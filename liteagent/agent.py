@@ -28,7 +28,7 @@ have the information needed."""
         "ollama/", "phi", "llama", "mistral"
     ]
 
-    def __init__(self, model="gpt-3.5-turbo", name="Agent", system_prompt=None, debug=False, drop_params=True):
+    def __init__(self, model, name, system_prompt=None, tools=None, debug=False, drop_params=True):
         """
         Initialize the LiteAgent.
         
@@ -36,6 +36,7 @@ have the information needed."""
             model (str): The LLM model to use
             name (str): Name of the agent
             system_prompt (str, optional): System prompt to use. Defaults to DEFAULT_SYSTEM_PROMPT.
+            tools (list, optional): List of tool functions to use. If None, uses all globally registered tools.
             debug (bool, optional): Whether to print debug information. Defaults to False.
             drop_params (bool, optional): Whether to drop unsupported parameters. Defaults to True.
         """
@@ -46,7 +47,78 @@ have the information needed."""
         self.drop_params = drop_params
         # Set global litellm setting for dropping unsupported parameters
         litellm.drop_params = self.drop_params
+        
+        # Initialize tools
+        self.tools = {}
+        if tools is not None:
+            # Register the provided tools
+            self._register_tools(tools)
+        else:
+            # Use all globally registered tools
+            self.tools = get_tools()
+            
         self.reset_memory()
+
+    def _register_tools(self, tool_functions):
+        """
+        Register the provided tool functions for this agent instance.
+        
+        Args:
+            tool_functions (list): List of functions or methods to register as tools
+        """
+        from pydantic import create_model
+        import inspect
+        import types
+        
+        for func in tool_functions:
+            # Check if this is a method bound to an instance
+            is_bound_method = hasattr(func, '__self__') and func.__self__ is not None
+            
+            # Get the function signature
+            sig = inspect.signature(func)
+            
+            # For bound methods, we need to skip the 'self' parameter
+            if is_bound_method:
+                # Create a wrapper function that doesn't require 'self'
+                instance = func.__self__
+                func_name = func.__name__
+                
+                # Create a wrapper that calls the method on the instance
+                def create_wrapper(method, obj):
+                    def wrapper(*args, **kwargs):
+                        return method(obj, *args, **kwargs)
+                    return wrapper
+                
+                wrapper_func = create_wrapper(getattr(type(instance), func_name), instance)
+                wrapper_func.__name__ = func_name
+                wrapper_func.__doc__ = func.__doc__
+                
+                # Get parameters excluding 'self'
+                params = list(sig.parameters.items())
+                if params and params[0][0] == 'self':
+                    params = params[1:]
+                
+                # Create fields from parameters
+                fields = {name: (param.annotation, ...) for name, param in params}
+                
+                # Store the wrapper function
+                tool_function = wrapper_func
+            else:
+                # For regular functions, use all parameters
+                fields = {name: (param.annotation, ...) for name, param in sig.parameters.items()}
+                tool_function = func
+            
+            # Create the schema
+            ToolSchema = create_model(func.__name__ + "Schema", **fields)
+            
+            # Add the function's docstring to the schema
+            ToolSchema.__doc__ = func.__doc__ or f"Execute {func.__name__}"
+            
+            # Store in tools dictionary
+            self.tools[func.__name__] = {
+                "schema": ToolSchema, 
+                "function": tool_function
+            }
 
     def reset_memory(self):
         """Reset conversation history to only include the system prompt."""
@@ -85,12 +157,11 @@ have the information needed."""
         Returns:
             str: A text description of available tools
         """
-        tools = get_tools()
-        if not tools:
+        if not self.tools:
             return ""
             
         tool_descriptions = []
-        for name, tool_data in tools.items():
+        for name, tool_data in self.tools.items():
             schema = tool_data["schema"]
             params = schema.schema().get("properties", {})
             param_desc = ", ".join([f"{p} ({t.get('type', 'any')})" 
@@ -125,6 +196,9 @@ have the information needed."""
         self.memory.append({"role": "user", "content": user_input})
         max_iterations = 5  # Prevent infinite loops
         iteration = 0
+        
+        # Track function calls to detect loops
+        function_calls_count = {}
 
         while iteration < max_iterations:
             iteration += 1
@@ -139,11 +213,67 @@ have the information needed."""
 
             # Process the response
             result = self._process_response(response, iteration)
+            
+            # If we got a final result, return it
             if result is not None:
                 return result
+                
+            # Check if we're in a function calling loop
+            # Count function calls by name and arguments
+            last_call = self.last_function_call
+            if last_call:
+                func_key = f"{last_call['name']}:{str(last_call['args'])}"
+                function_calls_count[func_key] = function_calls_count.get(func_key, 0) + 1
+                
+                # If we've called the same function with the same args more than twice, break the loop
+                if function_calls_count[func_key] > 2:
+                    logger.warning(f"Function call loop detected for {last_call['name']}. Breaking loop.")
+                    
+                    # Get the last function result
+                    last_result = next((m["content"] for m in reversed(self.memory) 
+                                      if m["role"] == "function" and m["name"] == last_call["name"]), 
+                                     "unknown")
+                    
+                    # Force a final response
+                    self.memory.append({
+                        "role": "system",
+                        "content": f"You have called {last_call['name']} multiple times. The result is: {last_result}. Please provide a FINAL answer to the user without calling any more functions."
+                    })
+                    
+                    try:
+                        final_response = self._get_llm_response()
+                        if hasattr(final_response, 'choices') and len(final_response.choices) > 0:
+                            content = final_response.choices[0].message.content
+                            if content:
+                                self.memory.append({"role": "assistant", "content": content})
+                                return content
+                    except Exception as e:
+                        logger.error(f"Error getting final response: {str(e)}")
+                    
+                    # If we couldn't get a good final response, create one from the function result
+                    final_answer = f"Based on the information I have, {last_result}"
+                    self.memory.append({"role": "assistant", "content": final_answer})
+                    return final_answer
 
         # Fallback if no non-empty answer is produced
         return "No complete response generated after maximum iterations."
+
+    def _get_function_definitions(self):
+        """
+        Convert agent's tools to function definitions compatible with LLM APIs.
+        
+        Returns:
+            list: List of function definitions in the format expected by OpenAI-compatible APIs
+        """
+        function_definitions = []
+        for tool_name, tool_data in self.tools.items():
+            schema = tool_data["schema"]
+            function_definitions.append({
+                "name": tool_name,
+                "description": schema.__doc__,
+                "parameters": schema.schema()  # Convert Pydantic model to JSON schema
+            })
+        return function_definitions
 
     def _get_llm_response(self):
         """
@@ -156,7 +286,7 @@ have the information needed."""
         
         if self.model_supports_tool_calling():
             # Get function definitions
-            function_definitions = get_function_definitions()
+            function_definitions = self._get_function_definitions()
             
             logger.info(f"Calling LiteLLM with model: {self.model}")
             logger.info(f"Message count: {len(self.memory)}")
@@ -256,8 +386,12 @@ have the information needed."""
                     
                     # Try to convert value to appropriate type
                     try:
+                        # Remove quotes from string values
+                        if (value.startswith('"') and value.endswith('"')) or \
+                           (value.startswith("'") and value.endswith("'")):
+                            value = value[1:-1]
                         # Try as number
-                        if value.isdigit():
+                        elif value.isdigit():
                             value = int(value)
                         elif value.replace(".", "", 1).isdigit():
                             value = float(value)
@@ -271,13 +405,35 @@ have the information needed."""
                     func_args[key] = value
         
         # Save the original message but modify it to remove function call syntax
-        modified_content = (
-            content[:start_idx].strip() + " " + 
-            content[end_idx + 16:].strip()
-        ).strip()
+        # Only keep text before and after the function call if it's meaningful
+        before_text = content[:start_idx].strip()
+        after_text = content[end_idx + 16:].strip()
         
+        modified_content = ""
+        if before_text:
+            modified_content += before_text + " "
+        if after_text:
+            modified_content += after_text
+            
         if modified_content:
             self.memory.append({"role": "assistant", "content": modified_content})
+            
+        # If this is a repeated function call, don't execute it again
+        # Check if we've called this function with similar args before
+        for msg in self.memory:
+            if msg.get("role") == "function" and msg.get("name") == func_name:
+                # Check if args are similar (simple string comparison for now)
+                prev_args = msg.get("args", {})
+                if str(prev_args) == str(func_args):
+                    logger.warning(f"Detected repeated text function call to {func_name}. Skipping execution.")
+                    
+                    # Add a system message to encourage a final response
+                    self.memory.append({
+                        "role": "system",
+                        "content": f"You already have the result from {func_name}. Please provide a final answer without calling this function again."
+                    })
+                    
+                    return None
             
         # Handle the extracted function call
         return self._handle_function_call(func_name, func_args, iteration)
@@ -383,58 +539,86 @@ have the information needed."""
         """
         logger.info(f"Function call detected: {function_name} with args: {function_args}")
         
-        tools = get_tools()
-        if function_name not in tools:
-            error_msg = f"Tool {function_name} is not registered."
+        if function_name not in self.tools:
+            error_msg = f"Tool {function_name} is not registered with this agent."
             logger.warning(error_msg)
             self.memory.append({"role": "assistant", "content": error_msg})
             return error_msg
             
-        tool_schema = tools[function_name]["schema"]
-        tool_function = tools[function_name]["function"]
+        tool_schema = self.tools[function_name]["schema"]
+        tool_function = self.tools[function_name]["function"]
         
-        # Check for repeated function calls
-        current_call = {
-            "name": function_name,
-            "args": function_args
-        }
+        # Check for repeated function calls - improved detection
+        # Normalize arguments for comparison by converting to strings and removing quotes
+        def normalize_args(args):
+            normalized = {}
+            for k, v in args.items():
+                if isinstance(v, str):
+                    # Remove extra quotes that might be added by the model
+                    normalized[k] = v.strip('"\'')
+                else:
+                    normalized[k] = v
+            return normalized
+            
+        normalized_args = normalize_args(function_args)
         
-        if self.last_function_call == current_call:
+        # Check if we've called this function before
+        previous_calls = [
+            (m["name"], normalize_args(m.get("args", {})))
+            for m in self.memory 
+            if m.get("role") == "function" and m.get("name") == function_name
+        ]
+        
+        # Check if this is a repeated call (same function with same normalized arguments)
+        is_repeated = any(
+            func_name == function_name and args == normalized_args
+            for func_name, args in previous_calls
+        )
+        
+        if is_repeated:
             logger.warning("Detected repeated function call! Breaking loop.")
             # Get the last function result from memory
             last_result = next((m["content"] for m in reversed(self.memory) 
                                if m["role"] == "function" and m["name"] == function_name), 
                               "unknown")
             
-            response = f"The result of {function_name}({function_args}) is {last_result}."
+            # Create a more helpful response that encourages the model to give a final answer
+            response = f"I already have the information from {function_name}. The result was: {last_result}. Let me provide a complete answer to your question."
             self.memory.append({"role": "assistant", "content": response})
+            
+            # For models without native function calling, add an explicit instruction
+            if not self.model_supports_tool_calling():
+                self.memory.append({
+                    "role": "system",
+                    "content": "You have all the information needed. Please provide a final, complete answer to the user's question without calling any more functions."
+                })
+            
             return response
         
         # Save this call to detect repetition
+        current_call = {
+            "name": function_name,
+            "args": function_args
+        }
         self.last_function_call = current_call
         
         try:
             # Validate and execute the function
-            validated_args = tool_schema(**function_args)
+            validated_args = tool_schema(**normalized_args)
             function_response = tool_function(**validated_args.dict())
             
-            # Add an extra hint to encourage a final response
+            # Add function result to memory
             self.memory.append({
                 "role": "function",
                 "name": function_name,
-                "content": str(function_response)
+                "content": str(function_response),
+                "args": function_args  # Store args for better repetition detection
             })
             
             # Add a conversational prompt to guide the model to give a more natural final answer
-            if iteration > 1:  # Only add this hint after the first iteration
-                if function_name == "add_numbers":
-                    guidance = f"The sum of {function_args.get('a')} and {function_args.get('b')} is {function_response}. Please respond conversationally to the user with this information."
-                elif function_name == "get_weather":
-                    guidance = f"The weather in {function_args.get('city')} is {function_response}. Please incorporate this information into a natural, conversational response."
-                elif function_name == "search_database":
-                    guidance = f"You found some results about '{function_args.get('query')}'. Please summarize these results in a helpful way for the user."
-                else:
-                    guidance = "Now provide a complete final answer to the user's question using the function result. Make your response natural and conversational."
+            if iteration >= 1:  # Add guidance after the first iteration
+                # Add a system message to encourage a final response
+                guidance = f"You now have the result from {function_name}: {function_response}. Please provide a complete, final answer to the user's question using this information. Do not call the same function again."
                 
                 self.memory.append({
                     "role": "system",

@@ -1,0 +1,211 @@
+# LiteAgent
+
+A lightweight agent framework using LiteLLM for LLM interactions.
+
+## Features
+
+- Simple, lightweight agent implementation
+- Uses LiteLLM for model-agnostic LLM interactions
+- Support for function/tool calling with compatible models
+- Fallback text-based function calling for models without native function calling
+- Customizable system prompts
+- Ability to create agents with specific tool sets
+- Smart detection and prevention of repeated function calls
+- Efficient handling of function call loops
+- Support for both standalone functions and class methods as tools
+
+## Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/liteagent.git
+cd liteagent
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+## Quick Start
+
+```python
+from liteagent import LiteAgent, tool
+
+# Define a tool using the @tool decorator
+@tool
+def add_numbers(a: int, b: int) -> int:
+    """Adds two numbers together."""
+    return a + b
+
+# Create an agent
+agent = LiteAgent(model="gpt-3.5-turbo")
+
+# Chat with the agent
+response = agent.chat("What is 3 + 7?")
+print(response)
+```
+
+## Command-Line Usage
+
+LiteAgent comes with a command-line interface for running examples:
+
+```bash
+# Show help and available options
+python liteagent_main.py --help
+
+# Run all examples with the default model (gpt-3.5-turbo)
+python liteagent_main.py
+
+# Run with a specific model
+python liteagent_main.py --model gpt-4o-mini
+
+# Run only the class methods example
+python liteagent_main.py --class-methods --model ollama/phi4
+
+# Run only the custom agents example
+python liteagent_main.py --custom-agents
+
+# Use Ollama for local inference (automatically prepends 'ollama/' to model name)
+python liteagent_main.py --ollama --model phi4
+
+# Show version information
+python liteagent_main.py --version
+
+# Enable debug mode
+python liteagent_main.py --debug
+
+# Log to file
+python liteagent_main.py --log-file
+```
+
+### Command-Line Arguments
+
+| Argument | Description |
+|----------|-------------|
+| `--model MODEL` | Model to use for the agent (default: gpt-3.5-turbo) |
+| `--class-methods` | Run only the class methods example |
+| `--custom-agents` | Run only the custom agents example |
+| `--all` | Run all examples (default behavior) |
+| `--ollama` | Use Ollama for local inference (automatically prepends 'ollama/' to model name if needed) |
+| `--debug` | Enable debug mode with verbose logging |
+| `--log-file` | Log output to a file in addition to console |
+| `--version` | Show version information and exit |
+| `--help` | Show help message and exit |
+
+## Creating Agents with Custom Tools
+
+You can create multiple agents with different system prompts and tool sets:
+
+```python
+from liteagent import LiteAgent, tool
+
+# Define tools
+@tool
+def add_numbers(a: int, b: int) -> int:
+    """Adds two numbers together."""
+    return a + b
+
+@tool
+def get_weather(city: str) -> str:
+    """Returns weather information for a city."""
+    return f"The weather in {city} is 22°C and sunny."
+
+# Create a math-only agent
+math_agent = LiteAgent(
+    model="gpt-3.5-turbo",
+    name="MathAgent",
+    system_prompt="You are a math specialist. You can only perform mathematical calculations.",
+    tools=[add_numbers],  # Only provide the add_numbers tool
+)
+
+# Create a weather-only agent
+weather_agent = LiteAgent(
+    model="gpt-3.5-turbo",
+    name="WeatherAgent",
+    system_prompt="You are a weather specialist. You can only provide weather information.",
+    tools=[get_weather],  # Only provide the weather tool
+)
+
+# Use the agents
+math_response = math_agent.chat("What is 42 + 17?")
+weather_response = weather_agent.chat("What's the weather in Tokyo?")
+```
+
+## Using Class Methods as Tools
+
+LiteAgent supports using class methods as tools, which is useful for organizing related functionality:
+
+```python
+from liteagent import LiteAgent
+
+class ToolsForAgents:
+    def __init__(self, api_key=None):
+        self.api_key = api_key
+        
+    def add_numbers(self, a: int, b: int) -> int:
+        """Adds two numbers together."""
+        return a + b
+        
+    def multiply_numbers(self, a: int, b: int) -> int:
+        """Multiplies two numbers together."""
+        return a * b
+        
+    def get_weather(self, city: str) -> str:
+        """Gets weather for a city using API key if provided."""
+        if self.api_key:
+            # Use API key to get real weather
+            return f"Weather in {city} retrieved with API key {self.api_key[:5]}..."
+        else:
+            return f"The weather in {city} is 22°C and sunny."
+
+# Create an instance of the tools class
+tools_instance = ToolsForAgents(api_key="your-api-key-here")
+
+# Create an agent with class methods as tools
+agent = LiteAgent(
+    model="gpt-3.5-turbo",
+    name="MathWeatherAgent",
+    tools=[
+        tools_instance.add_numbers,
+        tools_instance.get_weather
+    ]
+)
+
+# Use the agent
+response = agent.chat("What's the weather in Paris and what is 15 + 27?")
+print(response)
+```
+
+## Advanced Features
+
+### Loop Detection and Prevention
+
+LiteAgent automatically detects and prevents repeated function calls and function call loops, which can be common issues with LLM-based agents. This helps to:
+
+- Reduce token usage and API costs
+- Prevent infinite loops
+- Improve response times
+- Ensure the agent provides a final answer to the user
+
+The agent uses several strategies to detect and handle loops:
+
+1. Normalizing function arguments to detect similar calls
+2. Tracking function call history
+3. Counting repeated calls to the same function
+4. Adding explicit instructions to guide the model toward a final response
+
+### Models Without Native Function Calling
+
+For models that don't support native function calling (like some local models), LiteAgent provides a text-based function calling mechanism. The agent:
+
+1. Includes function descriptions in the system prompt
+2. Parses function calls from the model's text output
+3. Executes the functions and returns results
+4. Handles repeated function calls efficiently
+
+## Advanced Usage
+
+See the `examples.py` file for more advanced usage examples.
+
+## License
+
+MIT 
