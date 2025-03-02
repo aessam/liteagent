@@ -49,6 +49,82 @@ class TestObserverEvents:
         assert event_dict["parent_context_id"] == "parent-context-id"
         assert "timestamp" in event_dict
     
+    def test_model_response_event(self):
+        """Test the ModelResponseEvent class."""
+        # Test with a simple string response
+        event = ModelResponseEvent(
+            agent_id="test-agent-id",
+            agent_name="test-agent",
+            context_id="test-context-id",
+            parent_context_id="parent-context-id",
+            response="This is a test response"
+        )
+        
+        # Test properties
+        assert event.agent_id == "test-agent-id"
+        assert event.agent_name == "test-agent"
+        assert event.context_id == "test-context-id"
+        assert event.parent_context_id == "parent-context-id"
+        assert event.response == "This is a test response"
+        assert event.event_type == "ModelResponseEvent"
+        
+        # Test to_dict method
+        event_dict = event.to_dict()
+        assert event_dict["event_type"] == "ModelResponseEvent"
+        assert event_dict["response"] == "This is a test response"
+        
+        # Test with an object that has to_dict method
+        class TestObject:
+            def __init__(self):
+                self.value = "test value"
+                
+            def to_dict(self):
+                return {"value": self.value}
+        
+        test_obj = TestObject()
+        event = ModelResponseEvent(
+            agent_id="test-agent-id",
+            agent_name="test-agent",
+            context_id="test-context-id",
+            response=test_obj
+        )
+        
+        # Test to_dict method with object
+        event_dict = event.to_dict()
+        assert event_dict["response"] == {"value": "test value"}
+        
+        # Test with an object that has __dict__ but no to_dict
+        class AnotherTestObject:
+            def __init__(self):
+                self.attribute = "test attribute"
+                
+        another_obj = AnotherTestObject()
+        event = ModelResponseEvent(
+            agent_id="test-agent-id",
+            agent_name="test-agent",
+            context_id="test-context-id",
+            response=another_obj
+        )
+        
+        # Test to_dict method with object that has __dict__
+        event_dict = event.to_dict()
+        assert event_dict["response"]["attribute"] == "test attribute"
+        
+        # Skip test with a circular reference object because behavior depends on Python version
+        # and implementation details of the serialization
+        
+        # Test with None response
+        event = ModelResponseEvent(
+            agent_id="test-agent-id",
+            agent_name="test-agent",
+            context_id="test-context-id",
+            response=None
+        )
+        
+        # Test to_dict method with None response
+        event_dict = event.to_dict()
+        assert event_dict["response"] is None
+    
     def test_agent_initialized_event(self):
         """Test the AgentInitializedEvent class."""
         event = AgentInitializedEvent(
@@ -126,6 +202,78 @@ class TestObserverEvents:
         assert event_dict["function_name"] == "test_function"
         assert event_dict["function_args"] == {"param1": "value1", "param2": 123}
         assert event_dict["function_call_id"] == "call-id-123"
+
+    def test_function_result_event(self):
+        """Test the FunctionResultEvent class."""
+        # Test with a simple serializable result
+        event = FunctionResultEvent(
+            agent_id="test-agent-id",
+            agent_name="test-agent",
+            context_id="test-context-id",
+            parent_context_id="parent-context-id",
+            function_name="test_function",
+            function_args={"param1": "value1", "param2": 123},
+            result={"status": "success", "data": [1, 2, 3]},
+            function_call_id="call-id-123"
+        )
+        
+        # Test properties
+        assert event.agent_id == "test-agent-id"
+        assert event.agent_name == "test-agent"
+        assert event.context_id == "test-context-id"
+        assert event.parent_context_id == "parent-context-id"
+        assert event.function_name == "test_function"
+        assert event.function_args == {"param1": "value1", "param2": 123}
+        assert event.result == {"status": "success", "data": [1, 2, 3]}
+        assert event.function_call_id == "call-id-123"
+        assert event.error is None
+        assert event.event_type == "FunctionResultEvent"
+        
+        # Test to_dict method with serializable result
+        event_dict = event.to_dict()
+        assert event_dict["event_type"] == "FunctionResultEvent"
+        assert event_dict["function_name"] == "test_function"
+        assert event_dict["function_args"] == {"param1": "value1", "param2": 123}
+        assert event_dict["result"] == {"status": "success", "data": [1, 2, 3]}
+        assert event_dict["function_call_id"] == "call-id-123"
+        assert event_dict["error"] is None
+        
+        # Test with a non-serializable result
+        class NonSerializableObject:
+            def __init__(self):
+                self.circular_ref = self
+                
+        non_serializable = NonSerializableObject()
+        event = FunctionResultEvent(
+            agent_id="test-agent-id",
+            agent_name="test-agent",
+            context_id="test-context-id",
+            function_name="test_function",
+            function_args={"param1": "test"},
+            result=non_serializable,
+            function_call_id="call-id-456"
+        )
+        
+        # Test to_dict method with non-serializable result
+        event_dict = event.to_dict()
+        assert isinstance(event_dict["result"], str)
+        
+        # Test with error
+        event = FunctionResultEvent(
+            agent_id="test-agent-id",
+            agent_name="test-agent",
+            context_id="test-context-id",
+            function_name="test_function",
+            function_args={"param1": "value1"},
+            result=None,
+            error="Function execution failed",
+            function_call_id="call-id-789"
+        )
+        
+        # Test to_dict method with error
+        event_dict = event.to_dict()
+        assert event_dict["error"] == "Function execution failed"
+        assert event_dict["result"] is None
 
 
 class TestObserverInterface:
@@ -274,6 +422,102 @@ class TestTreeTraceObserver:
         assert "ModelRequestEvent" in event_types
         assert "ModelResponseEvent" in event_types
         assert "AgentResponseEvent" in event_types
+    
+    def test_tree_trace_observer_multi_agent(self, agent_with_mock_model, agent_with_tools):
+        """Test that TreeTraceObserver properly tracks multiple agents and their relationships."""
+        # Create a TreeTraceObserver
+        tree_observer = TreeTraceObserver()
+        
+        # Add the observer to both agents
+        agent1 = agent_with_mock_model
+        agent2 = agent_with_tools
+        
+        agent1.add_observer(tree_observer)
+        agent2.add_observer(tree_observer)
+        
+        # Set up parent-child relationship between agents
+        agent1_context_id = agent1.context_id
+        agent2.parent_context_id = agent1_context_id
+        
+        # Configure the mocks to return text responses
+        agent1.model_interface.responses = [
+            {"type": "text", "content": "Response from parent agent!"}
+        ]
+        agent2.model_interface.responses = [
+            {"type": "text", "content": "Response from child agent!"}
+        ]
+        
+        # Chat with both agents
+        agent1.chat("Hello, parent agent!")
+        agent2.chat("Hello, child agent!")
+        
+        # Check that both agents' contexts are tracked
+        assert agent1.context_id in tree_observer.context_map
+        assert agent2.context_id in tree_observer.context_map
+        
+        # Check parent-child relationship
+        assert agent2.context_id in tree_observer.parent_map
+        assert tree_observer.parent_map[agent2.context_id] == agent1_context_id
+        assert agent2.context_id in tree_observer.children_map[agent1_context_id]
+        
+        # Verify events were recorded for both agents
+        assert agent1.agent_id in tree_observer.agent_events
+        assert agent2.agent_id in tree_observer.agent_events
+        assert len(tree_observer.agent_events[agent1.agent_id]) > 0
+        assert len(tree_observer.agent_events[agent2.agent_id]) > 0
+    
+    def test_tree_trace_observer_tree_visualization(self, agent_with_mock_model):
+        """Test the tree visualization methods of TreeTraceObserver."""
+        # Create a TreeTraceObserver
+        tree_observer = TreeTraceObserver()
+        
+        # Add the observer to the agent
+        agent = agent_with_mock_model
+        agent.add_observer(tree_observer)
+        
+        # Configure the mock to return a text response
+        agent.model_interface.responses = [
+            {"type": "text", "content": "Hello from the agent!"}
+        ]
+        
+        # Chat with the agent
+        agent.chat("Hello, agent!")
+        
+        # Mock the print function to capture output
+        with patch('builtins.print') as mock_print:
+            # Test the _print_agent_tree method
+            tree_observer._print_agent_tree(agent.context_id, "", True)
+            
+            # Verify print was called at least once
+            assert mock_print.call_count > 0
+            
+            # Reset mock
+            mock_print.reset_mock()
+            
+            # Test the _print_agent_events method directly
+            tree_observer._print_agent_events(agent.agent_id, "")
+            
+            # Verify print was called at least once for events
+            assert mock_print.call_count > 0
+            
+            # Reset mock
+            mock_print.reset_mock()
+            
+            # Test _format_args method
+            args = {"param1": "value1", "param2": 123}
+            formatted = tree_observer._format_args(args)
+            assert "param1" in formatted
+            assert "value1" in formatted
+            assert "param2" in formatted
+            assert "123" in formatted
+            
+            # Test with a more complex structure
+            nested_args = {"param1": {"nested": "value"}, "param2": [1, 2, 3]}
+            formatted = tree_observer._format_args(nested_args)
+            assert "{" in formatted
+            assert "}" in formatted
+            assert "[" in formatted
+            assert "]" in formatted
 
 
 if __name__ == "__main__":
