@@ -33,6 +33,8 @@ def parse_arguments():
     debug_group = parser.add_argument_group("Debugging options")
     debug_group.add_argument("--debug", action="store_true",
                        help="Enable debug mode with verbose logging")
+    debug_group.add_argument("--debug-litellm", action="store_true",
+                       help="Enable debug mode with verbose logging for LiteLLM")
     debug_group.add_argument("--log-file", action="store_true",
                        help="Log output to a file in addition to console")
     
@@ -73,7 +75,9 @@ def main():
         show_version()
     # Load environment variables from .env file
     load_dotenv()
-    
+    if os.environ["LITELLM_VERBOSE"] == "true" or args.debug_litellm:
+        litellm._turn_on_debug()
+
     # Set up logging
     log_level = "DEBUG" if args.debug else "INFO"
     setup_logging(log_level=log_level, log_to_file=args.log_file)

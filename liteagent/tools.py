@@ -5,16 +5,121 @@ This module provides functionality for registering and managing tools
 that can be used by the agent to perform various tasks.
 """
 
-from pydantic import create_model
+from pydantic import create_model, BaseModel
 import inspect
+from typing import Any, Callable, Dict, List, Optional, Type, Union
+import functools
 
 # Global registry for tools
 TOOLS = {}
 
+class BaseTool:
+    """Base class for all tools."""
+    
+    def __init__(self, func: Callable, name: Optional[str] = None, description: Optional[str] = None):
+        """
+        Initialize a tool.
+        
+        Args:
+            func: The function to use as a tool
+            name: Optional name for the tool (defaults to function name)
+            description: Optional description (defaults to function docstring)
+        """
+        self.func = func
+        self.name = name or func.__name__
+        self.description = description or func.__doc__ or f"Execute {self.name}"
+        self.schema = self._create_schema()
+        
+    def _create_schema(self) -> Type[BaseModel]:
+        """Create a Pydantic model from the function signature."""
+        sig = inspect.signature(self.func)
+        fields = self._get_schema_fields(sig)
+        ToolSchema = create_model(self.name + "Schema", **fields)
+        ToolSchema.__doc__ = self.description
+        return ToolSchema
+    
+    def _get_schema_fields(self, sig: inspect.Signature) -> Dict:
+        """Extract fields from function signature for schema creation."""
+        return {name: (param.annotation, ...) for name, param in sig.parameters.items()}
+    
+    def execute(self, **kwargs) -> Any:
+        """Execute the tool with the given arguments."""
+        # Validate arguments using the schema
+        validated_args = self.schema(**kwargs)
+        # Execute the function with validated arguments
+        return self.func(**validated_args.dict())
+    
+    def to_function_definition(self) -> Dict:
+        """Convert tool to function definition compatible with LLM APIs."""
+        return {
+            "name": self.name,
+            "description": self.description,
+            "parameters": self.schema.schema()  # Convert Pydantic model to JSON schema
+        }
+
+
+class FunctionTool(BaseTool):
+    """Tool implementation for standalone functions."""
+    
+    def __init__(self, func: Callable, name: Optional[str] = None, description: Optional[str] = None):
+        super().__init__(func, name, description)
+
+
+class InstanceMethodTool(BaseTool):
+    """Tool implementation for instance methods."""
+    
+    def __init__(self, method: Callable, instance: Any, name: Optional[str] = None, description: Optional[str] = None):
+        """
+        Initialize a tool from an instance method.
+        
+        Args:
+            method: The instance method to use as a tool
+            instance: The instance the method belongs to
+            name: Optional name for the tool (defaults to method name)
+            description: Optional description (defaults to method docstring)
+        """
+        self.instance = instance
+        # Get the unbound method from the class
+        if hasattr(method, '__self__') and method.__self__ is instance:
+            # This is a bound method, get the unbound version
+            self.unbound_method = getattr(method.__self__.__class__, method.__name__)
+        else:
+            # Already unbound or not a method
+            self.unbound_method = method
+            
+        # Create a wrapper function that handles the instance correctly
+        @functools.wraps(method)
+        def wrapper(**kwargs):
+            return self.unbound_method(instance, **kwargs)
+        
+        super().__init__(wrapper, name or method.__name__, description or method.__doc__)
+    
+    def _get_schema_fields(self, sig: inspect.Signature) -> Dict:
+        """Extract fields from method signature, excluding 'self'."""
+        params = list(sig.parameters.items())
+        # Skip 'self' parameter if present
+        if params and params[0][0] == 'self':
+            params = params[1:]
+        return {name: (param.annotation, ...) for name, param in params}
+    
+    def execute(self, **kwargs) -> Any:
+        """Execute the instance method with the given arguments."""
+        # Validate arguments using the schema
+        validated_args = self.schema(**kwargs)
+        # Call the unbound method with the instance as first argument
+        return self.unbound_method(self.instance, **validated_args.dict())
+
+
+class StaticMethodTool(BaseTool):
+    """Tool implementation for static methods."""
+    
+    def __init__(self, method: Callable, name: Optional[str] = None, description: Optional[str] = None):
+        super().__init__(method, name, description)
+
+
 def tool(func):
     """
     Decorator to auto-register a function as a tool.
-    Dynamically creates a Pydantic model from the function signature.
     
     Args:
         func: The function to register as a tool
@@ -22,13 +127,65 @@ def tool(func):
     Returns:
         The original function (unchanged)
     """
-    sig = inspect.signature(func)
-    fields = {name: (param.annotation, ...) for name, param in sig.parameters.items()}
-    ToolSchema = create_model(func.__name__ + "Schema", **fields)
-    # Add the function's docstring to the schema
-    ToolSchema.__doc__ = func.__doc__ or f"Execute {func.__name__}"
-    TOOLS[func.__name__] = {"schema": ToolSchema, "function": func}
+    # Determine the appropriate tool type
+    if inspect.ismethod(func):
+        # For bound methods
+        if func.__self__ is not None:
+            tool_instance = InstanceMethodTool(func, func.__self__)
+        else:
+            # For static/class methods
+            tool_instance = StaticMethodTool(func)
+    else:
+        # For regular functions
+        tool_instance = FunctionTool(func)
+    
+    # Register the tool
+    TOOLS[tool_instance.name] = {
+        "schema": tool_instance.schema,
+        "function": tool_instance.func
+    }
+    
     return func
+
+
+def register_tool(func=None, *, name=None, description=None):
+    """
+    Enhanced decorator to register a function as a tool with optional customization.
+    
+    Args:
+        func: The function to register
+        name: Optional custom name for the tool
+        description: Optional custom description
+        
+    Returns:
+        Decorator function or decorated function
+    """
+    def decorator(f):
+        # Determine the appropriate tool type
+        if inspect.ismethod(f):
+            # For bound methods
+            if f.__self__ is not None:
+                tool_instance = InstanceMethodTool(f, f.__self__, name, description)
+            else:
+                # For static/class methods
+                tool_instance = StaticMethodTool(f, name, description)
+        else:
+            # For regular functions
+            tool_instance = FunctionTool(f, name, description)
+        
+        # Register the tool
+        TOOLS[tool_instance.name] = {
+            "schema": tool_instance.schema,
+            "function": tool_instance.func
+        }
+        
+        return f
+    
+    # Handle both @register_tool and @register_tool(name="custom")
+    if func is None:
+        return decorator
+    return decorator(func)
+
 
 def get_tools():
     """
@@ -38,6 +195,7 @@ def get_tools():
         dict: Dictionary of registered tools
     """
     return TOOLS
+
 
 def get_function_definitions():
     """

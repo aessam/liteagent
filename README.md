@@ -4,7 +4,7 @@ A lightweight agent framework using LiteLLM for LLM interactions.
 
 ## Features
 
-- Simple, lightweight agent implementation
+- Simple, lightweight agent implementation with clean abstractions
 - Uses LiteLLM for model-agnostic LLM interactions
 - Support for function/tool calling with compatible models
 - Fallback text-based function calling for models without native function calling
@@ -12,7 +12,19 @@ A lightweight agent framework using LiteLLM for LLM interactions.
 - Ability to create agents with specific tool sets
 - Smart detection and prevention of repeated function calls
 - Efficient handling of function call loops
-- Support for both standalone functions and class methods as tools
+- Support for different types of tools:
+  - Standalone functions
+  - Instance methods
+  - Static methods
+
+## Architecture
+
+LiteAgent is designed with clean abstractions to make it easy to understand and extend:
+
+- **Tools**: Abstraction for callable tools with `BaseTool`, `FunctionTool`, `InstanceMethodTool`, and `StaticMethodTool`
+- **Models**: Abstraction for different model capabilities with `ModelInterface`, `FunctionCallingModel`, and `TextBasedFunctionCallingModel`
+- **Memory**: Conversation history management with `ConversationMemory`
+- **Agent**: Core orchestration with `LiteAgent`
 
 ## Installation
 
@@ -175,6 +187,57 @@ response = agent.chat("What's the weather in Paris and what is 15 + 27?")
 print(response)
 ```
 
+## Advanced Usage
+
+### Custom Tool Registration
+
+You can use the enhanced `register_tool` decorator to customize tool names and descriptions:
+
+```python
+from liteagent import register_tool
+
+@register_tool(name="calculate_sum", description="Calculate the sum of two numbers")
+def add_numbers(a: int, b: int) -> int:
+    return a + b
+```
+
+### Direct Tool Creation
+
+You can create tools directly using the tool classes:
+
+```python
+from liteagent import FunctionTool, InstanceMethodTool
+
+# Create a function tool
+def multiply(a: int, b: int) -> int:
+    return a * b
+    
+multiply_tool = FunctionTool(multiply, name="multiply_numbers")
+
+# Create an instance method tool
+class Calculator:
+    def add(self, a: int, b: int) -> int:
+        return a + b
+        
+calc = Calculator()
+add_tool = InstanceMethodTool(calc.add, calc, name="addition")
+```
+
+### Model Interface Selection
+
+You can directly use the model interfaces:
+
+```python
+from liteagent import create_model_interface
+
+# Create the appropriate model interface based on the model name
+model_interface = create_model_interface("gpt-4o-mini")
+
+# Or create a specific interface
+from liteagent import TextBasedFunctionCallingModel
+text_model = TextBasedFunctionCallingModel("ollama/phi4")
+```
+
 ## Advanced Features
 
 ### Loop Detection and Prevention
@@ -201,10 +264,6 @@ For models that don't support native function calling (like some local models), 
 2. Parses function calls from the model's text output
 3. Executes the functions and returns results
 4. Handles repeated function calls efficiently
-
-## Advanced Usage
-
-See the `examples.py` file for more advanced usage examples.
 
 ## License
 

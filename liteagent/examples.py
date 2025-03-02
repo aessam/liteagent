@@ -2,7 +2,7 @@
 Example usage of LiteAgent.
 """
 
-from .tools import tool
+from .tools import tool, register_tool, FunctionTool, InstanceMethodTool
 from .agent import LiteAgent
 from .utils import check_api_keys
 
@@ -81,13 +81,20 @@ def run_custom_agents_example(model):
     check_api_keys()
     
     print("\n=== Example: Multiple Custom Agents ===")
-    tools = ToolsForAgents()
+    
+    # Create an instance of the tools class
+    tools_instance = ToolsForAgents()
+    
+    # Create tool instances for the class methods
+    add_numbers_tool = InstanceMethodTool(tools_instance.add_numbers, tools_instance)
+    get_weather_tool = InstanceMethodTool(tools_instance.get_weather, tools_instance)
+    
     # Create a math-only agent
     math_agent = LiteAgent(
         model=model,
         name="MathAgent",
         system_prompt="You are a math specialist. You can only perform mathematical calculations.",
-        tools=[tools.add_numbers],  # Only provide the add_numbers tool
+        tools=[add_numbers_tool],  # Pass the tool object, not just the function
         debug=False
     )
     
@@ -96,7 +103,7 @@ def run_custom_agents_example(model):
         model=model,
         name="WeatherAgent",
         system_prompt="You are a weather specialist. You can only provide weather information.",
-        tools=[tools.get_weather],  # Only provide the weather tool
+        tools=[get_weather_tool],  # Pass the tool object, not just the function
         debug=False
     )
     
@@ -104,8 +111,8 @@ def run_custom_agents_example(model):
     search_agent = LiteAgent(
         model=model,
         name="SearchAgent",
-        system_prompt="You are a search specialist. You can only search for information in the database.",
-        tools=[search_database],  # Only provide the search tool
+        system_prompt="You are a search specialist. You can search for information in a database.",
+        tools=[search_database],  # This is a regular function, so it works as is
         debug=False
     )
     
@@ -134,6 +141,7 @@ def run_custom_agents_example(model):
 def run_class_methods_example(model):
     """
     Example demonstrating how to use class methods as tools.
+    This shows how to maintain state between tool calls.
     """
     # Check for API keys
     check_api_keys()
@@ -141,24 +149,29 @@ def run_class_methods_example(model):
     print("\n=== Example: Class Methods as Tools ===")
     
     # Create an instance of the tools class
-    tools_instance = ToolsForAgents(api_key="demo-api-key-12345")
+    tools_instance = ToolsForAgents(api_key="fake-api-key-12345")
     
-    # Create an agent with class methods as tools
+    # Create tool instances for the class methods
+    add_numbers_tool = InstanceMethodTool(tools_instance.add_numbers, tools_instance)
+    multiply_numbers_tool = InstanceMethodTool(tools_instance.multiply_numbers, tools_instance)
+    get_weather_tool = InstanceMethodTool(tools_instance.get_weather, tools_instance)
+    get_call_count_tool = InstanceMethodTool(tools_instance.get_call_count, tools_instance)
+    
+    # Create an agent with all the tools
     class_methods_agent = LiteAgent(
         model=model,
         name="ClassMethodsAgent",
-        system_prompt="You are an assistant that can perform math operations and get weather information.",
-        tools=[
-            tools_instance.add_numbers,
-            tools_instance.multiply_numbers,
-            tools_instance.get_weather
-        ],
-        debug=False
+        system_prompt="You are a helpful assistant that can perform math operations and get weather information.",
+        tools=[add_numbers_tool, multiply_numbers_tool, get_weather_tool, get_call_count_tool],
+        debug=True
     )
+    
+    # Print the available tools
+    print("Available tools:", [name for name in class_methods_agent.tools.keys()])
     
     # Test with a query that uses multiple tools
     print("\n--- Class Methods Agent Test ---")
-    response = class_methods_agent.chat("What's the weather in Berlin and what is 23 + 45 and 7 * 9?")
+    response = class_methods_agent.chat("What's the weather in Berlin? Also, can you add 23 and 45? Finally, can you multiply 7 and 9?")
     print("Class Methods Agent Response:", response)
     
     # Show that the instance state is maintained
@@ -173,8 +186,19 @@ def run_examples(model):
     
     print("\nStarting LiteAgent...")
     
+    # Create tool instances for the standalone functions
+    add_numbers_tool = FunctionTool(add_numbers)
+    get_weather_tool = FunctionTool(get_weather)
+    search_database_tool = FunctionTool(search_database)
+    
     # Create agent instance with drop_params=True to handle different model capabilities
-    agent = LiteAgent(model=model, name="LiteAgent", debug=False, drop_params=True)
+    agent = LiteAgent(
+        model=model, 
+        name="LiteAgent", 
+        debug=False, 
+        drop_params=True,
+        tools=[add_numbers_tool, get_weather_tool, search_database_tool]
+    )
     
     # Example 1: Weather query
     print("\n=== Example 1: Weather Query ===")
