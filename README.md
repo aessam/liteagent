@@ -16,6 +16,11 @@ A lightweight agent framework using LiteLLM for LLM interactions.
   - Standalone functions
   - Instance methods
   - Static methods
+- **New**: Comprehensive observability layer with:
+  - Context ID tracking for multi-agent systems
+  - Parent-child relationship tracking between agents
+  - Event-based logging of all agent operations
+  - Customizable observers for different monitoring needs
 
 ## Architecture
 
@@ -25,6 +30,7 @@ LiteAgent is designed with clean abstractions to make it easy to understand and 
 - **Models**: Abstraction for different model capabilities with `ModelInterface`, `FunctionCallingModel`, and `TextBasedFunctionCallingModel`
 - **Memory**: Conversation history management with `ConversationMemory`
 - **Agent**: Core orchestration with `LiteAgent`
+- **Observer**: Event-based tracking and monitoring with `AgentObserver` implementations
 
 ## Installation
 
@@ -264,6 +270,84 @@ For models that don't support native function calling (like some local models), 
 2. Parses function calls from the model's text output
 3. Executes the functions and returns results
 4. Handles repeated function calls efficiently
+
+## Observability
+
+LiteAgent includes a comprehensive observability layer that allows you to track and monitor all agent operations, including tracing inter-agent relationships and function calls.
+
+### Context IDs
+
+Each agent has a unique context ID, and can optionally have a parent context ID. This allows you to trace the flow of execution in multi-agent systems.
+
+```python
+# Create a parent context ID
+parent_context_id = generate_context_id()
+
+# Create a main agent with this context
+main_agent = LiteAgent(
+    model="gpt-3.5-turbo",
+    name="MainAgent",
+    context_id=parent_context_id
+)
+
+# Create a child agent that references the parent
+child_agent = LiteAgent(
+    model="gpt-3.5-turbo",
+    name="ChildAgent",
+    parent_context_id=parent_context_id
+)
+```
+
+### Observer Pattern
+
+LiteAgent uses the observer pattern to notify interested parties about agent events:
+
+```python
+# Create observers
+console_observer = ConsoleObserver()
+file_observer = FileObserver("agent_events.jsonl")
+
+# Create an agent with observers
+agent = LiteAgent(
+    model="gpt-3.5-turbo",
+    name="MyAgent",
+    observers=[console_observer, file_observer]
+)
+
+# Add more observers later
+agent.add_observer(my_custom_observer)
+```
+
+### Events
+
+The following events are tracked:
+
+- `AgentInitializedEvent`: When an agent is created
+- `UserMessageEvent`: When a user message is received
+- `ModelRequestEvent`: Before a request is sent to the model
+- `ModelResponseEvent`: After a response is received from the model
+- `FunctionCallEvent`: Before a function/tool is called
+- `FunctionResultEvent`: After a function/tool returns a result
+- `AgentResponseEvent`: When an agent generates a final response
+
+### Custom Observers
+
+You can create custom observers by implementing the `AgentObserver` interface:
+
+```python
+class MyCustomObserver(AgentObserver):
+    def on_event(self, event: AgentEvent) -> None:
+        # Handle the event
+        print(f"Received event: {event.event_type}")
+        
+    # Optionally override specific event handlers
+    def on_function_call(self, event: FunctionCallEvent) -> None:
+        print(f"Function call: {event.function_name}")
+```
+
+### Example
+
+See `example_observability.py` for a complete example of using the observability features.
 
 ## License
 

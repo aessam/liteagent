@@ -24,9 +24,9 @@ COLORS = {
 # Level prefixes for better visual distinction
 LEVEL_PREFIXES = {
     'DEBUG': '🔍',
-    'INFO': '✓',
-    'WARNING': '⚠️',
-    'ERROR': '✗',
+    'INFO': '✅',
+    'WARNING': '⛔',
+    'ERROR': '❌',
     'CRITICAL': '🔥',
 }
 
@@ -68,7 +68,7 @@ logger.setLevel(logging.INFO)
 # Console handler with colored output
 _console_handler = logging.StreamHandler(sys.stdout)
 _console_handler.setLevel(logging.INFO)
-_console_handler.setFormatter(ColoredFormatter('%(asctime)s | %(levelname)s | %(message)s'))
+_console_handler.setFormatter(ColoredFormatter('%(asctime)s | %(levelname)s \t| %(message)s'))
 logger.addHandler(_console_handler)
 
 def setup_logging(log_level="INFO", log_to_file=False, log_file=None, use_colors=True):
@@ -93,9 +93,9 @@ def setup_logging(log_level="INFO", log_to_file=False, log_file=None, use_colors
     
     # Update console formatter based on color preference
     if use_colors:
-        _console_handler.setFormatter(ColoredFormatter('%(asctime)s | %(levelname)s | %(message)s'))
+        _console_handler.setFormatter(ColoredFormatter('%(asctime)s | %(levelname)s \t| %(message)s'))
     else:
-        _console_handler.setFormatter(logging.Formatter('%(asctime)s | %(levelname)s | %(message)s'))
+        _console_handler.setFormatter(logging.Formatter('%(asctime)s | %(levelname)s \t| %(message)s'))
     
     # Add file handler if requested
     if log_to_file:
