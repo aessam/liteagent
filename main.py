@@ -37,6 +37,8 @@ def parse_arguments():
                        help="Enable debug mode with verbose logging for LiteLLM")
     debug_group.add_argument("--log-file", action="store_true",
                        help="Log output to a file in addition to console")
+    debug_group.add_argument("--no-color", action="store_true",
+                       help="Disable colored log output")
     
     # Version
     parser.add_argument("--version", action="store_true",
@@ -80,7 +82,7 @@ def main():
 
     # Set up logging
     log_level = "DEBUG" if args.debug else "INFO"
-    setup_logging(log_level=log_level, log_to_file=args.log_file)
+    setup_logging(log_level=log_level, log_to_file=args.log_file, use_colors=not args.no_color)
     
     logger.info("Starting LiteAgent")
     logger.info(f"Using model: {args.model}")
