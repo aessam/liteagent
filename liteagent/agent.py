@@ -351,6 +351,8 @@ to provide a final text response to the user."""
                 if function_name in self.tool_instances:
                     try:
                         tool = self.tool_instances[function_name]
+                        # Pass the context_id to the tool so it can set the parent-child relationship
+                        function_args['_context_id'] = self.context_id
                         function_result = tool.execute(**function_args)
                         
                         # Add result to memory with the function call ID

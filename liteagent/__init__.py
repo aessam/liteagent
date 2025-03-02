@@ -11,5 +11,6 @@ from .observer import (AgentObserver, AgentEvent, AgentInitializedEvent, UserMes
                       ModelRequestEvent, ModelResponseEvent, FunctionCallEvent, 
                       FunctionResultEvent, AgentResponseEvent, ConsoleObserver, 
                       FileObserver, TreeTraceObserver, generate_context_id)
+from .agent_tool import AgentTool
 
 __version__ = "0.1.0"
