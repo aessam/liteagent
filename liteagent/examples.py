@@ -115,113 +115,117 @@ def calculate_area(width: float, height: float) -> float:
     """Calculates the area of a rectangle."""
     return width * height
 
-def run_custom_agents_example(model):
+def run_custom_agents_example(model, observers=None):
     """
-    Example demonstrating how to create multiple agents with different tools and system prompts.
+    Run examples with custom agents.
+    
+    Args:
+        model (str): The model to use
+        observers (list, optional): List of observers to attach to the agents
     """
     # Check for API keys
     check_api_keys()
     
-    print("\n=== Example: Multiple Custom Agents ===")
-    
-    # Create an instance of the tools class
-    tools_instance = ToolsForAgents()
-    
-    # Create tool instances for the class methods
-    add_numbers_tool = InstanceMethodTool(tools_instance.add_numbers, tools_instance)
-    get_weather_tool = InstanceMethodTool(tools_instance.get_weather, tools_instance)
-    
-    # Create a math-only agent
+    # Create a Math Agent
     math_agent = LiteAgent(
         model=model,
-        name="MathAgent",
-        system_prompt="You are a math specialist. You can only perform mathematical calculations.",
-        tools=[add_numbers_tool],  # Pass the tool object, not just the function
-        debug=False
+        name="Math Agent",
+        system_prompt="You are a Math Agent. You can only perform mathematical operations. If asked about anything else, politely explain that you can only help with math.",
+        tools=[add_numbers],
+        observers=observers
     )
     
-    # Create a weather-only agent
+    # Create a Weather Agent
     weather_agent = LiteAgent(
         model=model,
-        name="WeatherAgent",
-        system_prompt="You are a weather specialist. You can only provide weather information.",
-        tools=[get_weather_tool],  # Pass the tool object, not just the function
-        debug=False
+        name="Weather Agent",
+        system_prompt="You are a Weather Agent. You can only provide weather information. If asked about anything else, politely explain that you can only help with weather.",
+        tools=[get_weather],
+        observers=observers
     )
     
-    # Create a search-only agent
+    # Create a Search Agent
     search_agent = LiteAgent(
         model=model,
-        name="SearchAgent",
-        system_prompt="You are a search specialist. You can search for information in a database.",
-        tools=[search_database],  # This is a regular function, so it works as is
-        debug=False
+        name="Search Agent",
+        system_prompt="You are a Search Agent. You can search for information in a database.",
+        tools=[search_database],
+        observers=observers
     )
     
-    # Test each agent with appropriate queries
-    print("\n--- Math Agent Test ---")
+    # Test the Math Agent
+    print("\n=== Math Agent ===")
     response = math_agent.chat("What is 42 + 17?")
-    print("Math Agent Response:", response)
+    print(f"Response: {response}")
     
-    print("\n--- Weather Agent Test ---")
+    # Test the Weather Agent
+    print("\n=== Weather Agent ===")
     response = weather_agent.chat("What's the weather in Tokyo?")
-    print("Weather Agent Response:", response)
+    print(f"Response: {response}")
     
-    print("\n--- Search Agent Test ---")
+    # Test the Search Agent
+    print("\n=== Search Agent ===")
     response = search_agent.chat("Find information about renewable energy")
-    print("Search Agent Response:", response)
+    print(f"Response: {response}")
     
-    # Test with inappropriate queries (agent should not have access to other tools)
-    print("\n--- Math Agent with Weather Query ---")
-    response = math_agent.chat("What's the weather in London?")
-    print("Math Agent Response:", response)
+    # Test that agents only respond to their domain
+    print("\n=== Math Agent (asked about weather) ===")
+    response = math_agent.chat("What's the weather in Berlin?")
+    print(f"Response: {response}")
     
-    print("\n--- Weather Agent with Math Query ---")
+    print("\n=== Weather Agent (asked about math) ===")
     response = weather_agent.chat("What is 15 + 27?")
-    print("Weather Agent Response:", response)
+    print(f"Response: {response}")
 
-def run_class_methods_example(model):
+def run_class_methods_example(model, observers=None):
     """
-    Example demonstrating how to use class methods as tools.
-    This shows how to maintain state between tool calls.
+    Run examples with class methods as tools.
+    
+    Args:
+        model (str): The model to use
+        observers (list, optional): List of observers to attach to the agents
     """
     # Check for API keys
     check_api_keys()
     
-    print("\n=== Example: Class Methods as Tools ===")
-    
     # Create an instance of the tools class
-    tools_instance = ToolsForAgents(api_key="fake-api-key-12345")
+    tools_instance = ToolsForAgents(api_key="fake-api-key")
     
-    # Create tool instances for the class methods
-    add_numbers_tool = InstanceMethodTool(tools_instance.add_numbers, tools_instance)
-    multiply_numbers_tool = InstanceMethodTool(tools_instance.multiply_numbers, tools_instance)
-    get_weather_tool = InstanceMethodTool(tools_instance.get_weather, tools_instance)
-    get_call_count_tool = InstanceMethodTool(tools_instance.get_call_count, tools_instance)
-    
-    # Create an agent with all the tools
-    class_methods_agent = LiteAgent(
+    # Create an agent with class methods as tools
+    agent = LiteAgent(
         model=model,
-        name="ClassMethodsAgent",
-        system_prompt="You are a helpful assistant that can perform math operations and get weather information.",
-        tools=[add_numbers_tool, multiply_numbers_tool, get_weather_tool, get_call_count_tool],
-        debug=True
+        name="Class Methods Agent",
+        system_prompt="You are a helpful assistant that can perform mathematical operations and get weather information.",
+        tools=[
+            tools_instance.add_numbers,
+            tools_instance.multiply_numbers,
+            calculate_area,
+            tools_instance.get_weather
+        ],
+        observers=observers
     )
     
-    # Print the available tools
-    print("Available tools:", [name for name in class_methods_agent.tools.keys()])
+    # Test the agent with class methods
+    print("\n=== Class Methods Agent ===")
+    response = agent.chat("Can you tell me the latest weather in Berlin?")
+    print(f"Response: {response}")
     
-    # Test with a query that uses multiple tools
-    print("\n--- Class Methods Agent Test ---")
-    response = class_methods_agent.chat("What's the weather in Berlin? Also, can you add 23 and 45? Finally, can you multiply 7 and 9?")
-    print("Class Methods Agent Response:", response)
+    response = agent.chat("What is 23 + 45?")
+    print(f"Response: {response}")
     
-    # Show that the instance state is maintained
-    print(f"Tool call count: {tools_instance.get_call_count()}")
+    response = agent.chat("What is 7 * 9?")
+    print(f"Response: {response}")
+    
+    response = agent.chat("Calculate the area of a rectangle with width 5 and height 10")
+    print(f"Response: {response}")
 
-def run_simplified_tools_example(model):
+def run_simplified_tools_example(model, observers=None):
     """
     Example demonstrating how to use the simplified liteagent_tool decorator.
+    
+    Args:
+        model (str): The model to use
+        observers (list, optional): List of observers to attach to the agents
     """
     # Check for API keys
     check_api_keys()
@@ -243,7 +247,8 @@ def run_simplified_tools_example(model):
             tools_instance.get_weather,
             calculate_area
         ],
-        debug=True
+        debug=True,
+        observers=observers
     )
     
     # Print the available tools
@@ -257,57 +262,56 @@ def run_simplified_tools_example(model):
     # Show that the instance state is maintained
     print(f"Tool call count: {tools_instance.get_call_count()}")
 
-def run_examples(model):
+def run_examples(model, observers=None):
     """
-    Run example scenarios with LiteAgent.
+    Run all examples.
+    
+    Args:
+        model (str): The model to use
+        observers (list, optional): List of observers to attach to the agents
     """
     # Check for API keys
     check_api_keys()
     
-    print("\nStarting LiteAgent...")
-    
-    # Create tool instances for the standalone functions
-    add_numbers_tool = FunctionTool(add_numbers)
-    get_weather_tool = FunctionTool(get_weather)
-    search_database_tool = FunctionTool(search_database)
-    
-    # Create agent instance with drop_params=True to handle different model capabilities
+    # Create an agent with all tools
     agent = LiteAgent(
-        model=model, 
-        name="LiteAgent", 
-        debug=False, 
-        drop_params=True,
-        tools=[add_numbers_tool, get_weather_tool, search_database_tool]
+        model=model,
+        name="LiteAgent",
+        system_prompt="You are a helpful assistant that can perform various tasks.",
+        tools=[get_weather, add_numbers, search_database],
+        observers=observers
     )
     
-    # Example 1: Weather query
-    print("\n=== Example 1: Weather Query ===")
+    # Print available tools
+    print("\n=== Available Tools ===")
+    for name, tool in agent.tools.items():
+        print(f"- {name}: {tool['description'] if isinstance(tool, dict) else tool.description}")
+    
+    # Test the agent with a simple query
+    print("\n=== Weather Query ===")
     response = agent.chat("What's the weather in New York?")
-    print("Final Response:", response)
+    print(f"Response: {response}")
     
-    # Example 2: Math calculation
-    print("\n=== Example 2: Math Calculation ===")
-    agent.reset_memory()  # Reset for a new conversation
+    # Test the agent with a math query
+    print("\n=== Math Query ===")
     response = agent.chat("What is 3 + 7?")
-    print("Final Response:", response)
+    print(f"Response: {response}")
     
-    # Example 3: Database search
-    print("\n=== Example 3: Database Search ===")
-    agent.reset_memory()
-    response = agent.chat("Can you search for information about climate change?")
-    print("Final Response:", response)
+    # Test the agent with a search query
+    print("\n=== Search Query ===")
+    response = agent.chat("Search for information about climate change")
+    print(f"Response: {response}")
     
-    # Example 4: Multi-tool interaction
-    print("\n=== Example 4: Multi-tool Interaction ===")
-    agent.reset_memory()
+    # Test the agent with a complex query that requires multiple tools
+    print("\n=== Multi-tool Query ===")
     response = agent.chat("What's the weather in Paris and what is 15 + 27?")
-    print("Final Response:", response)
+    print(f"Response: {response}")
     
     # Run the custom agents example
-    run_custom_agents_example(model)
+    run_custom_agents_example(model, observers)
     
     # Run the class methods example
-    run_class_methods_example(model)
+    run_class_methods_example(model, observers)
     
     # Run the simplified tools example
-    run_simplified_tools_example(model)
+    run_simplified_tools_example(model, observers)

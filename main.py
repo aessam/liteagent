@@ -8,6 +8,7 @@ import os
 import sys
 import argparse
 from liteagent.utils import setup_logging, logger
+from liteagent.observer import ConsoleObserver, FileObserver, TreeTraceObserver
 
 def parse_arguments():
     """Parse command line arguments."""
@@ -39,6 +40,11 @@ def parse_arguments():
                        help="Log output to a file in addition to console")
     debug_group.add_argument("--no-color", action="store_true",
                        help="Disable colored log output")
+    
+    # Observability options
+    observability_group = parser.add_argument_group("Observability options")
+    observability_group.add_argument("--enable-observability", action="store_true",
+                       help="Enable observability features (console, file, and tree trace observers)")
     
     # Version
     parser.add_argument("--version", action="store_true",
@@ -99,20 +105,34 @@ def main():
         if not args.model.startswith("ollama/"):
             args.model = f"ollama/{args.model}"
             logger.info(f"Updated model name to: {args.model}")
+    
+    # Set up observers if enabled
+    observers = []
+    if args.enable_observability:
+        logger.info("Enabling observability features")
+        observers.append(ConsoleObserver())
+        observers.append(FileObserver('agent_events.jsonl'))
+        observers.append(TreeTraceObserver())
         
     # Determine which examples to run
     if args.class_methods:
         logger.info("Running class methods example")
         from liteagent.examples import run_class_methods_example
-        run_class_methods_example(model=args.model)
+        run_class_methods_example(model=args.model, observers=observers)
     elif args.custom_agents:
         logger.info("Running custom agents example")
         from liteagent.examples import run_custom_agents_example
-        run_custom_agents_example(model=args.model)
+        run_custom_agents_example(model=args.model, observers=observers)
     else:  # Default or --all
         logger.info("Running all examples")
         from liteagent.examples import run_examples
-        run_examples(model=args.model)
+        run_examples(model=args.model, observers=observers)
+        
+    # Print tree trace if observability is enabled
+    if args.enable_observability:
+        for observer in observers:
+            if isinstance(observer, TreeTraceObserver):
+                observer.print_trace()
 
 if __name__ == "__main__":
     main()
