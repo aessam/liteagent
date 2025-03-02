@@ -40,7 +40,7 @@ class ConversationMemory:
         """
         self.messages.append({"role": "assistant", "content": content})
     
-    def add_function_result(self, name: str, content: str, args: Dict = None) -> None:
+    def add_function_result(self, name: str, content: str, args: Dict = None, call_id: str = None, is_error: bool = False) -> None:
         """
         Add a function result to the conversation.
         
@@ -48,6 +48,8 @@ class ConversationMemory:
             name: Function name
             content: Function result
             args: Function arguments
+            call_id: Unique ID for this function call (to link call with result)
+            is_error: Whether this result represents an error
         """
         message = {
             "role": "function",
@@ -55,6 +57,14 @@ class ConversationMemory:
             "content": str(content)
         }
         
+        # Add function call ID if provided
+        if call_id:
+            message["function_call_id"] = call_id
+            
+        # Add error flag if this is an error result
+        if is_error:
+            message["is_error"] = True
+            
         if args:
             # Store args for better repetition detection
             message["args"] = args
@@ -81,7 +91,22 @@ class ConversationMemory:
         Returns:
             List of message dictionaries
         """
-        return self.messages
+        # Filter out internal fields that shouldn't be sent to the model
+        filtered_messages = []
+        for message in self.messages:
+            filtered_message = message.copy()
+            
+            # Remove fields that aren't part of the standard message format
+            if "args" in filtered_message:
+                del filtered_message["args"]
+            if "function_call_id" in filtered_message:
+                del filtered_message["function_call_id"]
+            if "is_error" in filtered_message:
+                del filtered_message["is_error"]
+                
+            filtered_messages.append(filtered_message)
+            
+        return filtered_messages
     
     def reset(self) -> None:
         """Reset the conversation to only include the system prompt."""

@@ -146,9 +146,13 @@ class FunctionCallingModel(ModelInterface):
             except json.JSONDecodeError:
                 function_args = {}
                 
+            # Extract the model's response ID if available
+            model_id = getattr(response, 'id', None)
+                
             return {
                 "name": function_name,
-                "arguments": function_args
+                "arguments": function_args,
+                "model_id": model_id
             }
         
         return None
@@ -289,10 +293,14 @@ class TextBasedFunctionCallingModel(ModelInterface):
                             
                         func_args[key] = value
             
+            # Extract the model's response ID if available
+            model_id = getattr(response, 'id', None)
+            
             return {
                 "name": func_name,
                 "arguments": func_args,
-                "raw_text": content  # Include the raw text for context
+                "raw_text": content,  # Include the raw text for context
+                "model_id": model_id
             }
         
         return None

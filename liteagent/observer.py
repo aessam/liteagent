@@ -215,6 +215,7 @@ class FunctionCallEvent(AgentEvent):
                  parent_context_id: Optional[str] = None,
                  function_name: str = None,
                  function_args: Dict = None,
+                 function_call_id: str = None,
                  **kwargs):
         """
         Initialize a function call event.
@@ -226,17 +227,20 @@ class FunctionCallEvent(AgentEvent):
             parent_context_id: Optional parent context ID if this agent was created by another agent
             function_name: Name of the function being called
             function_args: Arguments being passed to the function
+            function_call_id: Unique ID to link this call with its result
         """
         super().__init__(agent_id, agent_name, context_id, parent_context_id)
         self.function_name = function_name
         self.function_args = function_args
+        self.function_call_id = function_call_id
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert event to dictionary representation."""
         result = super().to_dict()
         result.update({
             "function_name": self.function_name,
-            "function_args": self.function_args
+            "function_args": self.function_args,
+            "function_call_id": self.function_call_id
         })
         return result
 
@@ -253,6 +257,7 @@ class FunctionResultEvent(AgentEvent):
                  function_args: Dict = None,
                  result: Any = None,
                  error: str = None,
+                 function_call_id: str = None,
                  **kwargs):
         """
         Initialize a function result event.
@@ -266,12 +271,14 @@ class FunctionResultEvent(AgentEvent):
             function_args: Arguments that were passed to the function
             result: Result returned by the function
             error: Error message if the function call failed
+            function_call_id: Unique ID linking this result to its function call
         """
         super().__init__(agent_id, agent_name, context_id, parent_context_id)
         self.function_name = function_name
         self.function_args = function_args
         self.result = result
         self.error = error
+        self.function_call_id = function_call_id
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert event to dictionary representation."""
@@ -293,7 +300,8 @@ class FunctionResultEvent(AgentEvent):
             "function_name": self.function_name,
             "function_args": self.function_args,
             "result": serialized_result,
-            "error": self.error
+            "error": self.error,
+            "function_call_id": self.function_call_id
         })
         return result_dict
 
@@ -486,6 +494,8 @@ class TreeTraceObserver(AgentObserver):
         self.parent_map = {}  # context_id -> parent_context_id
         self.children_map = defaultdict(list)  # parent_context_id -> [child_context_ids]
         self.agent_events = defaultdict(list)  # agent_id -> [events]
+        self.function_calls = {}  # function_call_id -> call event
+        self.function_results = {}  # function_call_id -> result event
         
     def on_event(self, event: AgentEvent) -> None:
         """Record all events."""
@@ -510,6 +520,13 @@ class TreeTraceObserver(AgentObserver):
             
         # Store events by agent
         self.agent_events[event.agent_id].append(event)
+        
+        # Track function calls and results
+        if isinstance(event, FunctionCallEvent) and hasattr(event, 'function_call_id') and event.function_call_id:
+            self.function_calls[event.function_call_id] = event
+            
+        if isinstance(event, FunctionResultEvent) and hasattr(event, 'function_call_id') and event.function_call_id:
+            self.function_results[event.function_call_id] = event
     
     def print_trace(self) -> None:
         """Print a hierarchical tree visualization of agent interactions."""
@@ -579,14 +596,27 @@ class TreeTraceObserver(AgentObserver):
             
             elif event_type == "FunctionCallEvent":
                 args_str = self._format_args(event.function_args)
-                print(f"{prefix}├── Function call: {event.function_name}({args_str})")
+                call_id = getattr(event, 'function_call_id', None)
+                if call_id:
+                    call_id_short = call_id[:8]
+                    print(f"{prefix}├── Function call: {event.function_name}({args_str}) [id:{call_id_short}]")
+                else:
+                    print(f"{prefix}├── Function call: {event.function_name}({args_str})")
             
             elif event_type == "FunctionResultEvent":
                 result_str = str(event.result)[:40] + "..." if len(str(event.result)) > 40 else str(event.result)
-                if event.error:
-                    print(f"{prefix}├── Function error: {event.error[:40]}...")
+                call_id = getattr(event, 'function_call_id', None)
+                if call_id:
+                    call_id_short = call_id[:8]
+                    if event.error:
+                        print(f"{prefix}├── Function error: {event.error[:40]}... [id:{call_id_short}]")
+                    else:
+                        print(f"{prefix}├── Function result: {result_str} [id:{call_id_short}]")
                 else:
-                    print(f"{prefix}├── Function result: {result_str}")
+                    if event.error:
+                        print(f"{prefix}├── Function error: {event.error[:40]}...")
+                    else:
+                        print(f"{prefix}├── Function result: {result_str}")
             
             elif event_type == "AgentResponseEvent":
                 response = event.response[:40] + "..." if len(event.response) > 40 else event.response

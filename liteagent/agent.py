@@ -25,10 +25,12 @@ class LiteAgent:
     """
     
     DEFAULT_SYSTEM_PROMPT = """You are a helpful AI assistant. 
-Use the provided functions when needed to answer the user's question. 
-After calling a function and receiving its result, you MUST provide a complete 
-text response to the user. Do not call functions repeatedly if you already 
-have the information needed."""
+Use the provided functions when needed to answer the user's question.
+IMPORTANT: After calling a function and receiving its result, you MUST provide a complete 
+text response to the user. DO NOT call the same function multiple times with the same arguments.
+DO NOT call functions repeatedly if you already have the information needed.
+If you've already received the information you need from a function call, use that information
+to provide a final text response to the user."""
 
     def __init__(self, model, name, system_prompt=None, tools=None, debug=False, drop_params=True, 
                  parent_context_id=None, context_id=None, observers=None):
@@ -226,6 +228,9 @@ have the information needed."""
         max_consecutive_function_calls = 10
         consecutive_function_calls = 0
         
+        # Track function calls to detect loops
+        function_call_counts = {}
+        
         while consecutive_function_calls < max_consecutive_function_calls:
             # Emit model request event
             self._emit_event(ModelRequestEvent(
@@ -271,6 +276,66 @@ have the information needed."""
                         self.memory.add_function_result(function_name, error_message, function_args)
                         continue
                 
+                # Check for repeated function calls with same arguments
+                call_key = f"{function_name}:{json.dumps(function_args, sort_keys=True)}"
+                function_call_counts[call_key] = function_call_counts.get(call_key, 0) + 1
+                
+                # If the same function with same args has been called too many times, break the loop
+                if function_call_counts[call_key] >= 2:
+                    logger.warning(f"Detected repeated function call: {function_name} with args {function_args}")
+                    # Force the agent to generate a text response instead
+                    self.memory.add_system_message(
+                        "IMPORTANT: You have called the same function multiple times with the same arguments. "
+                        "You MUST now provide a final text response based on the information you already have. "
+                        "DO NOT make any more function calls. Summarize what you know and respond directly to the user."
+                    )
+                    
+                    # Get updated messages
+                    messages = self.memory.get_messages()
+                    
+                    # Make one more model call to get a text response
+                    self._emit_event(ModelRequestEvent(
+                        agent_id=self.agent_id,
+                        agent_name=self.name,
+                        context_id=self.context_id,
+                        parent_context_id=self.parent_context_id,
+                        messages=messages,
+                        functions=None  # Don't provide functions to force a text response
+                    ))
+                    
+                    # Generate a response without function calling
+                    final_response = self.model_interface.generate_response(messages, None)
+                    
+                    # Emit model response event
+                    self._emit_event(ModelResponseEvent(
+                        agent_id=self.agent_id,
+                        agent_name=self.name,
+                        context_id=self.context_id,
+                        parent_context_id=self.parent_context_id,
+                        response=final_response
+                    ))
+                    
+                    # Extract the text content
+                    content = self.model_interface.extract_content(final_response)
+                    
+                    # Add assistant message to memory
+                    self.memory.add_assistant_message(content)
+                    
+                    # Emit agent response event
+                    self._emit_event(AgentResponseEvent(
+                        agent_id=self.agent_id,
+                        agent_name=self.name,
+                        context_id=self.context_id,
+                        parent_context_id=self.parent_context_id,
+                        response=content
+                    ))
+                    
+                    # Return the final response
+                    return content
+                
+                # Use the model's response ID if available, otherwise generate a unique ID
+                function_call_id = function_call.get("model_id") or str(uuid.uuid4())
+                
                 # Emit function call event
                 self._emit_event(FunctionCallEvent(
                     agent_id=self.agent_id,
@@ -278,7 +343,8 @@ have the information needed."""
                     context_id=self.context_id,
                     parent_context_id=self.parent_context_id,
                     function_name=function_name,
-                    function_args=function_args
+                    function_args=function_args,
+                    function_call_id=function_call_id
                 ))
                 
                 # Execute the function
@@ -287,8 +353,13 @@ have the information needed."""
                         tool = self.tool_instances[function_name]
                         function_result = tool.execute(**function_args)
                         
-                        # Add result to memory
-                        self.memory.add_function_result(function_name, function_result, function_args)
+                        # Add result to memory with the function call ID
+                        self.memory.add_function_result(
+                            name=function_name, 
+                            content=function_result, 
+                            args=function_args,
+                            call_id=function_call_id
+                        )
                         
                         # Emit function result event
                         self._emit_event(FunctionResultEvent(
@@ -298,7 +369,8 @@ have the information needed."""
                             parent_context_id=self.parent_context_id,
                             function_name=function_name,
                             function_args=function_args,
-                            result=function_result
+                            result=function_result,
+                            function_call_id=function_call_id
                         ))
                         
                         # Get updated messages
@@ -307,8 +379,14 @@ have the information needed."""
                         error_message = f"Error executing function {function_name}: {str(e)}"
                         logger.error(error_message)
                         
-                        # Add function call error to memory
-                        self.memory.add_function_result(function_name, error_message, function_args)
+                        # Add function call error to memory with the function call ID
+                        self.memory.add_function_result(
+                            name=function_name, 
+                            content=error_message, 
+                            args=function_args,
+                            call_id=function_call_id,
+                            is_error=True
+                        )
                         
                         # Emit function result event with error
                         self._emit_event(FunctionResultEvent(
@@ -318,7 +396,8 @@ have the information needed."""
                             parent_context_id=self.parent_context_id,
                             function_name=function_name,
                             function_args=function_args,
-                            error=str(e)
+                            error=str(e),
+                            function_call_id=function_call_id
                         ))
                         
                         # Get updated messages
@@ -327,8 +406,14 @@ have the information needed."""
                     error_message = f"Function {function_name} not found"
                     logger.error(error_message)
                     
-                    # Add function call error to memory
-                    self.memory.add_function_result(function_name, error_message, function_args)
+                    # Add function call error to memory with the function call ID
+                    self.memory.add_function_result(
+                        name=function_name, 
+                        content=error_message, 
+                        args=function_args,
+                        call_id=function_call_id,
+                        is_error=True
+                    )
                     
                     # Emit function result event with error
                     self._emit_event(FunctionResultEvent(
@@ -338,7 +423,8 @@ have the information needed."""
                         parent_context_id=self.parent_context_id,
                         function_name=function_name,
                         function_args=function_args,
-                        error=error_message
+                        error=error_message,
+                        function_call_id=function_call_id
                     ))
                     
                     # Get updated messages
