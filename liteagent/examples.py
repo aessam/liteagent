@@ -2,7 +2,7 @@
 Example usage of LiteAgent.
 """
 
-from .tools import tool, register_tool, FunctionTool, InstanceMethodTool
+from .tools import tool, register_tool, liteagent_tool, FunctionTool, InstanceMethodTool
 from .agent import LiteAgent
 from .utils import check_api_keys
 
@@ -72,6 +72,48 @@ class ToolsForAgents:
     def get_call_count(self) -> int:
         """Returns the number of times the tools have been called."""
         return self.counter
+
+# Example class using the new liteagent_tool decorator
+class SimplifiedToolsForAgents:
+    """
+    Example class with methods that use the liteagent_tool decorator.
+    This demonstrates how to use the simplified tool registration.
+    """
+    def __init__(self, api_key=None):
+        self.api_key = api_key
+        self.counter = 0
+        
+    @liteagent_tool
+    def add_numbers(self, a: int, b: int) -> int:
+        """Adds two numbers together."""
+        self.counter += 1
+        return a + b
+        
+    @liteagent_tool
+    def multiply_numbers(self, a: int, b: int) -> int:
+        """Multiplies two numbers together."""
+        self.counter += 1
+        return a * b
+        
+    @liteagent_tool
+    def get_weather(self, city: str) -> str:
+        """Gets weather for a city using API key if provided."""
+        self.counter += 1
+        if self.api_key:
+            # In a real implementation, this would use the API key
+            return f"Weather in {city} retrieved with API key {self.api_key[:5]}..."
+        else:
+            return f"The weather in {city} is 22°C and sunny."
+            
+    def get_call_count(self) -> int:
+        """Returns the number of times the tools have been called."""
+        return self.counter
+
+# Example standalone function using the new liteagent_tool decorator
+@liteagent_tool
+def calculate_area(width: float, height: float) -> float:
+    """Calculates the area of a rectangle."""
+    return width * height
 
 def run_custom_agents_example(model):
     """
@@ -177,6 +219,44 @@ def run_class_methods_example(model):
     # Show that the instance state is maintained
     print(f"Tool call count: {tools_instance.get_call_count()}")
 
+def run_simplified_tools_example(model):
+    """
+    Example demonstrating how to use the simplified liteagent_tool decorator.
+    """
+    # Check for API keys
+    check_api_keys()
+    
+    print("\n=== Example: Simplified Tool Registration ===")
+    
+    # Create an instance of the simplified tools class
+    tools_instance = SimplifiedToolsForAgents(api_key="fake-api-key-12345")
+    
+    # Create an agent with the simplified tools
+    # Note: We don't need to manually create tool instances, just pass the functions
+    simplified_agent = LiteAgent(
+        model=model,
+        name="SimplifiedAgent",
+        system_prompt="You are a helpful assistant that can perform math operations and get weather information.",
+        tools=[
+            tools_instance.add_numbers,
+            tools_instance.multiply_numbers, 
+            tools_instance.get_weather,
+            calculate_area
+        ],
+        debug=True
+    )
+    
+    # Print the available tools
+    print("Available tools:", [name for name in simplified_agent.tools.keys()])
+    
+    # Test with a query that uses multiple tools
+    print("\n--- Simplified Agent Test ---")
+    response = simplified_agent.chat("What's the weather in Berlin? Also, can you add 23 and 45? Finally, can you multiply 7 and 9? And calculate the area of a rectangle with width 5 and height 10.")
+    print("Simplified Agent Response:", response)
+    
+    # Show that the instance state is maintained
+    print(f"Tool call count: {tools_instance.get_call_count()}")
+
 def run_examples(model):
     """
     Run example scenarios with LiteAgent.
@@ -228,3 +308,6 @@ def run_examples(model):
     
     # Run the class methods example
     run_class_methods_example(model)
+    
+    # Run the simplified tools example
+    run_simplified_tools_example(model)

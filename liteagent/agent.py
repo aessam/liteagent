@@ -80,6 +80,8 @@ have the information needed."""
             else:
                 # Create the appropriate tool instance based on the function type
                 func = tool_or_func
+                
+                # Check if this is a class method or static method
                 if inspect.ismethod(func):
                     # For bound methods
                     if func.__self__ is not None:
@@ -89,6 +91,28 @@ have the information needed."""
                     else:
                         # For static/class methods
                         tool = StaticMethodTool(func)
+                        self.tool_instances[tool.name] = tool
+                elif inspect.isfunction(func) and hasattr(func, '__qualname__') and '.' in func.__qualname__:
+                    # This might be a class method or static method that's not bound yet
+                    class_name, method_name = func.__qualname__.rsplit('.', 1)
+                    
+                    # Try to get the class
+                    module = inspect.getmodule(func)
+                    if module and hasattr(module, class_name):
+                        cls = getattr(module, class_name)
+                        
+                        # Check if it's a classmethod or staticmethod
+                        if isinstance(getattr(cls, method_name, None), (classmethod, staticmethod)):
+                            # For class methods and static methods
+                            tool = InstanceMethodTool(func, cls)
+                            self.tool_instances[tool.name] = tool
+                        else:
+                            # Regular function
+                            tool = FunctionTool(func)
+                            self.tool_instances[tool.name] = tool
+                    else:
+                        # Regular function
+                        tool = FunctionTool(func)
                         self.tool_instances[tool.name] = tool
                 else:
                     # For regular functions
@@ -124,7 +148,7 @@ have the information needed."""
         # Add user input to memory
         self.memory.add_user_message(user_input)
         
-        max_iterations = 5  # Prevent infinite loops
+        max_iterations = 10  # Prevent infinite loops
         iteration = 0
         
         while iteration < max_iterations:
