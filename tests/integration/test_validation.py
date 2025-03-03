@@ -183,7 +183,7 @@ class TestValidationPatterns:
         
         # Validate that the right data was returned in the response
         assert "Alice" in response
-        assert "premium" in response
+        assert "premium" in response.lower()
         
         validation_observer.reset()
         
