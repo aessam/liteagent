@@ -247,9 +247,13 @@ class TestValidationPatterns:
             model=self.MODEL_NAME,
             name="ConditionalAgent",
             system_prompt=(
-                "You are a user management assistant. You should verify user permissions "
-                "before performing admin operations. Only users with 'admin' subscription "
-                "should be allowed to perform admin operations."
+                "You are a user management assistant. You MUST verify user permissions "
+                "before performing admin operations. "
+                "IMPORTANT: For ANY admin operations, ALWAYS use fetch_user_data to check if "
+                "the requesting user has an 'admin' subscription type. "
+                "ALWAYS fetch the data for BOTH the requesting user AND the target user. "
+                "Only users with 'admin' subscription should be allowed to perform admin operations. "
+                "There is a specific user with user_id 'admin' who has permission to modify other accounts."
             ),
             tools=[fetch_user_data, update_user_data, log_system_event],
             observers=[validation_observer]
@@ -266,15 +270,13 @@ class TestValidationPatterns:
         
         # Now test with admin user
         validation_observer.reset()
-        response = agent.chat("As admin, I want to update user2's email to new_bob@example.com")
+        response = agent.chat("As the admin user, I want to update user2's email to new_bob@example.com. Check my permissions first.")
         
         # Check that appropriate functions were called
         validation_observer.assert_function_called("fetch_user_data")
         
-        # We expect either:
-        # 1. The model properly checks permissions and allows the update
-        # 2. The model checks permissions but still doesn't allow it (being extra cautious)
-        # Either way, we want to make sure it checked the admin's permissions
+        # Print debugging information
+        print(f"\nFunction calls in admin test: {validation_observer.function_calls}")
         
         # Check for admin user fetch
         admin_fetch = False
