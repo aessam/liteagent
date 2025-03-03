@@ -32,6 +32,11 @@ class ValidationObserver(AgentObserver):
     def on_function_call(self, event: FunctionCallEvent):
         """Record function call event."""
         super().on_function_call(event)
+        
+        # Add function call info - make sure we're using function_args from the event
+        # Print for debugging
+        print(f"Processing function call: {event.function_name} with args: {event.function_args}")
+        
         self.function_calls.append({
             "name": event.function_name,
             "arguments": event.function_args
