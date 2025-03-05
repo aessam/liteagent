@@ -11,8 +11,8 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Union
 import litellm
 
-from .tool_calling import ToolCallingType, get_tool_calling_handler
-from .tool_calling_config import get_tool_calling_type
+from .tool_calling import ToolCallingType, get_tool_calling_handler, get_provider_specific_handler
+from .tool_calling_config import get_tool_calling_type, get_provider_from_model
 from .utils import logger, log_completion_request, log_completion_response
 
 
@@ -29,8 +29,10 @@ class ModelInterface(ABC):
         """
         self.model_name = model_name
         self.drop_params = drop_params
+        self.provider = get_provider_from_model(model_name)
         self.tool_calling_type = get_tool_calling_type(model_name)
-        self.tool_handler = get_tool_calling_handler(self.tool_calling_type)
+        self.tool_handler = get_provider_specific_handler(self.provider, self.tool_calling_type)
+        self.temperature = None  # Default to None, which will use the model's default temperature
         
     def generate_response(self, messages: List[Dict], functions: Optional[List[Dict]] = None) -> Any:
         """
@@ -44,6 +46,10 @@ class ModelInterface(ABC):
             Dict containing the model's response
         """
         kwargs = {"model": self.model_name, "messages": messages}
+        
+        # Add temperature if it's been set
+        if self.temperature is not None:
+            kwargs["temperature"] = self.temperature
         
         if functions:
             # Format tools appropriately for this model
@@ -148,16 +154,55 @@ class ModelInterface(ABC):
             return str(content).strip() if content else ""
             
         elif self.tool_calling_type == ToolCallingType.ANTHROPIC:
-            if not response or not hasattr(response, 'content') or not isinstance(response.content, list):
+            if not response:
+                logger.warning("Anthropic response is None or empty")
                 return ""
                 
-            # Concatenate all text content
-            text_content = []
-            for content_item in response.content:
-                if hasattr(content_item, "type") and content_item.type == "text":
-                    text_content.append(content_item.text)
+            # Debug log for Anthropic responses
+            logger.warning(f"Anthropic response type: {type(response)}")
+            logger.warning(f"Anthropic response attributes: {dir(response) if hasattr(response, '__dict__') else 'No attributes'}")
+            
+            if hasattr(response, '__dict__'):
+                logger.warning(f"Anthropic response dict: {response.__dict__}")
+            
+            # Try different ways to extract content from Anthropic responses
+            if hasattr(response, 'content') and isinstance(response.content, list):
+                logger.warning(f"Anthropic response has content list with {len(response.content)} items")
+                # Concatenate all text content
+                text_content = []
+                for content_item in response.content:
+                    logger.warning(f"Content item type: {content_item.type if hasattr(content_item, 'type') else 'unknown'}")
+                    if hasattr(content_item, "type") and content_item.type == "text":
+                        text_content.append(content_item.text)
+                        logger.warning(f"Added text content: {content_item.text}")
+                return "\n".join(text_content)
+            
+            # Check for ModelResponse structure from LiteLLM
+            elif hasattr(response, 'choices') and len(response.choices) > 0:
+                logger.warning(f"Anthropic response has choices with {len(response.choices)} items")
+                choice = response.choices[0]
+                if hasattr(choice, 'message'):
+                    message = choice.message
+                    logger.warning(f"Message attributes: {dir(message) if hasattr(message, '__dict__') else 'No attributes'}")
                     
-            return "\n".join(text_content)
+                    # Check for content in the message
+                    if hasattr(message, 'content'):
+                        logger.warning(f"Message content type: {type(message.content)}")
+                        if isinstance(message.content, list):
+                            # Concatenate all text content
+                            text_content = []
+                            for content_item in message.content:
+                                if hasattr(content_item, "type") and content_item.type == "text":
+                                    text_content.append(content_item.text)
+                                    logger.warning(f"Added text content from message: {content_item.text}")
+                            return "\n".join(text_content)
+                        else:
+                            logger.warning(f"Message content as string: {message.content}")
+                            return str(message.content).strip() if message.content else ""
+            
+            # If we can't find content, log the response structure for debugging
+            logger.warning(f"Unable to extract content from Anthropic response: {response}")
+            return ""
             
         elif self.tool_calling_type == ToolCallingType.OLLAMA:
             # Ollama responses can have different structures

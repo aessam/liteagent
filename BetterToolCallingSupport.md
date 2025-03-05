@@ -419,3 +419,9 @@ def test_openai_handler_extraction():
     assert tool_calls[0]["name"] == "get_weather"
     assert tool_calls[0]["arguments"]["location"] == "San Francisco, CA"
 ``` 
+
+## Resrouces 
+- https://platform.openai.com/docs/guides/function-calling
+- https://console.groq.com/docs/tool-use
+- https://github.com/ollama/ollama/issues/6224
+- https://docs.anthropic.com/en/docs/build-with-claude/tool-use/overview#example-of-tool-result-with-images

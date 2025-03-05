@@ -346,7 +346,8 @@ to provide a final text response to the user."""
                                 name=function_name, 
                                 content=function_result, 
                                 args=function_args,
-                                call_id=function_id
+                                call_id=function_id,
+                                provider=self.model_interface.provider
                             )
                             
                             # Emit function result event
@@ -370,7 +371,8 @@ to provide a final text response to the user."""
                                 content=error_message, 
                                 args=function_args,
                                 call_id=function_id,
-                                is_error=True
+                                is_error=True,
+                                provider=self.model_interface.provider
                             )
                             
                             # Emit function result event with error
@@ -394,7 +396,8 @@ to provide a final text response to the user."""
                             content=error_message, 
                             args=function_args,
                             call_id=function_id,
-                            is_error=True
+                            is_error=True,
+                            provider=self.model_interface.provider
                         )
                         
                         # Emit function result event with error

@@ -77,59 +77,61 @@ class OpenAIToolCallingHandler(ToolCallingHandler):
     
     def extract_tool_calls(self, response: Any) -> List[Dict]:
         """Extract tool calls from an OpenAI-style response."""
-        if not hasattr(response, "choices") or not response.choices:
-            return []
-            
-        message = response.choices[0].message
+        tool_calls = []
         
-        # Check for tool_calls first (newer API)
-        if hasattr(message, "tool_calls") and message.tool_calls:
-            tool_calls = []
-            for tool_call in message.tool_calls:
-                if tool_call.type == "function":
-                    function_call = tool_call.function
-                    try:
-                        arguments = json.loads(function_call.arguments) if isinstance(function_call.arguments, str) else function_call.arguments
-                    except json.JSONDecodeError:
-                        arguments = {}
-                        
+        # Handle case where response is a ModelResponse object
+        if hasattr(response, 'choices') and len(response.choices) > 0:
+            choice = response.choices[0]
+            if hasattr(choice, 'message'):
+                message = choice.message
+                
+                # Check for tool_calls array (OpenAI format)
+                if hasattr(message, 'tool_calls') and message.tool_calls:
+                    for tool_call in message.tool_calls:
+                        if hasattr(tool_call, 'function'):
+                            function_call = tool_call.function
+                            tool_calls.append({
+                                "name": function_call.name,
+                                "arguments": json.loads(function_call.arguments) if isinstance(function_call.arguments, str) else function_call.arguments,
+                                "id": tool_call.id
+                            })
+                
+                # Check for function_call (older OpenAI format)
+                elif hasattr(message, 'function_call') and message.function_call:
+                    function_call = message.function_call
                     tool_calls.append({
                         "name": function_call.name,
-                        "arguments": arguments,
-                        "id": tool_call.id
+                        "arguments": json.loads(function_call.arguments) if isinstance(function_call.arguments, str) else function_call.arguments,
+                        "id": str(uuid.uuid4())  # Generate an ID since one isn't provided
                     })
-            return tool_calls
         
-        # Check for function_call (older API)
-        if hasattr(message, "function_call") and message.function_call:
-            try:
-                arguments = json.loads(message.function_call.arguments) if isinstance(message.function_call.arguments, str) else message.function_call.arguments
-            except json.JSONDecodeError:
-                arguments = {}
-                
-            return [{
-                "name": message.function_call.name,
-                "arguments": arguments,
-                "id": str(uuid.uuid4())  # Generate a random ID since function_call doesn't provide one
-            }]
-            
-        return []
+        return tool_calls
         
     def format_tools_for_model(self, tools: List[Dict]) -> List[Dict]:
         """Format tools for OpenAI models."""
-        # OpenAI format is our base format, so we just return the tools as is
         return tools
         
     def format_tool_results(self, tool_name: str, result: Any, **kwargs) -> Dict:
         """Format tool results for OpenAI models."""
-        tool_call_id = kwargs.get("tool_call_id")
-        if not tool_call_id:
-            logger.warning("No tool_call_id provided for OpenAI tool result formatting")
-            
+        # Check for both tool_id and tool_call_id for backward compatibility
+        tool_call_id = kwargs.get("tool_call_id") or kwargs.get("tool_id")
         return {
             "role": "tool",
             "tool_call_id": tool_call_id,
             "name": tool_name,
+            "content": json.dumps(result) if not isinstance(result, str) else result
+        }
+
+
+class GroqToolCallingHandler(OpenAIToolCallingHandler):
+    """Handler for Groq-style tool calling, which is similar to OpenAI but with some differences."""
+    
+    def format_tool_results(self, tool_name: str, result: Any, **kwargs) -> Dict:
+        """Format tool results for Groq models."""
+        tool_call_id = kwargs.get("tool_id")
+        return {
+            "role": "tool",
+            "tool_call_id": tool_call_id,
             "content": json.dumps(result) if not isinstance(result, str) else result
         }
 
@@ -139,19 +141,129 @@ class AnthropicToolCallingHandler(ToolCallingHandler):
     
     def extract_tool_calls(self, response: Any) -> List[Dict]:
         """Extract tool calls from an Anthropic-style response."""
-        if not hasattr(response, "content") or not isinstance(response.content, list):
-            return []
-            
         tool_calls = []
-        for content_item in response.content:
-            if hasattr(content_item, "type") and content_item.type == "tool_use":
-                tool_calls.append({
-                    "name": content_item.name,
-                    "arguments": content_item.input,
-                    "id": content_item.id
-                })
+        
+        # Debug log the response structure
+        logger.debug(f"Anthropic response type: {type(response)}")
+        logger.debug(f"Anthropic response attributes: {dir(response) if hasattr(response, '__dict__') else 'No attributes'}")
+        
+        # Check for content array in the response (standard Anthropic format)
+        if hasattr(response, "content") and isinstance(response.content, list):
+            for content_item in response.content:
+                if hasattr(content_item, "type") and content_item.type == "tool_use":
+                    tool_calls.append({
+                        "name": content_item.name,
+                        "arguments": content_item.input,
+                        "id": content_item.id
+                    })
+        
+        # Check for ModelResponse structure from LiteLLM
+        elif hasattr(response, 'choices') and len(response.choices) > 0:
+            choice = response.choices[0]
+            if hasattr(choice, 'message'):
+                message = choice.message
                 
-        return tool_calls
+                # Check for tool_calls in the message (OpenAI-like format that LiteLLM might use)
+                if hasattr(message, 'tool_calls') and message.tool_calls:
+                    for tool_call in message.tool_calls:
+                        if hasattr(tool_call, 'function'):
+                            function_call = tool_call.function
+                            tool_calls.append({
+                                "name": function_call.name,
+                                "arguments": json.loads(function_call.arguments) if isinstance(function_call.arguments, str) else function_call.arguments,
+                                "id": tool_call.id
+                            })
+                
+                # Check for content array in the message (LiteLLM might wrap Anthropic's response)
+                elif hasattr(message, 'content') and isinstance(message.content, list):
+                    for content_item in message.content:
+                        if hasattr(content_item, "type") and content_item.type == "tool_use":
+                            tool_calls.append({
+                                "name": content_item.name,
+                                "arguments": content_item.input,
+                                "id": content_item.id
+                            })
+        
+        # If we found tool calls, return them
+        if tool_calls:
+            logger.debug(f"Extracted tool calls from Anthropic response: {tool_calls}")
+            return tool_calls
+            
+        # If no tool calls were found, try to extract from text using text-based approach
+        content = self._extract_content(response)
+        if content and "[FUNCTION_CALL]" in content and "[/FUNCTION_CALL]" in content:
+            # Extract function call from text
+            start_idx = content.find("[FUNCTION_CALL]")
+            end_idx = content.find("[/FUNCTION_CALL]")
+            
+            if start_idx != -1 and end_idx != -1 and start_idx < end_idx:
+                func_text = content[start_idx + 15:end_idx].strip()
+                
+                # Parse function name and arguments
+                if "(" in func_text and ")" in func_text:
+                    func_name = func_text[:func_text.find("(")].strip()
+                    args_text = func_text[func_text.find("(")+1:func_text.rfind(")")].strip()
+                    
+                    # Parse arguments
+                    func_args = {}
+                    if args_text:
+                        try:
+                            # Try to parse as JSON first
+                            func_args = json.loads("{" + args_text + "}")
+                        except json.JSONDecodeError:
+                            # Fall back to parsing key-value pairs
+                            for arg_pair in args_text.split(","):
+                                if "=" in arg_pair:
+                                    key, value = arg_pair.split("=", 1)
+                                    key = key.strip()
+                                    value = value.strip()
+                                    
+                                    # Try to convert value to appropriate type
+                                    try:
+                                        # Remove quotes from string values
+                                        if (value.startswith('"') and value.endswith('"')) or \
+                                           (value.startswith("'") and value.endswith("'")):
+                                            value = value[1:-1]
+                                        # Try as number
+                                        elif value.isdigit():
+                                            value = int(value)
+                                        elif value.replace(".", "", 1).isdigit():
+                                            value = float(value)
+                                        # Try as boolean
+                                        elif value.lower() in ["true", "false"]:
+                                            value = value.lower() == "true"
+                                        # Keep as string if none of the above
+                                    except:
+                                        pass
+                                        
+                                    func_args[key] = value
+                    
+                    return [{
+                        "name": func_name,
+                        "arguments": func_args,
+                        "id": str(uuid.uuid4())
+                    }]
+        
+        # No tool calls found
+        logger.debug("No tool calls found in Anthropic response")
+        return []
+    
+    def _extract_content(self, response: Any) -> str:
+        """Extract text content from the response."""
+        if hasattr(response, 'choices') and len(response.choices) > 0:
+            if hasattr(response.choices[0], 'message') and hasattr(response.choices[0].message, 'content'):
+                content = response.choices[0].message.content
+                return str(content).strip() if content else ""
+        
+        if hasattr(response, 'content') and isinstance(response.content, list):
+            # Concatenate all text content
+            text_content = []
+            for content_item in response.content:
+                if hasattr(content_item, "type") and content_item.type == "text":
+                    text_content.append(content_item.text)
+            return "\n".join(text_content)
+        
+        return ""
         
     def format_tools_for_model(self, tools: List[Dict]) -> List[Dict]:
         """Format tools for Anthropic models."""
@@ -166,19 +278,11 @@ class AnthropicToolCallingHandler(ToolCallingHandler):
         
     def format_tool_results(self, tool_name: str, result: Any, **kwargs) -> Dict:
         """Format tool results for Anthropic models."""
-        tool_id = kwargs.get("tool_id")
-        if not tool_id:
-            logger.warning("No tool_id provided for Anthropic tool result formatting")
-            
+        # For Anthropic, we'll use a regular user message with text content
+        # to avoid the error when there was no tool_use in the previous message
         return {
-            "role": "assistant",
-            "content": [
-                {
-                    "type": "tool_result",
-                    "tool_use_id": tool_id,
-                    "content": json.dumps(result) if not isinstance(result, str) else result
-                }
-            ]
+            "role": "user",
+            "content": f"The result of calling {tool_name} is: {json.dumps(result) if not isinstance(result, str) else result}"
         }
 
 
@@ -535,21 +639,45 @@ class NoopToolCallingHandler(ToolCallingHandler):
 
 def get_tool_calling_handler(tool_calling_type: ToolCallingType) -> ToolCallingHandler:
     """
-    Get the appropriate tool calling handler for the given type.
+    Get the appropriate tool calling handler for a tool calling type.
     
     Args:
         tool_calling_type: The tool calling type
         
     Returns:
-        ToolCallingHandler: The appropriate handler instance
+        ToolCallingHandler: The appropriate handler for the tool calling type
     """
-    handlers = {
-        ToolCallingType.OPENAI: OpenAIToolCallingHandler(),
-        ToolCallingType.ANTHROPIC: AnthropicToolCallingHandler(),
-        ToolCallingType.OLLAMA: OllamaToolCallingHandler(),
-        ToolCallingType.STRUCTURED_OUTPUT: StructuredOutputHandler(),
-        ToolCallingType.TEXT_BASED: TextBasedToolCallingHandler(),
-        ToolCallingType.NONE: NoopToolCallingHandler()
-    }
+    if tool_calling_type == ToolCallingType.OPENAI:
+        return OpenAIToolCallingHandler()
+    elif tool_calling_type == ToolCallingType.ANTHROPIC:
+        return AnthropicToolCallingHandler()
+    elif tool_calling_type == ToolCallingType.OLLAMA:
+        return OllamaToolCallingHandler()
+    elif tool_calling_type == ToolCallingType.STRUCTURED_OUTPUT:
+        return StructuredOutputHandler()
+    elif tool_calling_type == ToolCallingType.TEXT_BASED:
+        return TextBasedToolCallingHandler()
+    elif tool_calling_type == ToolCallingType.NONE:
+        return NoopToolCallingHandler()
+    else:
+        logger.warning(f"Unknown tool calling type: {tool_calling_type}, using TEXT_BASED")
+        return TextBasedToolCallingHandler()
+
+
+def get_provider_specific_handler(provider: str, tool_calling_type: ToolCallingType) -> ToolCallingHandler:
+    """
+    Get a provider-specific tool calling handler.
     
-    return handlers.get(tool_calling_type, TextBasedToolCallingHandler()) 
+    Args:
+        provider: The provider name
+        tool_calling_type: The tool calling type
+        
+    Returns:
+        ToolCallingHandler: The appropriate handler for the provider and tool calling type
+    """
+    if provider.lower() == "groq" and tool_calling_type == ToolCallingType.OPENAI:
+        return GroqToolCallingHandler()
+    elif provider.lower() == "anthropic" and tool_calling_type == ToolCallingType.ANTHROPIC:
+        return AnthropicToolCallingHandler()
+    else:
+        return get_tool_calling_handler(tool_calling_type) 

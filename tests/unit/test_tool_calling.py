@@ -235,11 +235,12 @@ class TestAnthropicToolCallingHandler:
         formatted_result = handler.format_tool_results("get_weather", result, tool_id="toolu_123")
         
         # Verify format
-        assert formatted_result["role"] == "assistant"
-        assert len(formatted_result["content"]) == 1
-        assert formatted_result["content"][0]["type"] == "tool_result"
-        assert formatted_result["content"][0]["tool_use_id"] == "toolu_123"
-        assert formatted_result["content"][0]["content"] == '{"temperature": 72, "conditions": "sunny"}'
+        assert formatted_result["role"] == "user"
+        assert "content" in formatted_result
+        assert isinstance(formatted_result["content"], str)
+        assert "get_weather" in formatted_result["content"]
+        assert "72" in formatted_result["content"]
+        assert "sunny" in formatted_result["content"]
 
 
 class TestOllamaToolCallingHandler:

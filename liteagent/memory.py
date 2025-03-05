@@ -40,7 +40,7 @@ class ConversationMemory:
         """
         self.messages.append({"role": "assistant", "content": content})
     
-    def add_function_result(self, name: str, content: str, args: Dict = None, call_id: str = None, is_error: bool = False) -> None:
+    def add_function_result(self, name: str, content: str, args: Dict = None, call_id: str = None, is_error: bool = False, provider: str = None) -> None:
         """
         Add a function result to the conversation.
         
@@ -50,24 +50,34 @@ class ConversationMemory:
             args: Function arguments
             call_id: Unique ID for this function call (to link call with result)
             is_error: Whether this result represents an error
+            provider: The model provider (e.g., "anthropic", "openai")
         """
-        message = {
-            "role": "function",
-            "name": name,
-            "content": str(content)
-        }
-        
-        # Add function call ID if provided
-        if call_id:
-            message["function_call_id"] = call_id
+        # For Anthropic, we need to use a different format to avoid the tool_result error
+        if provider and provider.lower() == "anthropic":
+            # For Anthropic, use assistant role with text content
+            message = {
+                "role": "assistant",
+                "content": f"I called the {name} function with {args} and got this result: {content}"
+            }
+        else:
+            # For other models, use the standard function role
+            message = {
+                "role": "function",
+                "name": name,
+                "content": str(content)
+            }
             
-        # Add error flag if this is an error result
-        if is_error:
-            message["is_error"] = True
-            
-        if args:
-            # Store args for better repetition detection
-            message["args"] = args
+            # Add function call ID if provided
+            if call_id:
+                message["function_call_id"] = call_id
+                
+            # Add error flag if this is an error result
+            if is_error:
+                message["is_error"] = True
+                
+            if args:
+                # Store args for better repetition detection
+                message["args"] = args
             
         self.messages.append(message)
         
