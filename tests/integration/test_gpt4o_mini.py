@@ -41,7 +41,19 @@ class TestGPT4OMini:
         agent = LiteAgent(
             model=self.MODEL_NAME,
             name="TestAgent",
-            system_prompt="You are a helpful assistant that can answer questions using tools.",
+            system_prompt="""You are a helpful assistant that can answer questions using tools.
+When you need information that requires using a tool, ALWAYS use the available tools rather than making up information.
+
+For the get_weather tool: Use this when asked about weather in a specific city.
+Example: When asked "What's the weather in Tokyo?", call the get_weather tool with {"city": "Tokyo"}.
+
+For the add_numbers tool: Use this when asked to perform addition of two numbers.
+Example: When asked "What is 42 + 17?", call the add_numbers tool with {"a": 42, "b": 17}.
+
+For the search_database tool: Use this when asked to search for information in a database.
+Example: When asked "Search for climate change", call the search_database tool with {"query": "climate change", "limit": 5}.
+
+IMPORTANT: You MUST use these tools when applicable. Do not try to answer questions that require these tools without calling them first.""",
             tools=[get_weather, add_numbers, search_database],
             observers=[validation_observer]
         )
@@ -79,7 +91,19 @@ class TestGPT4OMini:
         agent = LiteAgent(
             model=self.MODEL_NAME,
             name="ClassMethodsAgent",
-            system_prompt="You are a helpful assistant that can perform math operations and check the weather.",
+            system_prompt="""You are a helpful assistant that can perform math operations and check the weather.
+When you need to perform calculations or get weather information, ALWAYS use the available tools rather than making up information.
+
+For the multiply_numbers tool: Use this when asked to multiply two numbers.
+Example: When asked "What is 7 times 8?", call the multiply_numbers tool with {"a": 7, "b": 8}.
+
+For the add_numbers tool: Use this when asked to add two numbers.
+Example: When asked "What is 5 plus 3?", call the add_numbers tool with {"a": 5, "b": 3}.
+
+For the get_weather tool: Use this when asked about weather in a specific city.
+Example: When asked "What's the weather in Paris?", call the get_weather tool with {"city": "Paris"}.
+
+IMPORTANT: You MUST use these tools when applicable. Do not try to answer questions that require these tools without calling them first.""",
             tools=[
                 tools_instance.add_numbers,
                 tools_instance.multiply_numbers,
@@ -107,19 +131,27 @@ class TestGPT4OMini:
         assert "API key" in response or "Berlin" in response
     
     def test_decorated_class_methods(self, validation_observer):
-        """Test decorated class methods from examples.py."""
+        """Test decorated class methods as tools."""
         # Create instance of SimplifiedToolsForAgents
-        tools_instance = SimplifiedToolsForAgents(api_key="fake-api-key-12345")
+        tools_instance = SimplifiedToolsForAgents()
         
-        # Create agent with decorated class methods
+        # Create agent with decorated class methods as tools
         agent = LiteAgent(
             model=self.MODEL_NAME,
             name="DecoratedMethodsAgent",
-            system_prompt=(
-                "You are a helpful assistant that can perform math operations. "
-                "YOU MUST USE THE PROVIDED TOOLS for any calculations. DO NOT calculate anything yourself. "
-                "When asked to perform calculations, ALWAYS use the appropriate tool."
-            ),
+            system_prompt="""You are a helpful assistant that can perform math operations.
+When you need to perform calculations, ALWAYS use the available tools rather than calculating manually.
+
+For the add_numbers tool: Use this when asked to add two numbers.
+Example: When asked "What is 10 plus 20?", call the add_numbers tool with {"a": 10, "b": 20}.
+
+For the multiply_numbers tool: Use this when asked to multiply two numbers.
+Example: When asked "What is 6 times 7?", call the multiply_numbers tool with {"a": 6, "b": 7}.
+
+For the calculate_area tool: Use this when asked to calculate the area of a rectangle.
+Example: When asked "Calculate the area of a rectangle with width 5 and height 3", call the calculate_area tool with {"width": 5, "height": 3}.
+
+IMPORTANT: You MUST use these tools when applicable. Do not try to answer questions that require these tools without calling them first.""",
             tools=[
                 tools_instance.add_numbers,
                 tools_instance.multiply_numbers,
@@ -157,17 +189,21 @@ class TestGPT4OMini:
         assert "40" in response
 
     def test_multi_step_reasoning(self, validation_observer):
-        """Test multi-step reasoning with function calls."""
-        # Create agent with tools
+        """Test multi-step reasoning with tools."""
+        # Create agent with tools for multi-step reasoning
         agent = LiteAgent(
             model=self.MODEL_NAME,
-            name="ReasoningAgent",
-            system_prompt=(
-                "You are a helpful assistant that can solve complex problems. "
-                "YOU MUST USE THE PROVIDED TOOLS for all calculations. DO NOT perform any math yourself. "
-                "For all arithmetic operations, use the add_numbers tool. "
-                "For any area calculations, use the calculate_area tool."
-            ),
+            name="MultiStepAgent",
+            system_prompt="""You are a helpful assistant that can solve complex problems using tools.
+When solving problems that require multiple steps, break down the problem and use the appropriate tools for each step.
+
+For the add_numbers tool: Use this when you need to add two numbers.
+Example: When asked "What is 3 plus 4?", call the add_numbers tool with {"a": 3, "b": 4}.
+
+For the calculate_area tool: Use this when you need to calculate the area of a rectangle.
+Example: When asked "Calculate the area of a rectangle with width 5 and height 3", call the calculate_area tool with {"width": 5, "height": 3}.
+
+IMPORTANT: You MUST use these tools when applicable. Do not try to answer questions that require these tools without calling them first.""",
             tools=[add_numbers, calculate_area],
             observers=[validation_observer]
         )

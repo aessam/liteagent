@@ -114,6 +114,8 @@ class TestOpenAIToolCallingHandler:
         
         # Test with no tool calls
         mock_response.choices[0].message.tool_calls = []
+        # Also ensure function_call is not present
+        mock_response.choices[0].message.function_call = None
         assert handler.extract_tool_calls(mock_response) == []
         
         # Test with invalid response
@@ -295,7 +297,8 @@ class TestOllamaToolCallingHandler:
         assert len(formatted_tools) == 1
         assert formatted_tools[0]["type"] == "function"
         assert formatted_tools[0]["function"]["name"] == "get_weather"
-        assert formatted_tools[0]["function"]["description"] == "Get the weather for a location"
+        assert formatted_tools[0]["function"]["description"].startswith("Get the weather for a location")
+        assert "[FUNCTION_CALL]" in formatted_tools[0]["function"]["description"]
         assert "parameters" in formatted_tools[0]["function"]
     
     def test_format_tool_results(self):

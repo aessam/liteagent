@@ -35,7 +35,16 @@
         "claude-3-5-sonnet-20240620": "ANTHROPIC",
         "claude-3-5-haiku-20241022": "ANTHROPIC",
         "claude-3-5-sonnet-20241022": "ANTHROPIC",
-        "claude-3-7-sonnet-20250219": "ANTHROPIC"
+        "claude-3-7-sonnet-20250219": "ANTHROPIC",
+        "claude-3-opus": "ANTHROPIC",
+        "claude-3-sonnet": "ANTHROPIC",
+        "claude-3-haiku": "ANTHROPIC",
+        "claude-3.5-sonnet": "ANTHROPIC",
+        "claude-3.5-haiku": "ANTHROPIC",
+        "claude-3.7-sonnet": "ANTHROPIC",
+        "claude-instant-1.2": "TEXT_BASED",
+        "claude-2.0": "TEXT_BASED",
+        "claude-2.1": "TEXT_BASED"
       }
     },
     "groq": {
@@ -56,7 +65,10 @@
         "qwen-2.5-32b": "OPENAI",
         "qwen-2.5-coder-32b": "OPENAI",
         "deepseek-r1-distill-llama-70b": "OPENAI",
-        "deepseek-r1-distill-qwen-32b": "OPENAI"
+        "deepseek-r1-distill-qwen-32b": "OPENAI",
+        "mixtral-8x7b-32768": "OPENAI",
+        "llama3-70b": "OPENAI",
+        "llama3-8b": "OPENAI"
       }
     },
     "ollama": {
@@ -64,7 +76,23 @@
       "models": {
         "default": "OLLAMA",
         "llama3.3": "OLLAMA",
-        "qwen2.5-coder-32b": "OLLAMA"
+        "qwen2.5-coder-32b": "OLLAMA",
+        "phi4": "OLLAMA",
+        "phi3": "OLLAMA",
+        "phi2": "OLLAMA",
+        "llama3": "OLLAMA",
+        "llama3.2": "OLLAMA",
+        "llama3.1": "OLLAMA",
+        "llama2": "OLLAMA",
+        "mistral": "OLLAMA",
+        "mixtral": "OLLAMA",
+        "gemma": "OLLAMA",
+        "gemma2": "OLLAMA",
+        "qwen": "OLLAMA",
+        "qwen2": "OLLAMA",
+        "qwen2.5": "OLLAMA",
+        "deepseek": "OLLAMA",
+        "deepseek-r1": "OLLAMA"
       }
     },
     "mistral": {
@@ -73,7 +101,11 @@
         "default": "STRUCTURED_OUTPUT",
         "mistral-small": "STRUCTURED_OUTPUT",
         "mistral-medium": "STRUCTURED_OUTPUT",
-        "mistral-large": "STRUCTURED_OUTPUT"
+        "mistral-large": "STRUCTURED_OUTPUT",
+        "open-mistral-7b": "STRUCTURED_OUTPUT",
+        "open-mixtral-8x7b": "STRUCTURED_OUTPUT",
+        "mistral-7b-instruct": "STRUCTURED_OUTPUT",
+        "mixtral-8x7b-instruct": "STRUCTURED_OUTPUT"
       }
     },
     "huggingface": {
@@ -88,7 +120,9 @@
         "default": "STRUCTURED_OUTPUT",
         "command": "STRUCTURED_OUTPUT",
         "command-r": "STRUCTURED_OUTPUT",
-        "command-r-plus": "STRUCTURED_OUTPUT"
+        "command-r-plus": "STRUCTURED_OUTPUT",
+        "command-light": "STRUCTURED_OUTPUT",
+        "command-nightly": "STRUCTURED_OUTPUT"
       }
     },
     "together": {

@@ -55,7 +55,7 @@ def load_config() -> Dict:
             }
         }
 
-
+#FIXME: We should use litellm to give us the info about the model provider.
 def get_provider_from_model(model_name: str) -> str:
     """
     Extract the provider from a model name.
@@ -68,26 +68,36 @@ def get_provider_from_model(model_name: str) -> str:
     """
     model_lower = model_name.lower()
     
-    # Check for provider prefixes
+    # Check for provider prefixes in provider/model format
+    if "/" in model_lower:
+        provider, _ = model_lower.split("/", 1)
+        return provider
+    
+    # Check for provider-specific model naming patterns
     if model_lower.startswith(("gpt-", "text-davinci")):
         return "openai"
     elif model_lower.startswith("claude"):
         return "anthropic"
     elif model_lower.startswith("mistral"):
+        # Could be mistral or ollama/mistral
         return "mistral"
-    elif model_lower.startswith(("llama", "qwen", "gemma", "phi")):
-        # Could be groq or ollama, need to check if it has a provider prefix
-        if "/" in model_lower:
-            provider, _ = model_lower.split("/", 1)
-            return provider
-        # Default to ollama for local models
-        return "ollama"
     elif model_lower.startswith("command"):
         return "cohere"
-    elif "/" in model_lower:
-        # Extract provider from provider/model format
-        provider, _ = model_lower.split("/", 1)
-        return provider
+    elif model_lower.startswith(("llama", "llama3", "llama3.1", "llama3.2", "llama3.3")):
+        # Could be groq or ollama, default to groq for API calls
+        return "groq"
+    elif model_lower.startswith(("phi", "phi2", "phi3", "phi4")):
+        # Phi models are typically used with Ollama
+        return "ollama"
+    elif model_lower.startswith(("qwen", "qwen2", "qwen2.5")):
+        # Could be groq or ollama, default to groq for API calls
+        return "groq"
+    elif model_lower.startswith(("gemma", "gemma2")):
+        # Could be groq or ollama, default to groq for API calls
+        return "groq"
+    elif model_lower.startswith(("mixtral", "deepseek")):
+        # Could be groq or ollama, default to groq for API calls
+        return "groq"
         
     # Default to "local" if we can't determine the provider
     return "local"

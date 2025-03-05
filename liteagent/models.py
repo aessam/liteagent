@@ -89,6 +89,18 @@ class ModelInterface(ABC):
         # Log the response
         log_completion_response(response, elapsed_time)
         
+        # Debug log for Ollama responses
+        if self.tool_calling_type == ToolCallingType.OLLAMA:
+            logger.debug(f"Ollama response type: {type(response)}")
+            logger.debug(f"Ollama response attributes: {dir(response) if hasattr(response, '__dict__') else 'No attributes'}")
+            logger.debug(f"Ollama response dict: {response.__dict__ if hasattr(response, '__dict__') else 'Not a class instance'}")
+            
+            # Check for message attribute
+            if hasattr(response, 'message'):
+                logger.debug(f"Ollama message type: {type(response.message)}")
+                logger.debug(f"Ollama message attributes: {dir(response.message) if hasattr(response.message, '__dict__') else 'No attributes'}")
+                logger.debug(f"Ollama message dict: {response.message.__dict__ if hasattr(response.message, '__dict__') else 'Not a class instance'}")
+        
         return response
     
     @abstractmethod
@@ -148,11 +160,33 @@ class ModelInterface(ABC):
             return "\n".join(text_content)
             
         elif self.tool_calling_type == ToolCallingType.OLLAMA:
-            if not response or not hasattr(response, 'message'):
-                return ""
-                
-            content = response.message.content if hasattr(response.message, 'content') else ""
-            return str(content).strip() if content else ""
+            # Ollama responses can have different structures
+            # First check for ModelResponse structure (from litellm)
+            if hasattr(response, 'choices') and len(response.choices) > 0:
+                choice = response.choices[0]
+                if hasattr(choice, 'message') and hasattr(choice.message, 'content'):
+                    content = choice.message.content
+                    if content is not None:
+                        return str(content).strip()
+            
+            # Then check for original Ollama structure
+            if hasattr(response, 'message') and hasattr(response.message, 'content'):
+                return str(response.message.content).strip()
+            elif hasattr(response, 'response'):
+                return str(response.response).strip()
+            elif hasattr(response, 'content'):
+                return str(response.content).strip()
+            elif isinstance(response, dict):
+                if 'message' in response and 'content' in response['message']:
+                    return str(response['message']['content']).strip()
+                elif 'response' in response:
+                    return str(response['response']).strip()
+                elif 'content' in response:
+                    return str(response['content']).strip()
+            
+            # If we can't find content, log the response structure for debugging
+            logger.warning(f"Unable to extract content from Ollama response: {response}")
+            return ""
             
         else:
             # For other types, use a generic approach

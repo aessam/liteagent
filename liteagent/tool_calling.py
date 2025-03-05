@@ -81,25 +81,39 @@ class OpenAIToolCallingHandler(ToolCallingHandler):
             return []
             
         message = response.choices[0].message
-        if not hasattr(message, "tool_calls") or not message.tool_calls:
-            return []
-            
-        tool_calls = []
-        for tool_call in message.tool_calls:
-            if tool_call.type == "function":
-                function_call = tool_call.function
-                try:
-                    arguments = json.loads(function_call.arguments) if isinstance(function_call.arguments, str) else function_call.arguments
-                except json.JSONDecodeError:
-                    arguments = {}
-                    
-                tool_calls.append({
-                    "name": function_call.name,
-                    "arguments": arguments,
-                    "id": tool_call.id
-                })
+        
+        # Check for tool_calls first (newer API)
+        if hasattr(message, "tool_calls") and message.tool_calls:
+            tool_calls = []
+            for tool_call in message.tool_calls:
+                if tool_call.type == "function":
+                    function_call = tool_call.function
+                    try:
+                        arguments = json.loads(function_call.arguments) if isinstance(function_call.arguments, str) else function_call.arguments
+                    except json.JSONDecodeError:
+                        arguments = {}
+                        
+                    tool_calls.append({
+                        "name": function_call.name,
+                        "arguments": arguments,
+                        "id": tool_call.id
+                    })
+            return tool_calls
+        
+        # Check for function_call (older API)
+        if hasattr(message, "function_call") and message.function_call:
+            try:
+                arguments = json.loads(message.function_call.arguments) if isinstance(message.function_call.arguments, str) else message.function_call.arguments
+            except json.JSONDecodeError:
+                arguments = {}
                 
-        return tool_calls
+            return [{
+                "name": message.function_call.name,
+                "arguments": arguments,
+                "id": str(uuid.uuid4())  # Generate a random ID since function_call doesn't provide one
+            }]
+            
+        return []
         
     def format_tools_for_model(self, tools: List[Dict]) -> List[Dict]:
         """Format tools for OpenAI models."""
@@ -173,20 +187,105 @@ class OllamaToolCallingHandler(ToolCallingHandler):
     
     def extract_tool_calls(self, response: Any) -> List[Dict]:
         """Extract tool calls from an Ollama-style response."""
-        if not hasattr(response, "message") or not hasattr(response.message, "tool_calls"):
-            return []
-            
-        tool_calls = []
-        for tool_call in response.message.tool_calls:
-            if hasattr(tool_call, "function"):
-                function_call = tool_call.function
-                tool_calls.append({
-                    "name": function_call.name,
-                    "arguments": function_call.arguments,
-                    "id": str(uuid.uuid4())  # Ollama doesn't provide IDs, so we generate one
-                })
+        # First try to extract native tool calls from ModelResponse structure
+        if hasattr(response, 'choices') and len(response.choices) > 0:
+            choice = response.choices[0]
+            if hasattr(choice, 'message') and hasattr(choice.message, 'tool_calls'):
+                tool_calls = []
+                for tool_call in choice.message.tool_calls:
+                    if hasattr(tool_call, 'function'):
+                        function_call = tool_call.function
+                        tool_calls.append({
+                            "name": function_call.name,
+                            "arguments": json.loads(function_call.arguments) if isinstance(function_call.arguments, str) else function_call.arguments,
+                            "id": tool_call.id if hasattr(tool_call, 'id') else str(uuid.uuid4())
+                        })
                 
-        return tool_calls
+                if tool_calls:
+                    return tool_calls
+        
+        # Then try the original Ollama format
+        if hasattr(response, "message") and hasattr(response.message, "tool_calls"):
+            tool_calls = []
+            for tool_call in response.message.tool_calls:
+                if hasattr(tool_call, "function"):
+                    function_call = tool_call.function
+                    tool_calls.append({
+                        "name": function_call.name,
+                        "arguments": json.loads(function_call.arguments) if isinstance(function_call.arguments, str) else function_call.arguments,
+                        "id": str(uuid.uuid4())  # Ollama doesn't provide IDs, so we generate one
+                    })
+            
+            if tool_calls:
+                return tool_calls
+        
+        # If no native tool calls found, try text-based extraction as a fallback
+        # Extract content from the response
+        content = ""
+        if hasattr(response, "message") and hasattr(response.message, "content"):
+            content = response.message.content
+        elif hasattr(response, 'choices') and len(response.choices) > 0 and hasattr(response.choices[0], 'message'):
+            content = response.choices[0].message.content if hasattr(response.choices[0].message, 'content') else ""
+        
+        if not content:
+            return []
+        
+        # Check for our special function call syntax
+        if "[FUNCTION_CALL]" in content and "[/FUNCTION_CALL]" in content:
+            # Extract function call from text
+            start_idx = content.find("[FUNCTION_CALL]")
+            end_idx = content.find("[/FUNCTION_CALL]")
+            
+            if start_idx == -1 or end_idx == -1 or start_idx >= end_idx:
+                # No valid function call found
+                return []
+                
+            func_text = content[start_idx + 15:end_idx].strip()
+            
+            # Parse function name and arguments
+            if "(" not in func_text or ")" not in func_text:
+                # Invalid function call format
+                return []
+                
+            func_name = func_text[:func_text.find("(")].strip()
+            args_text = func_text[func_text.find("(")+1:func_text.rfind(")")].strip()
+            
+            # Parse arguments
+            func_args = {}
+            if args_text:
+                for arg_pair in args_text.split(","):
+                    if "=" in arg_pair:
+                        key, value = arg_pair.split("=", 1)
+                        key = key.strip()
+                        value = value.strip()
+                        
+                        # Try to convert value to appropriate type
+                        try:
+                            # Remove quotes from string values
+                            if (value.startswith('"') and value.endswith('"')) or \
+                               (value.startswith("'") and value.endswith("'")):
+                                value = value[1:-1]
+                            # Try as number
+                            elif value.isdigit():
+                                value = int(value)
+                            elif value.replace(".", "", 1).isdigit():
+                                value = float(value)
+                            # Try as boolean
+                            elif value.lower() in ["true", "false"]:
+                                value = value.lower() == "true"
+                            # Keep as string if none of the above
+                        except:
+                            pass
+                            
+                        func_args[key] = value
+            
+            return [{
+                "name": func_name,
+                "arguments": func_args,
+                "id": str(uuid.uuid4())
+            }]
+        
+        return []
         
     def format_tools_for_model(self, tools: List[Dict]) -> List[Dict]:
         """Format tools for Ollama models."""
@@ -200,6 +299,28 @@ class OllamaToolCallingHandler(ToolCallingHandler):
                     "parameters": tool.get("parameters", {})
                 }
             })
+        
+        # Also add text-based instructions to the system prompt
+        tool_descriptions = []
+        for func in tools:
+            name = func.get("name", "unknown")
+            description = func.get("description", f"Function to {name}")
+            params = func.get("parameters", {}).get("properties", {})
+            
+            param_desc = ", ".join([f"{p} ({t.get('type', 'any')})" 
+                                  for p, t in params.items()])
+            
+            tool_descriptions.append(f"Function: {name}({param_desc})\nDescription: {description}\n")
+        
+        # Add the text-based instructions to the first tool's description
+        if ollama_tools:
+            current_desc = ollama_tools[0]["function"]["description"]
+            text_instructions = ("\n\nIf you need to use a function, you can also output exactly "
+                               "[FUNCTION_CALL] function_name(param1=value1, param2=value2) [/FUNCTION_CALL].\n\n" + 
+                               "\n".join(tool_descriptions))
+            
+            ollama_tools[0]["function"]["description"] = current_desc + text_instructions
+            
         return ollama_tools
         
     def format_tool_results(self, tool_name: str, result: Any, **kwargs) -> Dict:

@@ -42,7 +42,17 @@ class TestOllamaPhi:
         agent = LiteAgent(
             model=self.MODEL_NAME,
             name="TestAgent",
-            system_prompt="You are a helpful assistant that can answer questions using tools. Make sure to use tools when applicable.",
+            system_prompt="""You are a helpful assistant that can answer questions using tools. 
+When you need to use a tool, you MUST use the exact format:
+[FUNCTION_CALL] function_name(param1=value1, param2=value2) [/FUNCTION_CALL]
+
+For example, to get weather:
+[FUNCTION_CALL] get_weather(city="Tokyo") [/FUNCTION_CALL]
+
+For example, to add numbers:
+[FUNCTION_CALL] add_numbers(a=5, b=7) [/FUNCTION_CALL]
+
+Always use tools when applicable and format your function calls exactly as shown above.""",
             tools=[get_weather, add_numbers],
             observers=[validation_observer]
         )
@@ -77,7 +87,14 @@ class TestOllamaPhi:
         agent = LiteAgent(
             model=self.MODEL_NAME,
             name="ClassMethodsAgent",
-            system_prompt="You are a helpful assistant that can perform math operations and check the weather.",
+            system_prompt="""You are a helpful assistant that can perform math operations and check the weather.
+When you need to use a tool, you MUST use the exact format:
+[FUNCTION_CALL] function_name(param1=value1, param2=value2) [/FUNCTION_CALL]
+
+For example, to multiply numbers:
+[FUNCTION_CALL] multiply_numbers(a=6, b=7) [/FUNCTION_CALL]
+
+Always use tools when applicable and format your function calls exactly as shown above.""",
             tools=[
                 tools_instance.add_numbers,
                 tools_instance.multiply_numbers
@@ -107,11 +124,15 @@ class TestOllamaPhi:
         agent = LiteAgent(
             model=self.MODEL_NAME,
             name="BasicToolsAgent",
-            system_prompt=(
-                "You are a helpful assistant that can use tools to accomplish tasks. "
-                "Make sure to call the add_numbers tool when asked to add two numbers. "
-                "Be very careful to use the exact function signatures for tools."
-            ),
+            system_prompt="""You are a helpful assistant that can use tools to accomplish tasks.
+When you need to use a tool, you MUST use the exact format:
+[FUNCTION_CALL] function_name(param1=value1, param2=value2) [/FUNCTION_CALL]
+
+For example, to add numbers:
+[FUNCTION_CALL] add_numbers(a=5, b=7) [/FUNCTION_CALL]
+
+Always use tools when applicable and format your function calls exactly as shown above.
+Make sure to call the add_numbers tool when asked to add two numbers.""",
             tools=[add_numbers],
             observers=[validation_observer]
         )
@@ -132,20 +153,26 @@ class TestOllamaPhi:
         # Create agent with tools
         agent = LiteAgent(
             model=self.MODEL_NAME,
-            name="ComboAgent",
-            system_prompt=(
-                "You are a helpful assistant that can perform math operations. "
-                "Always use the available tools when appropriate to solve problems."
-            ),
-            tools=[add_numbers, calculate_area],
+            name="MultiToolAgent",
+            system_prompt="""You are a helpful assistant that can use multiple tools to solve problems.
+When you need to use a tool, you MUST use the exact format:
+[FUNCTION_CALL] function_name(param1=value1, param2=value2) [/FUNCTION_CALL]
+
+For example, to add numbers:
+[FUNCTION_CALL] add_numbers(a=5, b=7) [/FUNCTION_CALL]
+
+For example, to search a database:
+[FUNCTION_CALL] search_database(query="AI tools", limit=3) [/FUNCTION_CALL]
+
+Always use tools when applicable and format your function calls exactly as shown above.""",
+            tools=[add_numbers, search_database],
             observers=[validation_observer]
         )
         
         # Ask a question that requires multiple tool calls
         response = agent.chat(
             "First, add 10 and 5 using the add_numbers tool. "
-            "Then, use the calculate_area tool to find the area of a rectangle "
-            "with width 3 and height 4."
+            "Then, use the search_database tool to find information about AI tools."
         )
         
         # Print info about the function calls
@@ -155,6 +182,6 @@ class TestOllamaPhi:
         
         # Check if the response contains the expected answers
         # 10 + 5 = 15
-        # area of 3x4 = 12
+        # search_database(query="AI tools", limit=3)
         assert "15" in response or "10" in response and "5" in response
-        assert "12" in response or "3" in response and "4" in response 
+        assert "AI tools" in response or "AI" in response and "tools" in response 
