@@ -7,12 +7,14 @@ This module provides classes for handling tool calling interactions with differe
 from abc import ABC, abstractmethod
 import json
 import re
+import uuid
 from enum import Enum, auto
 from typing import Dict, List, Optional, Any, Union, Callable, Set, Tuple
 
 from .tools import get_function_definitions
 from .agent_tool import FunctionDefinition
 from .tool_calling_types import ToolCallingType
+from .utils import logger
 
 
 class ToolCallingHandler(ABC):
@@ -100,7 +102,37 @@ class OpenAIToolCallingHandler(ToolCallingHandler):
         
     def format_tools_for_model(self, tools: List[Dict]) -> List[Dict]:
         """Format tools for OpenAI models."""
-        return tools
+        # OpenAI requires a "type" field for each tool and a "function" property
+        formatted_tools = []
+        for tool in tools:
+            # Create a copy of the tool to avoid modifying the original
+            tool_copy = tool.copy()
+            
+            # Add the "type" field if it doesn't exist
+            if "type" not in tool_copy:
+                tool_copy["type"] = "function"
+            
+            # Ensure the tool has a "function" property
+            if "function" not in tool_copy:
+                # If the tool has name, description, and parameters, move them to a function object
+                function_data = {}
+                if "name" in tool_copy:
+                    function_data["name"] = tool_copy["name"]
+                if "description" in tool_copy:
+                    function_data["description"] = tool_copy["description"]
+                if "parameters" in tool_copy:
+                    function_data["parameters"] = tool_copy["parameters"]
+                
+                # Add the function object to the tool
+                tool_copy["function"] = function_data
+                
+                # Remove the fields that were moved to the function object
+                # but keep them if they're needed at the top level
+                if "parameters" in tool_copy and "function" in tool_copy:
+                    tool_copy.pop("parameters", None)
+            
+            formatted_tools.append(tool_copy)
+        return formatted_tools
         
     def format_tool_results(self, tool_name: str, result: Any, **kwargs) -> Dict:
         """Format tool results for OpenAI models."""
@@ -116,6 +148,40 @@ class OpenAIToolCallingHandler(ToolCallingHandler):
 
 class GroqToolCallingHandler(OpenAIToolCallingHandler):
     """Handler for Groq-style tool calling, which is similar to OpenAI but with some differences."""
+    
+    def format_tools_for_model(self, tools: List[Dict]) -> List[Dict]:
+        """Format tools for Groq models."""
+        # Groq requires a "type" field for each tool and a "function" property
+        formatted_tools = []
+        for tool in tools:
+            # Create a copy of the tool to avoid modifying the original
+            tool_copy = tool.copy()
+            
+            # Add the "type" field if it doesn't exist
+            if "type" not in tool_copy:
+                tool_copy["type"] = "function"
+            
+            # Ensure the tool has a "function" property
+            if "function" not in tool_copy:
+                # If the tool has name, description, and parameters, move them to a function object
+                function_data = {}
+                if "name" in tool_copy:
+                    function_data["name"] = tool_copy["name"]
+                if "description" in tool_copy:
+                    function_data["description"] = tool_copy["description"]
+                if "parameters" in tool_copy:
+                    function_data["parameters"] = tool_copy["parameters"]
+                
+                # Add the function object to the tool
+                tool_copy["function"] = function_data
+                
+                # Remove the fields that were moved to the function object
+                # but keep them if they're needed at the top level
+                if "parameters" in tool_copy and "function" in tool_copy:
+                    tool_copy.pop("parameters", None)
+            
+            formatted_tools.append(tool_copy)
+        return formatted_tools
     
     def format_tool_results(self, tool_name: str, result: Any, **kwargs) -> Dict:
         """Format tool results for Groq models."""
@@ -285,7 +351,7 @@ class OllamaToolCallingHandler(ToolCallingHandler):
         # First try to extract native tool calls from ModelResponse structure
         if hasattr(response, 'choices') and len(response.choices) > 0:
             choice = response.choices[0]
-            if hasattr(choice, 'message') and hasattr(choice.message, 'tool_calls'):
+            if hasattr(choice, 'message') and hasattr(choice.message, 'tool_calls') and choice.message.tool_calls is not None:
                 tool_calls = []
                 for tool_call in choice.message.tool_calls:
                     if hasattr(tool_call, 'function'):
@@ -300,7 +366,7 @@ class OllamaToolCallingHandler(ToolCallingHandler):
                     return tool_calls
         
         # Then try the original Ollama format
-        if hasattr(response, "message") and hasattr(response.message, "tool_calls"):
+        if hasattr(response, "message") and hasattr(response.message, "tool_calls") and response.message.tool_calls is not None:
             tool_calls = []
             for tool_call in response.message.tool_calls:
                 if hasattr(tool_call, "function"):

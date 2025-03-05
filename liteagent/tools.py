@@ -53,22 +53,30 @@ class ToolsForAgents:
     def __init__(self, api_key=None):
         """Initialize with an optional API key."""
         self.api_key = api_key
+        self._call_count = 0
         
     def add_numbers(self, a: int, b: int) -> int:
         """Adds two numbers together."""
+        self._call_count += 1
         return a + b
         
     def multiply_numbers(self, a: int, b: int) -> int:
         """Multiplies two numbers together."""
+        self._call_count += 1
         return a * b
         
     def get_weather(self, city: str) -> str:
         """Gets weather for a city using API key if provided."""
+        self._call_count += 1
         if self.api_key:
             # Use API key to get real weather (simulated here)
             return f"Weather in {city} retrieved with API key {self.api_key[:5]}...: 22°C and sunny."
         else:
             return get_weather(city)
+            
+    def get_call_count(self) -> int:
+        """Returns the number of times any tool method has been called."""
+        return self._call_count
 
 class BaseTool:
     """Base class for all tools."""

@@ -36,52 +36,46 @@ class TestToolCallingTypes:
         assert get_provider_from_model("claude-3-opus") == "anthropic"
         assert get_provider_from_model("claude-3-sonnet") == "anthropic"
         
-        # Mistral models
-        assert get_provider_from_model("mistral-medium") == "mistral"
-        assert get_provider_from_model("mistral-large") == "mistral"
+        # Groq models
+        assert get_provider_from_model("llama-3.1-8b-instant") == "groq"
         
-        # Provider/model format
-        assert get_provider_from_model("ollama/llama3") == "ollama"
-        assert get_provider_from_model("groq/llama-3.1-8b") == "groq"
+        # Ollama models
+        assert get_provider_from_model("ollama/llama2") == "ollama"
         
-        # Default for unknown
-        assert get_provider_from_model("unknown-model") == "local"
+        # Unknown models
+        assert get_provider_from_model("unknown-model") == "unknown"
     
     def test_get_tool_calling_type(self):
         """Test getting tool calling type for models."""
         # OpenAI models
-        assert get_tool_calling_type("gpt-4") == ToolCallingType.OPENAI
-        assert get_tool_calling_type("gpt-3.5-turbo") == ToolCallingType.OPENAI
+        assert get_tool_calling_type("gpt-4") == ToolCallingType.OPENAI_FUNCTION_CALLING
+        assert get_tool_calling_type("gpt-3.5-turbo") == ToolCallingType.OPENAI_FUNCTION_CALLING
         
         # Anthropic models
-        assert get_tool_calling_type("claude-3-opus") == ToolCallingType.ANTHROPIC
-        assert get_tool_calling_type("claude-3-sonnet") == ToolCallingType.ANTHROPIC
+        assert get_tool_calling_type("claude-3-opus") == ToolCallingType.ANTHROPIC_TOOL_CALLING
+        assert get_tool_calling_type("claude-3-sonnet") == ToolCallingType.ANTHROPIC_TOOL_CALLING
         
         # Ollama models
-        assert get_tool_calling_type("ollama/llama3") == ToolCallingType.OLLAMA
+        assert get_tool_calling_type("ollama/llama2") == ToolCallingType.JSON_EXTRACTION
         
-        # Structured output models
-        assert get_tool_calling_type("mistral-medium") == ToolCallingType.STRUCTURED_OUTPUT
+        # Groq models
+        assert get_tool_calling_type("groq/llama-3.1-8b-instant") == ToolCallingType.OPENAI_FUNCTION_CALLING
         
-        # Text-based models
-        assert get_tool_calling_type("huggingface/model") == ToolCallingType.TEXT_BASED
-        
-        # Unknown models default to TEXT_BASED
-        assert get_tool_calling_type("unknown-model") == ToolCallingType.TEXT_BASED
+        # Models without tool calling support
+        assert get_tool_calling_type("text-davinci-003") == ToolCallingType.NONE
     
     def test_get_tool_calling_handler_type(self):
         """Test getting tool calling handler type name."""
-        assert get_tool_calling_handler_type("gpt-4") == "OPENAI"
-        assert get_tool_calling_handler_type("claude-3-opus") == "ANTHROPIC"
-        assert get_tool_calling_handler_type("ollama/llama3") == "OLLAMA"
+        assert get_tool_calling_handler_type("gpt-4") == "OPENAI_FUNCTION_CALLING"
+        assert get_tool_calling_handler_type("claude-3-opus") == "ANTHROPIC_TOOL_CALLING"
+        assert get_tool_calling_handler_type("ollama/llama2") == "JSON_EXTRACTION"
     
     def test_get_tool_calling_handler(self):
         """Test getting the appropriate handler for a tool calling type."""
-        assert isinstance(get_tool_calling_handler(ToolCallingType.OPENAI), OpenAIToolCallingHandler)
-        assert isinstance(get_tool_calling_handler(ToolCallingType.ANTHROPIC), AnthropicToolCallingHandler)
-        assert isinstance(get_tool_calling_handler(ToolCallingType.OLLAMA), OllamaToolCallingHandler)
-        assert isinstance(get_tool_calling_handler(ToolCallingType.STRUCTURED_OUTPUT), StructuredOutputHandler)
-        assert isinstance(get_tool_calling_handler(ToolCallingType.TEXT_BASED), TextBasedToolCallingHandler)
+        assert isinstance(get_tool_calling_handler(ToolCallingType.OPENAI_FUNCTION_CALLING), OpenAIToolCallingHandler)
+        assert isinstance(get_tool_calling_handler(ToolCallingType.ANTHROPIC_TOOL_CALLING), AnthropicToolCallingHandler)
+        assert isinstance(get_tool_calling_handler(ToolCallingType.JSON_EXTRACTION), OllamaToolCallingHandler)
+        assert isinstance(get_tool_calling_handler(ToolCallingType.PROMPT_BASED), TextBasedToolCallingHandler)
         assert isinstance(get_tool_calling_handler(ToolCallingType.NONE), NoopToolCallingHandler)
 
 
@@ -145,8 +139,14 @@ class TestOpenAIToolCallingHandler:
         # Format tools
         formatted_tools = handler.format_tools_for_model(tools)
         
-        # OpenAI format is our base format, so it should be unchanged
-        assert formatted_tools == tools
+        # Check that the tools have been properly formatted with type and function fields
+        assert len(formatted_tools) == 1
+        assert formatted_tools[0]["type"] == "function"
+        assert "function" in formatted_tools[0]
+        assert formatted_tools[0]["function"]["name"] == "get_weather"
+        assert formatted_tools[0]["function"]["description"] == "Get the weather for a location"
+        assert formatted_tools[0]["function"]["parameters"]["type"] == "object"
+        assert "location" in formatted_tools[0]["function"]["parameters"]["properties"]
     
     def test_format_tool_results(self):
         """Test formatting tool results for OpenAI models."""

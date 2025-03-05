@@ -13,12 +13,13 @@ from typing import List, Dict, Any, Callable
 
 from liteagent.agent import LiteAgent
 from liteagent.tools import tool, liteagent_tool
+from liteagent.tool_calling_types import ToolCallingType, get_tool_calling_type
 from liteagent.examples import (
     get_weather, add_numbers, search_database, calculate_area,
     ToolsForAgents, SimplifiedToolsForAgents
 )
 
-from tests.integration.test_observer import ValidationObserver
+from tests.integration.validation_observer import ValidationObserver
 
 
 # Skip tests if API key is not set
@@ -38,6 +39,10 @@ class TestAnthropicClaude:
     
     def test_standalone_tools(self, validation_observer):
         """Test standalone function tools with Anthropic's native function calling."""
+        # Set validation strategy for Anthropic models
+        tool_calling_type = get_tool_calling_type(self.MODEL_NAME)
+        validation_observer.set_validation_strategy(tool_calling_type)
+        
         # Create agent with standalone tools
         agent = LiteAgent(
             model=self.MODEL_NAME,
@@ -129,6 +134,10 @@ IMPORTANT: Always use the tools when appropriate rather than trying to answer wi
     
     def test_class_method_tools(self, validation_observer):
         """Test class method tools with Anthropic's native function calling."""
+        # Set validation strategy for Anthropic models
+        tool_calling_type = get_tool_calling_type(self.MODEL_NAME)
+        validation_observer.set_validation_strategy(tool_calling_type)
+        
         # Create tools class instance
         tools_instance = ToolsForAgents()
         
@@ -218,6 +227,10 @@ IMPORTANT: Always use the tools when appropriate rather than trying to answer wi
     
     def test_multi_step_reasoning(self, validation_observer):
         """Test multi-step reasoning with Anthropic's native function calling."""
+        # Set validation strategy for Anthropic models
+        tool_calling_type = get_tool_calling_type(self.MODEL_NAME)
+        validation_observer.set_validation_strategy(tool_calling_type)
+        
         # Create agent with multiple tools
         agent = LiteAgent(
             model=self.MODEL_NAME,

@@ -231,13 +231,15 @@ class ValidationTestHelper:
         }
     
     @staticmethod
-    def validate_weather_tool_usage(validation_observer: Any, city: str):
+    def validate_weather_tool_usage(validation_observer: Any, response: str, city: str, tool_calling_type: Any = None):
         """
         Validate that the weather tool was used correctly.
         
         Args:
             validation_observer: The validation observer
+            response: The response from the agent
             city: The expected city
+            tool_calling_type: The tool calling type (optional)
         """
         validation_observer.assert_function_called("get_weather")
         validation_observer.assert_function_called_with("get_weather", city=city)
@@ -248,19 +250,20 @@ class ValidationTestHelper:
         assert city in weather_result, f"Result should mention {city}"
     
     @staticmethod
-    def validate_number_tool_usage(validation_observer: Any, tool_name: str, a: int, b: int, expected_result: int):
+    def validate_number_tool_usage(validation_observer: Any, response: str, tool_name: str, a_b_dict: Dict[str, int], expected_result: int, tool_calling_type: Any = None):
         """
         Validate that a number tool was used correctly.
         
         Args:
             validation_observer: The validation observer
+            response: The response from the agent
             tool_name: The name of the tool (add_numbers or multiply_numbers)
-            a: The first number
-            b: The second number
+            a_b_dict: Dictionary containing 'a' and 'b' keys with their respective values
             expected_result: The expected result
+            tool_calling_type: The tool calling type (optional)
         """
         validation_observer.assert_function_called(tool_name)
-        validation_observer.assert_function_called_with(tool_name, a=a, b=b)
+        validation_observer.assert_function_called_with(tool_name, **a_b_dict)
         
         # Check function result
         result = validation_observer.get_last_function_result(tool_name)

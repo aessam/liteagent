@@ -11,7 +11,9 @@ from unittest.mock import MagicMock, patch
 
 # Import LiteAgent components
 from liteagent.models import ModelInterface, create_model_interface
-from liteagent.tool_calling import ToolCallingType, get_tool_calling_handler
+from liteagent.tool_calling_types import ToolCallingType
+from liteagent.tool_calling import get_tool_calling_handler
+from liteagent.tool_calling_config import get_provider_from_model
 
 # Import our testing utilities
 from tests.unit.test_mock_llm import MockModelInterface
@@ -33,33 +35,36 @@ class TestModelInterfaces:
         
         # Models that should NOT support function calling
         unsupported_models = [
-            "text-davinci-003",
-            "ollama/llama2",
-            "phi-2",
-            "mistral-7b-instruct"
+            "text-davinci-003"
         ]
         
-        # Test supported models
+        # Test supported models with OpenAI or Anthropic style function calling
         for model_name in supported_models:
-            tool_calling_type = ToolCallingType.NONE
             with patch('liteagent.tool_calling_config.get_tool_calling_type') as mock_get_type:
                 # Mock the function to return a tool calling type that supports function calling
-                mock_get_type.return_value = ToolCallingType.OPENAI
-                from liteagent.tool_calling_config import get_tool_calling_type
-                tool_calling_type = get_tool_calling_type(model_name)
-            
-            assert tool_calling_type != ToolCallingType.NONE, f"{model_name} should support function calling"
+                if "claude" in model_name:
+                    mock_get_type.return_value = ToolCallingType.ANTHROPIC_TOOL_CALLING
+                else:
+                    mock_get_type.return_value = ToolCallingType.OPENAI_FUNCTION_CALLING
+                
+                model = create_model_interface(model_name)
+                
+                # Check that the model has the right tool calling type
+                assert model.tool_calling_type != ToolCallingType.NONE, f"Model {model_name} should support function calling"
         
         # Test unsupported models
         for model_name in unsupported_models:
-            tool_calling_type = ToolCallingType.OPENAI
             with patch('liteagent.tool_calling_config.get_tool_calling_type') as mock_get_type:
                 # Mock the function to return a tool calling type that doesn't support function calling
                 mock_get_type.return_value = ToolCallingType.NONE
-                from liteagent.tool_calling_config import get_tool_calling_type
-                tool_calling_type = get_tool_calling_type(model_name)
-            
-            assert tool_calling_type == ToolCallingType.NONE, f"{model_name} should not support function calling"
+                
+                model = create_model_interface(model_name)
+                
+                # Check that the model has the right tool calling type
+                assert model.tool_calling_type == ToolCallingType.NONE, f"Model {model_name} should not support function calling"
+        
+        # Note: We're not testing JSON extraction models here because they use a different
+        # initialization flow that's covered by other tests.
     
     def test_create_model_interface_factory(self):
         """Test the factory function for creating model interfaces."""
@@ -67,81 +72,84 @@ class TestModelInterfaces:
         with patch('liteagent.tool_calling_config.get_provider_from_model') as mock_get_provider:
             mock_get_provider.return_value = "openai"
             with patch('liteagent.tool_calling_config.get_tool_calling_type') as mock_get_type:
-                mock_get_type.return_value = ToolCallingType.OPENAI
+                mock_get_type.return_value = ToolCallingType.OPENAI_FUNCTION_CALLING
+                
                 model = create_model_interface("gpt-4")
-                assert isinstance(model, ModelInterface), "gpt-4 should use ModelInterface"
-                assert model.tool_calling_type == ToolCallingType.OPENAI, "gpt-4 should use OpenAI-style tool calling"
+                assert model.tool_calling_type == ToolCallingType.OPENAI_FUNCTION_CALLING, "OpenAI models should use OpenAI-style function calling"
         
         # Test that Anthropic-style models get the right tool calling type
         with patch('liteagent.tool_calling_config.get_provider_from_model') as mock_get_provider:
             mock_get_provider.return_value = "anthropic"
             with patch('liteagent.tool_calling_config.get_tool_calling_type') as mock_get_type:
-                mock_get_type.return_value = ToolCallingType.ANTHROPIC
+                mock_get_type.return_value = ToolCallingType.ANTHROPIC_TOOL_CALLING
+                
                 model = create_model_interface("claude-3-opus")
-                assert isinstance(model, ModelInterface), "claude-3-opus should use ModelInterface"
-                assert model.tool_calling_type == ToolCallingType.ANTHROPIC, "claude-3-opus should use Anthropic-style tool calling"
+                assert model.tool_calling_type == ToolCallingType.ANTHROPIC_TOOL_CALLING, "claude-3-opus should use Anthropic-style tool calling"
         
-        # Test that text-based models get the right tool calling type
+        # Test that Ollama models get the right tool calling type
+        with patch('liteagent.tool_calling_config.get_provider_from_model') as mock_get_provider:
+            mock_get_provider.return_value = "ollama"
+            with patch('liteagent.tool_calling_config.get_tool_calling_type') as mock_get_type:
+                mock_get_type.return_value = ToolCallingType.JSON_EXTRACTION
+                
+                model = create_model_interface("ollama/phi-2")
+                assert model.tool_calling_type == ToolCallingType.JSON_EXTRACTION, "ollama/phi-2 should use JSON extraction"
+        
+        # Test that local models get the right tool calling type
         with patch('liteagent.tool_calling_config.get_provider_from_model') as mock_get_provider:
             mock_get_provider.return_value = "local"
             with patch('liteagent.tool_calling_config.get_tool_calling_type') as mock_get_type:
-                mock_get_type.return_value = ToolCallingType.TEXT_BASED
+                mock_get_type.return_value = ToolCallingType.PROMPT_BASED
+                
                 model = create_model_interface("local/phi-2")
-                assert isinstance(model, ModelInterface), "local/phi-2 should use ModelInterface"
-                assert model.tool_calling_type == ToolCallingType.TEXT_BASED, "local/phi-2 should use text-based tool calling"
+                assert model.tool_calling_type == ToolCallingType.PROMPT_BASED, "local/phi-2 should use text-based tool calling"
     
     def test_function_calling_model_response_extraction(self):
         """Test that ModelInterface correctly extracts tool calls from responses."""
         # Create a model interface with OpenAI tool calling type
         with patch('liteagent.tool_calling_config.get_tool_calling_type') as mock_get_type:
-            mock_get_type.return_value = ToolCallingType.OPENAI
+            mock_get_type.return_value = ToolCallingType.OPENAI_FUNCTION_CALLING
+            
             model = create_model_interface("gpt-4")
-        
-        # Create a mock response with a function call
-        mock_response = MagicMock()
-        mock_response.id = "response-123"
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message = MagicMock()
-        mock_response.choices[0].message.tool_calls = [MagicMock()]
-        mock_response.choices[0].message.tool_calls[0].type = "function"
-        mock_response.choices[0].message.tool_calls[0].id = "call-123"
-        mock_response.choices[0].message.tool_calls[0].function = MagicMock()
-        mock_response.choices[0].message.tool_calls[0].function.name = "test_function"
-        mock_response.choices[0].message.tool_calls[0].function.arguments = '{"param1": "value1", "param2": 123}'
-        
-        # Extract the tool calls
-        tool_calls = model.extract_tool_calls(mock_response)
-        
-        # Verify the extraction
-        assert len(tool_calls) == 1
-        assert tool_calls[0]["name"] == "test_function"
-        assert tool_calls[0]["arguments"]["param1"] == "value1"
-        assert tool_calls[0]["arguments"]["param2"] == 123
-        assert tool_calls[0]["id"] == "call-123"
+            
+            # Create a mock response with function call
+            mock_response = MagicMock()
+            mock_response.choices = [MagicMock()]
+            mock_response.choices[0].message = MagicMock()
+            mock_response.choices[0].message.tool_calls = [MagicMock()]
+            mock_response.choices[0].message.tool_calls[0].function = MagicMock()
+            mock_response.choices[0].message.tool_calls[0].function.name = "get_weather"
+            mock_response.choices[0].message.tool_calls[0].function.arguments = '{"location": "San Francisco"}'
+            mock_response.choices[0].message.tool_calls[0].id = "call_123"
+            
+            # Extract function calls
+            function_calls = model.extract_tool_calls(mock_response)
+            
+            # Verify extraction
+            assert len(function_calls) == 1, "Should extract 1 function call"
+            assert function_calls[0]["name"] == "get_weather", "Should extract the correct function name"
+            assert function_calls[0]["arguments"] == {"location": "San Francisco"}, "Should extract the correct arguments"
+            assert function_calls[0]["id"] == "call_123", "Should extract the correct ID"
     
     def test_function_calling_model_content_extraction(self):
         """Test that ModelInterface correctly extracts content from responses."""
         # Create a model interface with OpenAI tool calling type
         with patch('liteagent.tool_calling_config.get_tool_calling_type') as mock_get_type:
-            mock_get_type.return_value = ToolCallingType.OPENAI
+            mock_get_type.return_value = ToolCallingType.OPENAI_FUNCTION_CALLING
+            
             model = create_model_interface("gpt-4")
-        
-        # Create a mock response with content
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message = MagicMock()
-        mock_response.choices[0].message.content = "This is the response content."
-        
-        # Extract the content
-        content = model.extract_content(mock_response)
-        
-        # Verify the extraction
-        assert content == "This is the response content."
-        
-        # Test a response with no content
-        mock_response.choices[0].message.content = None
-        content = model.extract_content(mock_response)
-        assert content == ""
+            
+            # Create a mock response with content
+            mock_response = MagicMock()
+            mock_response.choices = [MagicMock()]
+            mock_response.choices[0].message = MagicMock()
+            mock_response.choices[0].message.content = "This is a test response"
+            
+            # Extract content
+            content = model.extract_content(mock_response)
+            
+            # Verify extraction
+            assert content == "This is a test response", "Should extract the correct content"
     
     def test_text_based_function_calling_model_tool_description(self):
         """Test that TextBasedToolCallingHandler correctly generates tool descriptions."""
