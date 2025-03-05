@@ -74,12 +74,13 @@ class MockModelInterface(ModelInterface):
             "content": "This is a mock response."
         })
     
-    def extract_function_call(self, response: Any) -> Optional[Dict]:
+    def extract_function_call(self, response: Any, tools: Any = None) -> Optional[Dict]:
         """
         Extract function call information from the mock response.
         
         Args:
             response: The mock model's response
+            tools: Optional list of tools or functions (not used in mock, but required for interface compatibility)
             
         Returns:
             Dict with function call details or None if no function call

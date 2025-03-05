@@ -75,13 +75,7 @@ if [ "$RUN_UNIT" = true ]; then
     echo -e "\nCoverage Report Summary:"
     coverage report
     
-    # Open the HTML coverage report if running on macOS
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        echo -e "\nOpening HTML coverage report..."
-        open tests/coverage/index.html
-    else
-        echo -e "\nHTML coverage report generated at: tests/coverage/index.html"
-    fi
+    echo -e "\nHTML coverage report generated at: tests/coverage/index.html"
 fi
 
 # Print usage information
