@@ -17,63 +17,72 @@ class TestBaseTool:
     
     def test_base_tool_initialization(self):
         """Test that a BaseTool can be initialized correctly."""
-        # Simple function for testing
-        def test_func(param1: str, param2: int = 0) -> str:
+        # Define a simple function to wrap
+        def test_function(param1: str, param2: int) -> str:
             """Test function docstring."""
-            return f"Result: {param1}, {param2}"
+            return f"{param1} {param2}"
         
         # Create a BaseTool
-        tool = BaseTool(test_func)
+        tool = BaseTool(test_function)
         
-        # Check tool properties
-        assert tool.func == test_func
-        assert tool.name == "test_func"
+        # Check that the tool has the correct properties
+        assert tool.name == "test_function"
         assert tool.description == "Test function docstring."
-        assert issubclass(tool.schema, BaseModel)
+        assert tool.func == test_function
         
-        # Check schema fields
-        field_types = {name: field.annotation for name, field in tool.schema.__fields__.items()}
-        assert "param1" in field_types
+        # Check that the schema was created correctly
+        assert tool.schema.__name__ == "test_functionSchema"
+        field_types = {name: field.annotation for name, field in tool.schema.model_fields.items()}
         assert field_types["param1"] == str
-        assert "param2" in field_types
         assert field_types["param2"] == int
+        
+        # Check that the function definition is correct
+        func_def = tool.to_function_definition()
+        assert func_def["name"] == "test_function"
+        assert func_def["description"] == "Test function docstring."
+        assert "parameters" in func_def
+        
+        # Test execution
+        result = tool.execute(param1="hello", param2=42)
+        assert result == "hello 42"
     
     def test_base_tool_with_custom_name_and_description(self):
-        """Test that a BaseTool can be initialized with custom name and description."""
-        # Simple function for testing
-        def test_func(param1: str) -> str:
-            return f"Result: {param1}"
+        """Test that a BaseTool can be created with custom name and description."""
+        def test_function(param: str) -> str:
+            """Original docstring."""
+            return f"Result: {param}"
         
-        # Create a BaseTool with custom name and description
-        custom_name = "custom_tool_name"
-        custom_description = "Custom tool description."
-        tool = BaseTool(test_func, name=custom_name, description=custom_description)
+        custom_name = "custom_name"
+        custom_desc = "Custom description."
         
-        # Check tool properties
+        tool = BaseTool(test_function, name=custom_name, description=custom_desc)
+        
         assert tool.name == custom_name
-        assert tool.description == custom_description
-        assert tool.schema.__name__ == f"{custom_name}Schema"
-    
+        assert tool.description == custom_desc
+        
+        # Check function definition
+        func_def = tool.to_function_definition()
+        assert func_def["name"] == custom_name
+        assert func_def["description"] == custom_desc
+        
     def test_base_tool_without_annotations(self):
-        """Test that a BaseTool handles functions without type annotations."""
-        # Function without type annotations
-        def untyped_func(param1, param2=None):
-            """Untyped function."""
-            return f"Result: {param1}, {param2}"
+        """Test that a BaseTool can handle functions without type annotations."""
+        # Define a function without type annotations
+        def test_function(param1, param2):
+            """Function without annotations."""
+            return f"{param1} {param2}"
         
         # Create a BaseTool
-        tool = BaseTool(untyped_func)
+        tool = BaseTool(test_function)
         
-        # Check tool properties
-        assert tool.name == "untyped_func"
-        assert tool.description == "Untyped function."
-        
-        # Check schema fields - they should default to Any
-        field_types = {name: field.annotation for name, field in tool.schema.__fields__.items()}
-        assert "param1" in field_types
+        # Check that the schema was created with Any types
+        field_types = {name: field.annotation for name, field in tool.schema.model_fields.items()}
         assert field_types["param1"] == Any
-        assert "param2" in field_types
         assert field_types["param2"] == Any
+        
+        # Test execution
+        result = tool.execute(param1="hello", param2=42)
+        assert result == "hello 42"
     
     def test_base_tool_without_docstring(self):
         """Test that a BaseTool handles functions without docstrings."""

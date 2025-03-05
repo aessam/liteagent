@@ -1,0 +1,107 @@
+{
+  "providers": {
+    "openai": {
+      "tool_calling_type": "OPENAI",
+      "models": {
+        "default": "OPENAI",
+        "gpt-3.5-turbo": "OPENAI",
+        "gpt-3.5-turbo-0125": "OPENAI",
+        "gpt-3.5-turbo-1106": "OPENAI",
+        "gpt-3.5-turbo-16k": "OPENAI",
+        "gpt-4": "OPENAI",
+        "gpt-4-0613": "OPENAI",
+        "gpt-4-0125-preview": "OPENAI",
+        "gpt-4-1106-preview": "OPENAI",
+        "gpt-4-turbo": "OPENAI",
+        "gpt-4-turbo-preview": "OPENAI",
+        "gpt-4-turbo-2024-04-09": "OPENAI",
+        "gpt-4o": "OPENAI",
+        "gpt-4o-mini": "OPENAI",
+        "gpt-4o-2024-05-13": "OPENAI",
+        "gpt-4o-2024-08-06": "OPENAI",
+        "gpt-4o-2024-11-20": "OPENAI",
+        "gpt-4o-mini-2024-07-18": "OPENAI",
+        "gpt-4.5-preview": "OPENAI",
+        "gpt-4.5-preview-2025-02-27": "OPENAI"
+      }
+    },
+    "anthropic": {
+      "tool_calling_type": "ANTHROPIC",
+      "models": {
+        "default": "ANTHROPIC",
+        "claude-3-opus-20240229": "ANTHROPIC",
+        "claude-3-sonnet-20240229": "ANTHROPIC",
+        "claude-3-haiku-20240307": "ANTHROPIC",
+        "claude-3-5-sonnet-20240620": "ANTHROPIC",
+        "claude-3-5-haiku-20241022": "ANTHROPIC",
+        "claude-3-5-sonnet-20241022": "ANTHROPIC",
+        "claude-3-7-sonnet-20250219": "ANTHROPIC"
+      }
+    },
+    "groq": {
+      "tool_calling_type": "OPENAI",
+      "models": {
+        "default": "OPENAI",
+        "llama-3.1-8b-instant": "OPENAI",
+        "llama-3.2-1b-preview": "OPENAI",
+        "llama-3.2-3b-preview": "OPENAI",
+        "llama-3.2-11b-vision-preview": "OPENAI",
+        "llama-3.2-90b-vision-preview": "OPENAI",
+        "llama-3.3-70b-versatile": "OPENAI",
+        "llama-3.3-70b-specdec": "OPENAI",
+        "llama3-8b-8192": "OPENAI",
+        "llama3-70b-8192": "OPENAI",
+        "gemma2-9b-it": "OPENAI",
+        "mistral-saba-24b": "OPENAI",
+        "qwen-2.5-32b": "OPENAI",
+        "qwen-2.5-coder-32b": "OPENAI",
+        "deepseek-r1-distill-llama-70b": "OPENAI",
+        "deepseek-r1-distill-qwen-32b": "OPENAI"
+      }
+    },
+    "ollama": {
+      "tool_calling_type": "OLLAMA",
+      "models": {
+        "default": "OLLAMA",
+        "llama3.3": "OLLAMA",
+        "qwen2.5-coder-32b": "OLLAMA"
+      }
+    },
+    "mistral": {
+      "tool_calling_type": "STRUCTURED_OUTPUT",
+      "models": {
+        "default": "STRUCTURED_OUTPUT",
+        "mistral-small": "STRUCTURED_OUTPUT",
+        "mistral-medium": "STRUCTURED_OUTPUT",
+        "mistral-large": "STRUCTURED_OUTPUT"
+      }
+    },
+    "huggingface": {
+      "tool_calling_type": "TEXT_BASED",
+      "models": {
+        "default": "TEXT_BASED"
+      }
+    },
+    "cohere": {
+      "tool_calling_type": "STRUCTURED_OUTPUT",
+      "models": {
+        "default": "STRUCTURED_OUTPUT",
+        "command": "STRUCTURED_OUTPUT",
+        "command-r": "STRUCTURED_OUTPUT",
+        "command-r-plus": "STRUCTURED_OUTPUT"
+      }
+    },
+    "together": {
+      "tool_calling_type": "TEXT_BASED",
+      "models": {
+        "default": "TEXT_BASED"
+      }
+    },
+    "local": {
+      "tool_calling_type": "TEXT_BASED",
+      "models": {
+        "default": "TEXT_BASED"
+      }
+    }
+  }
+} 

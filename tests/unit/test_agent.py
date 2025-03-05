@@ -28,7 +28,7 @@ class TestAgentWithMockLLM:
         agent = agent_with_mock_model
         
         assert agent.name == "test-agent"
-        assert agent.model_name == "mock-model"
+        assert agent.model == "mock-model"
         assert agent.system_prompt == "You are a test agent."
         assert isinstance(agent.model_interface, MockModelInterface)
     

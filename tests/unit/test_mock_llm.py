@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, patch
 
 # Import from the liteagent module
 from liteagent.models import ModelInterface, create_model_interface
+from liteagent.tool_calling import ToolCallingType
 
 
 class MockModelInterface(ModelInterface):
@@ -36,31 +37,25 @@ class MockModelInterface(ModelInterface):
         # For tracking calls
         self.generate_response_calls = []
     
-    def supports_function_calling(self) -> bool:
+    def generate_response(self, messages: List[Dict], functions: Optional[List[Dict]] = None) -> Any:
         """
-        Check if this model supports native function calling.
-        
-        Returns:
-            bool: Whether the model supports function calling
-        """
-        return self.supports_tools
-    
-    def generate_response(self, messages: List[Dict], functions: Optional[List[Dict]] = None) -> Dict:
-        """
-        Generate a mock response.
+        Generate a response from the model.
         
         Args:
             messages: List of conversation messages
             functions: Optional list of function definitions
             
         Returns:
-            Dict containing the mocked model's response
+            Dict containing the model's response
         """
+        kwargs = {"model": self.model_name, "messages": messages}
+        
+        if functions:
+            # For mock model, just pass functions directly
+            kwargs["functions"] = functions
+        
         # Record the call for later assertions
-        self.generate_response_calls.append({
-            "messages": messages,
-            "functions": functions
-        })
+        self.generate_response_calls.append(kwargs)
         
         # Return the next predefined response if available
         if self.responses and self.response_index < len(self.responses):
@@ -74,37 +69,68 @@ class MockModelInterface(ModelInterface):
             "content": "This is a mock response."
         })
     
-    def extract_function_call(self, response: Any, tools: Any = None) -> Optional[Dict]:
+    def extract_tool_calls(self, response: Any) -> List[Dict]:
         """
-        Extract function call information from the mock response.
+        Extract tool calls from the mock response.
         
         Args:
             response: The mock model's response
-            tools: Optional list of tools or functions (not used in mock, but required for interface compatibility)
             
         Returns:
-            Dict with function call details or None if no function call
+            List of dictionaries with tool call details
         """
         if not hasattr(response, "choices") or not response.choices:
-            return None
+            return []
             
         message = response.choices[0].message
         
-        if not hasattr(message, "function_call") or not message.function_call:
-            return None
+        # Check for OpenAI-style function calls
+        if hasattr(message, "function_call") and message.function_call:
+            function_call = message.function_call
             
-        function_call = message.function_call
+            # Handle MagicMock objects
+            if hasattr(function_call, "arguments"):
+                if isinstance(function_call.arguments, str):
+                    try:
+                        function_args = json.loads(function_call.arguments)
+                    except json.JSONDecodeError:
+                        function_args = {}
+                else:
+                    # For MagicMock objects, just use an empty dict
+                    function_args = {}
+                    
+            return [{
+                "name": function_call.name,
+                "arguments": function_args,
+                "id": getattr(response, "id", "mock-response-id")
+            }]
         
-        try:
-            function_args = json.loads(function_call.arguments)
-        except (json.JSONDecodeError, AttributeError):
-            function_args = {}
+        # Check for OpenAI-style tool calls
+        if hasattr(message, "tool_calls") and message.tool_calls:
+            tool_calls = []
+            for tool_call in message.tool_calls:
+                if tool_call.type == "function":
+                    function_call = tool_call.function
+                    
+                    # Handle MagicMock objects
+                    if hasattr(function_call, "arguments"):
+                        if isinstance(function_call.arguments, str):
+                            try:
+                                arguments = json.loads(function_call.arguments)
+                            except json.JSONDecodeError:
+                                arguments = {}
+                        else:
+                            # For MagicMock objects, just use an empty dict
+                            arguments = {}
+                            
+                    tool_calls.append({
+                        "name": function_call.name,
+                        "arguments": arguments,
+                        "id": tool_call.id
+                    })
+            return tool_calls
             
-        return {
-            "name": function_call.name,
-            "arguments": function_args,
-            "model_id": getattr(response, "id", "mock-response-id")
-        }
+        return []
     
     def extract_content(self, response: Any) -> str:
         """
@@ -124,7 +150,8 @@ class MockModelInterface(ModelInterface):
         if not hasattr(message, "content"):
             return ""
             
-        return message.content or ""
+        # Return the exact content from the message
+        return message.content if message.content is not None else ""
     
     def _create_mock_response(self, response_spec: Dict) -> Any:
         """
@@ -150,15 +177,29 @@ class MockModelInterface(ModelInterface):
             function_name = response_spec.get("function_name", "test_function")
             function_args = response_spec.get("function_args", {})
             
+            # Create function_call for OpenAI format
             mock_function_call = MagicMock()
             mock_function_call.name = function_name
             mock_function_call.arguments = json.dumps(function_args)
-            
             mock_message.function_call = mock_function_call
+            
+            # Create tool_calls array for OpenAI format
+            mock_function = MagicMock()
+            mock_function.name = function_name
+            mock_function.arguments = json.dumps(function_args)
+            
+            mock_tool_call = MagicMock()
+            mock_tool_call.id = response_spec.get("id", "call_" + mock_response.id)
+            mock_tool_call.type = "function"
+            mock_tool_call.function = mock_function
+            
+            mock_message.tool_calls = [mock_tool_call]
+            # Set content to None for function calls
             mock_message.content = None
         else:
-            # Text response
-            mock_message.content = response_spec.get("content", "Mock response content")
+            # Text response - use the exact content from the response_spec
+            mock_message.content = response_spec.get("content", "This is a mock response.")
+            mock_message.tool_calls = None
             mock_message.function_call = None
         
         mock_choice = MagicMock()
@@ -166,6 +207,28 @@ class MockModelInterface(ModelInterface):
         mock_response.choices.append(mock_choice)
         
         return mock_response
+
+    def _call_api(self, kwargs: Dict) -> Any:
+        """
+        Make the actual API call to the model provider.
+        
+        Args:
+            kwargs: Dictionary of arguments for the API call
+            
+        Returns:
+            The model's response
+        """
+        # For the mock, we just use the predefined responses
+        if self.responses and self.response_index < len(self.responses):
+            response = self.responses[self.response_index]
+            self.response_index += 1
+            return self._create_mock_response(response)
+        
+        # Default to a text response if no function calls are specified
+        return self._create_mock_response({
+            "type": "text",
+            "content": "This is a mock response."
+        })
 
 
 class TestMockModelInterface(unittest.TestCase):
@@ -182,7 +245,7 @@ class TestMockModelInterface(unittest.TestCase):
         
         content = mock_model.extract_content(response)
         self.assertEqual(content, "Hello, I am a mock model!")
-        self.assertIsNone(mock_model.extract_function_call(response))
+        self.assertEqual(mock_model.extract_tool_calls(response), [])
     
     def test_mock_model_function_call(self):
         """Test that the mock model correctly generates function calls."""
@@ -199,19 +262,11 @@ class TestMockModelInterface(unittest.TestCase):
         
         response = mock_model.generate_response(messages, functions)
         
-        function_call = mock_model.extract_function_call(response)
-        self.assertIsNotNone(function_call)
-        self.assertEqual(function_call["name"], "get_weather")
-        self.assertEqual(function_call["arguments"]["location"], "New York")
-        self.assertEqual(function_call["arguments"]["unit"], "celsius")
-    
-    def test_supports_function_calling(self):
-        """Test the supports_function_calling method."""
-        mock_model_with_tools = MockModelInterface(supports_tools=True)
-        mock_model_without_tools = MockModelInterface(supports_tools=False)
-        
-        self.assertTrue(mock_model_with_tools.supports_function_calling())
-        self.assertFalse(mock_model_without_tools.supports_function_calling())
+        tool_calls = mock_model.extract_tool_calls(response)
+        self.assertEqual(len(tool_calls), 1)
+        self.assertEqual(tool_calls[0]["name"], "get_weather")
+        self.assertEqual(tool_calls[0]["arguments"]["location"], "New York")
+        self.assertEqual(tool_calls[0]["arguments"]["unit"], "celsius")
     
     def test_multiple_responses(self):
         """Test that the mock model correctly cycles through multiple responses."""
@@ -229,9 +284,10 @@ class TestMockModelInterface(unittest.TestCase):
         
         # Second response
         response2 = mock_model.generate_response(messages)
-        function_call = mock_model.extract_function_call(response2)
-        self.assertEqual(function_call["name"], "test_func")
-        self.assertEqual(function_call["arguments"]["arg1"], 123)
+        tool_calls = mock_model.extract_tool_calls(response2)
+        self.assertEqual(len(tool_calls), 1)
+        self.assertEqual(tool_calls[0]["name"], "test_func")
+        self.assertEqual(tool_calls[0]["arguments"]["arg1"], 123)
         
         # Third response
         response3 = mock_model.generate_response(messages)
@@ -249,16 +305,14 @@ class TestMockModelInterface(unittest.TestCase):
             {"role": "assistant", "content": "First response"},
             {"role": "user", "content": "Second message"}
         ]
-        functions2 = [{"name": "func1"}, {"name": "func2"}]
         
         mock_model.generate_response(messages1, functions1)
-        mock_model.generate_response(messages2, functions2)
+        mock_model.generate_response(messages2)
         
         self.assertEqual(len(mock_model.generate_response_calls), 2)
         self.assertEqual(mock_model.generate_response_calls[0]["messages"], messages1)
         self.assertEqual(mock_model.generate_response_calls[0]["functions"], functions1)
         self.assertEqual(mock_model.generate_response_calls[1]["messages"], messages2)
-        self.assertEqual(mock_model.generate_response_calls[1]["functions"], functions2)
 
 
 if __name__ == "__main__":

@@ -101,22 +101,14 @@ class AgentTool(BaseTool):
         super().__init__(agent_wrapper, tool_name, tool_description)
     
     def execute(self, **kwargs) -> Any:
-        """
-        Execute the agent tool with the given arguments.
-        
-        Args:
-            **kwargs: Arguments to pass to the agent
-            
-        Returns:
-            The agent's response
-        """
-        # Validate arguments using the schema
-        validated_args = self.schema(**kwargs)
-        
-        # Store the current parent_context_id to restore it later
+        """Execute the tool with the given arguments."""
+        # Save the original parent_context_id
         original_parent_context_id = self.agent.parent_context_id
         
         try:
+            # Validate arguments using the schema
+            validated_args = self.schema(**kwargs)
+            
             # Get the parent context ID from the calling agent's context
             # This is passed implicitly by the LiteAgent when calling tools
             parent_context_id = kwargs.get('_context_id')
@@ -125,44 +117,27 @@ class AgentTool(BaseTool):
             if parent_context_id:
                 self.agent.parent_context_id = parent_context_id
             
-            # Check if there's a direct 'message' parameter
-            if 'message' in validated_args.dict():
-                message = validated_args.dict()['message']
-                if message:
-                    return self.agent.chat(message)
+            # Initialize message variable
+            message = None
             
-            # Handle the case where the model passes a dictionary of arguments
-            if 'kwargs' in validated_args.dict() and isinstance(validated_args.dict()['kwargs'], dict):
-                # Extract the nested kwargs
-                nested_kwargs = validated_args.dict()['kwargs']
-                
-                # Check if there's a 'message' key in the nested kwargs
-                if 'message' in nested_kwargs:
-                    # Use the message directly
-                    return self.agent.chat(nested_kwargs['message'])
-                else:
-                    # Format the nested kwargs into a message using the template
-                    if self.message_template:
-                        try:
-                            formatted_message = self.message_template.format(**nested_kwargs)
-                            return self.agent.chat(formatted_message)
-                        except KeyError:
-                            # If formatting fails, just use the first value as the message
-                            if nested_kwargs:
-                                first_key = next(iter(nested_kwargs))
-                                return self.agent.chat(str(nested_kwargs[first_key]))
-                            else:
-                                return "Error: No message provided to the agent."
-                    else:
-                        # If no template, just use the first value as the message
-                        if nested_kwargs:
-                            first_key = next(iter(nested_kwargs))
-                            return self.agent.chat(str(nested_kwargs[first_key]))
-                        else:
-                            return "Error: No message provided to the agent."
-            else:
-                # Call the agent with the validated arguments
-                return self.func(**validated_args.dict())
+            # Check if we have a message parameter
+            if 'message' in validated_args.model_dump():
+                message = validated_args.model_dump()['message']
+            
+            # If we have a message template, format it with the arguments
+            if self.message_template:
+                # Check if we have a kwargs parameter for nested formatting
+                if 'kwargs' in validated_args.model_dump() and isinstance(validated_args.model_dump()['kwargs'], dict):
+                    # Extract the kwargs for nested formatting
+                    nested_kwargs = validated_args.model_dump()['kwargs']
+                    message = self.message_template.format(**nested_kwargs)
+            
+            # If we have a message, use it to chat with the agent
+            if message is not None:
+                return self.agent.chat(message)
+            
+            # Otherwise, call the function with the validated arguments
+            return self.func(**validated_args.model_dump())
         finally:
             # Restore the original parent_context_id
             self.agent.parent_context_id = original_parent_context_id

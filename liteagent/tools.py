@@ -54,15 +54,19 @@ class BaseTool:
         # Validate arguments using the schema
         validated_args = self.schema(**kwargs)
         # Execute the function with validated arguments
-        return self.func(**validated_args.dict())
+        return self.func(**validated_args.model_dump())
     
     def to_function_definition(self) -> Dict:
         """Convert tool to function definition compatible with LLM APIs."""
         return {
             "name": self.name,
             "description": self.description,
-            "parameters": self.schema.schema()  # Convert Pydantic model to JSON schema
+            "parameters": self.schema.model_json_schema()  # Convert Pydantic model to JSON schema
         }
+        
+    def to_dict(self) -> Dict:
+        """Alias for to_function_definition for compatibility with new tool calling system."""
+        return self.to_function_definition()
 
 
 class FunctionTool(BaseTool):
@@ -130,17 +134,12 @@ class InstanceMethodTool(BaseTool):
         return fields
     
     def execute(self, **kwargs) -> Any:
-        """Execute the instance method with the given arguments."""
+        """Execute the tool with the given arguments."""
         # Validate arguments using the schema
         validated_args = self.schema(**kwargs)
         
-        # Check if this is a class method or static method
-        if isinstance(self.instance, type):
-            # For class methods and static methods, don't pass the instance
-            return self.func(**validated_args.dict())
-        else:
-            # For instance methods, the wrapper already handles passing the instance
-            return self.func(**validated_args.dict())
+        # The wrapper function created in __init__ already handles the instance correctly
+        return self.func(**validated_args.model_dump())
 
 
 class StaticMethodTool(BaseTool):
@@ -230,21 +229,41 @@ def get_tools():
     return TOOLS
 
 
-def get_function_definitions():
+def get_function_definitions(tool_functions=None):
     """
-    Convert registered tools to function definitions compatible with LLM APIs.
+    Convert tools to function definitions compatible with LLM APIs.
+    
+    Args:
+        tool_functions: Optional list of tool functions to convert. If None, uses all registered tools.
     
     Returns:
         list: List of function definitions in the format expected by OpenAI-compatible APIs
     """
     function_definitions = []
-    for tool_name, tool_data in TOOLS.items():
-        schema = tool_data["schema"]
-        function_definitions.append({
-            "name": tool_name,
-            "description": schema.__doc__,
-            "parameters": schema.schema()  # Convert Pydantic model to JSON schema
-        })
+    
+    # If specific tools are provided, convert them
+    if tool_functions:
+        for tool in tool_functions:
+            if isinstance(tool, BaseTool):
+                # For BaseTool instances, use their to_dict method
+                function_definitions.append(tool.to_dict())
+            elif callable(tool):
+                # For functions, create a temporary FunctionTool and get its definition
+                temp_tool = FunctionTool(tool)
+                function_definitions.append(temp_tool.to_dict())
+            elif isinstance(tool, dict) and "name" in tool:
+                # For dictionaries that already look like function definitions
+                function_definitions.append(tool)
+    else:
+        # Otherwise, use all registered tools
+        for tool_name, tool_data in TOOLS.items():
+            schema = tool_data["schema"]
+            function_definitions.append({
+                "name": tool_name,
+                "description": schema.__doc__,
+                "parameters": schema.schema()  # Convert Pydantic model to JSON schema
+            })
+            
     return function_definitions
 
 
