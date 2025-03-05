@@ -257,6 +257,11 @@ ALWAYS COMPLETE ALL THREE STEPS - fetch, update, and log - for any user data upd
         # Test updating user data should follow the specified sequence
         response = agent.chat("Update user1's age to 33")
         
+        # Validate function call counts
+        sequence_validation_observer.assert_function_call_count("fetch_user_data", 1)
+        sequence_validation_observer.assert_function_call_count("update_user_data", 1)
+        sequence_validation_observer.assert_function_call_count("log_system_event", 1)
+        
         # Validate the sequence of function calls
         sequence_validation_observer.assert_function_call_sequence([
             "fetch_user_data",
@@ -264,7 +269,28 @@ ALWAYS COMPLETE ALL THREE STEPS - fetch, update, and log - for any user data upd
             "log_system_event"
         ])
         
-        # Also validate specific parameters
+        # Validate specific parameters for each function call
+        sequence_validation_observer.assert_function_called_with(
+            "fetch_user_data", user_id="user1"
+        )
+        
         sequence_validation_observer.assert_function_called_with(
             "update_user_data", user_id="user1", field="age", value=33
         )
+        
+        # Validate log event has the correct structure
+        sequence_validation_observer.assert_function_result_structure(
+            "log_system_event",
+            {
+                "event_type": "user_update",
+                "description": lambda x: "user1" in x and "age" in x and "33" in x,
+                "severity": lambda x: x in ["info", "information"]
+            }
+        )
+        
+        # Validate the response structure
+        parsed_response = sequence_validation_observer.parse_response(response)
+        assert any("success" in str(val).lower() for val in parsed_response.values()), "Response should indicate success"
+        assert any("user1" in str(val) for val in parsed_response.values()), "Response should mention user1"
+        assert any("age" in str(val) for val in parsed_response.values()), "Response should mention the age field"
+        assert any("33" in str(val) for val in parsed_response.values()), "Response should mention the new age value"

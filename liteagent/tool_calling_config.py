@@ -7,10 +7,12 @@ for tool calling support.
 
 import json
 import os
-from typing import Dict, Optional
+from typing import Dict, Optional, Any, List, Set
 
 from .tool_calling import ToolCallingType
 from .utils import logger
+from .tool_calling_types import ToolCallingType as ToolCallingType_from_types
+from litellm import get_llm_provider
 
 # Path to the configuration file
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), "model_config.json")
@@ -55,7 +57,23 @@ def load_config() -> Dict:
             }
         }
 
-#FIXME: We should use litellm to give us the info about the model provider.
+def get_model_info(model_name: str) -> Dict[str, Any]:
+    """
+    Get information about a model.
+    
+    Args:
+        model_name: The name of the model
+        
+    Returns:
+        Dict with model information
+    """
+    provider = get_provider_from_model(model_name)
+    return {
+        "provider": provider,
+        "supports_function_calling": provider in ["openai", "groq", "anthropic"],
+        "tool_calling_type": get_tool_calling_type(model_name),
+    }
+
 def get_provider_from_model(model_name: str) -> str:
     """
     Extract the provider from a model name.
@@ -64,87 +82,41 @@ def get_provider_from_model(model_name: str) -> str:
         model_name: The name of the model
         
     Returns:
-        str: The provider name
+        Provider name
     """
+    if not model_name:
+        return "unknown"
+        
+    # For custom prefixed models like "ollama/phi"
+    if '/' in model_name:
+        provider = model_name.split('/')[0]
+        return provider.lower()
+    
+    # Use a simple mapping for common models
     model_lower = model_name.lower()
-    
-    # Check for provider prefixes in provider/model format
-    if "/" in model_lower:
-        provider, _ = model_lower.split("/", 1)
-        return provider
-    
-    # Check for provider-specific model naming patterns
     if model_lower.startswith(("gpt-", "text-davinci")):
         return "openai"
     elif model_lower.startswith("claude"):
         return "anthropic"
-    elif model_lower.startswith("mistral"):
-        # Could be mistral or ollama/mistral
-        return "mistral"
-    elif model_lower.startswith("command"):
-        return "cohere"
-    elif model_lower.startswith(("llama", "llama3", "llama3.1", "llama3.2", "llama3.3")):
-        # Could be groq or ollama, default to groq for API calls
+    elif model_lower.startswith("llama"):
         return "groq"
-    elif model_lower.startswith(("phi", "phi2", "phi3", "phi4")):
-        # Phi models are typically used with Ollama
-        return "ollama"
-    elif model_lower.startswith(("qwen", "qwen2", "qwen2.5")):
-        # Could be groq or ollama, default to groq for API calls
-        return "groq"
-    elif model_lower.startswith(("gemma", "gemma2")):
-        # Could be groq or ollama, default to groq for API calls
-        return "groq"
-    elif model_lower.startswith(("mixtral", "deepseek")):
-        # Could be groq or ollama, default to groq for API calls
-        return "groq"
-        
-    # Default to "local" if we can't determine the provider
-    return "local"
+    
+    # Default to "unknown" if we can't determine the provider
+    return "unknown"
 
 
 def get_tool_calling_type(model_name: str) -> ToolCallingType:
     """
-    Get the tool calling type for a model.
+    Determine the tool calling type for a model.
     
     Args:
         model_name: The name of the model
         
     Returns:
-        ToolCallingType: The tool calling type for the model
+        ToolCallingType enum value
     """
-    config = load_config()
-    provider = get_provider_from_model(model_name)
-    
-    # Get provider config
-    provider_config = config["providers"].get(provider)
-    if not provider_config:
-        logger.warning(f"No configuration found for provider '{provider}', using default")
-        provider_config = config["providers"].get("default", {"tool_calling_type": "TEXT_BASED", "models": {}})
-    
-    # Get model-specific tool calling type
-    model_lower = model_name.lower()
-    model_type = None
-    
-    # Check for exact model match
-    if "models" in provider_config and model_lower in provider_config["models"]:
-        model_type = provider_config["models"][model_lower]
-    # Fall back to provider default
-    elif "models" in provider_config and "default" in provider_config["models"]:
-        model_type = provider_config["models"]["default"]
-    # Fall back to provider type
-    elif "tool_calling_type" in provider_config:
-        model_type = provider_config["tool_calling_type"]
-    # Last resort default
-    else:
-        model_type = "TEXT_BASED"
-    
-    # Convert string to enum
-    try:
-        return ToolCallingType[model_type]
-    except (KeyError, TypeError):
-        logger.warning(f"Invalid tool calling type '{model_type}', using TEXT_BASED")
-        return ToolCallingType.TEXT_BASED
+    from .tool_calling_types import get_tool_calling_type
+    return get_tool_calling_type(model_name)
 
 
 def get_tool_calling_handler_type(model_name: str) -> str:

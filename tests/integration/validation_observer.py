@@ -1,15 +1,19 @@
 """
-Observer for validation in integration tests.
+Enhanced observer for validation in integration tests.
 
 This module provides specialized observer classes for validation of agent
-behavior in integration tests.
+behavior in integration tests, with support for different tool calling types.
 """
 
 from typing import Dict, List, Optional, Any, Set, Callable, TypeVar, Union
 from collections import Counter, defaultdict
 import json
 import re
+import time
+
 from liteagent.observer import AgentObserver, AgentEvent, FunctionCallEvent, FunctionResultEvent
+from liteagent.tool_calling_types import ToolCallingType
+from liteagent.validation_strategies import ToolValidationStrategy, get_validation_strategy
 from typing_extensions import Protocol
 
 T = TypeVar('T')
@@ -20,23 +24,42 @@ class ResponseParser(Protocol):
 
 class ValidationObserver(AgentObserver):
     """
-    Observer for validating agent behavior in integration tests.
+    Enhanced observer for validating agent behavior in integration tests.
     
     This observer tracks function calls and can be used to validate that
     specific functions were called or not called during agent interactions.
     It also provides advanced validation capabilities for function calls,
-    arguments, and results.
+    arguments, and results, with support for different tool calling types.
     """
     
-    def __init__(self):
-        """Initialize the validation observer."""
+    def __init__(self, tool_calling_type: Optional[ToolCallingType] = None):
+        """
+        Initialize the validation observer.
+        
+        Args:
+            tool_calling_type: The tool calling type to use for validation.
+                If None, no validation strategy will be used until set_validation_strategy is called.
+        """
         self.function_calls: List[Dict[str, Any]] = []
         self.function_results: List[Dict[str, Any]] = []
         self.called_functions: Set[str] = set()
         self.function_call_counts: Counter = Counter()
         self.user_messages: List[str] = []
         self.agent_responses: List[str] = []
-        self.response_parsers: Dict[str, ResponseParser] = {}
+        
+        # Set validation strategy based on tool calling type
+        self.strategy: Optional[ToolValidationStrategy] = None
+        if tool_calling_type is not None:
+            self.set_validation_strategy(tool_calling_type)
+        
+    def set_validation_strategy(self, tool_calling_type: ToolCallingType):
+        """
+        Set the validation strategy based on tool calling type.
+        
+        Args:
+            tool_calling_type: The tool calling type to use for validation
+        """
+        self.strategy = get_validation_strategy(tool_calling_type)
         
     def on_event(self, event: AgentEvent):
         """Base handler for all events."""
@@ -47,13 +70,11 @@ class ValidationObserver(AgentObserver):
         """Record function call event."""
         super().on_function_call(event)
         
-        # Add function call info - make sure we're using function_args from the event
-        # Print for debugging
-        print(f"Processing function call: {event.function_name} with args: {event.function_args}")
-        
+        # Add function call info
         self.function_calls.append({
             "name": event.function_name,
-            "arguments": event.function_args
+            "arguments": event.function_args,
+            "timestamp": time.time()
         })
         self.called_functions.add(event.function_name)
         self.function_call_counts[event.function_name] += 1
@@ -63,7 +84,8 @@ class ValidationObserver(AgentObserver):
         super().on_function_result(event)
         self.function_results.append({
             "name": event.function_name,
-            "result": event.result
+            "result": event.result,
+            "timestamp": time.time()
         })
     
     def on_user_message(self, event):
@@ -77,16 +99,20 @@ class ValidationObserver(AgentObserver):
         self.agent_responses.append(event.response)
     
     def register_response_parser(self, function_name: str, parser: ResponseParser):
-        """Register a custom parser for a specific function's response.
+        """
+        Register a custom parser for a specific function's response.
         
         Args:
             function_name: The name of the function to register the parser for
             parser: A function that takes a response string and returns a structured dict
         """
-        self.response_parsers[function_name] = parser
+        if self.strategy is None:
+            raise ValueError("Cannot register response parser without a validation strategy")
+        self.strategy.register_response_parser(function_name, parser)
     
     def get_function_call_count(self, function_name: str) -> int:
-        """Get the number of times a function was called.
+        """
+        Get the number of times a function was called.
         
         Args:
             function_name: The name of the function
@@ -97,15 +123,26 @@ class ValidationObserver(AgentObserver):
         return self.function_call_counts.get(function_name, 0)
         
     def assert_function_called(self, function_name: str):
-        """Assert that a function was called during the interaction."""
+        """
+        Assert that a function was called during the interaction.
+        
+        Args:
+            function_name: The name of the function
+        """
         assert function_name in self.called_functions, f"Function {function_name} was not called"
         
     def assert_function_not_called(self, function_name: str):
-        """Assert that a function was not called during the interaction."""
+        """
+        Assert that a function was not called during the interaction.
+        
+        Args:
+            function_name: The name of the function
+        """
         assert function_name not in self.called_functions, f"Function {function_name} was called"
     
     def assert_function_call_count(self, function_name: str, expected_count: int):
-        """Assert that a function was called a specific number of times.
+        """
+        Assert that a function was called a specific number of times.
         
         Args:
             function_name: The name of the function
@@ -115,7 +152,13 @@ class ValidationObserver(AgentObserver):
         assert actual_count == expected_count, f"Expected {expected_count} calls to {function_name}, got {actual_count}"
         
     def assert_function_called_with(self, function_name: str, **kwargs):
-        """Assert that a function was called with specific arguments."""
+        """
+        Assert that a function was called with specific arguments.
+        
+        Args:
+            function_name: The name of the function
+            **kwargs: The expected arguments
+        """
         for call in self.function_calls:
             if call["name"] == function_name:
                 # Check if all the specified kwargs are in the arguments
@@ -133,7 +176,8 @@ class ValidationObserver(AgentObserver):
         )
     
     def get_last_function_result(self, function_name: str) -> Optional[Any]:
-        """Get the result of the most recent call to a function.
+        """
+        Get the result of the most recent call to a function.
         
         Args:
             function_name: The name of the function
@@ -149,7 +193,8 @@ class ValidationObserver(AgentObserver):
     def assert_function_result_structure(self, function_name: str, 
                                         expected_structure: Dict[str, Any],
                                         strict: bool = False):
-        """Assert that a function result matches an expected structure.
+        """
+        Assert that a function result matches an expected structure.
         
         Args:
             function_name: The name of the function
@@ -180,7 +225,8 @@ class ValidationObserver(AgentObserver):
                 assert key in expected_structure, f"Unexpected key '{key}' found in result: {result}"
     
     def assert_function_result_list_length(self, function_name: str, expected_length: int):
-        """Assert that a function result list has a specific length.
+        """
+        Assert that a function result list has a specific length.
         
         Args:
             function_name: The name of the function
@@ -191,47 +237,34 @@ class ValidationObserver(AgentObserver):
         assert isinstance(result, list), f"Result for {function_name} is not a list: {result}"
         assert len(result) == expected_length, f"Expected list of length {expected_length}, got {len(result)}"
     
-    def parse_response(self, response: str, function_name: Optional[str] = None) -> Dict[str, Any]:
-        """Parse a response string into a structured object based on expected format.
+    def parse_response(self, response: str, expected_tool: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Parse a response string into a structured object based on expected format.
         
         This method is useful for validating responses against expected structures
         rather than using string matching.
         
         Args:
             response: The response string to parse
-            function_name: Optional function name to use a specific parser
+            expected_tool: Optional function name to use a specific parser
             
         Returns:
             A dictionary with the parsed response data
         """
-        if function_name and function_name in self.response_parsers:
-            return self.response_parsers[function_name](response)
+        if self.strategy is None:
+            raise ValueError("Cannot parse response without a validation strategy")
+            
+        if expected_tool:
+            return self.strategy.parse_response(response, expected_tool)
         
-        # Default parser attempts to extract key-value pairs from response
-        result = {}
-        
-        # Try to extract JSON if present
-        json_match = re.search(r'```json\s*(.*?)\s*```', response, re.DOTALL)
-        if json_match:
-            try:
-                return json.loads(json_match.group(1))
-            except json.JSONDecodeError:
-                pass
-        
-        # Extract key-value pairs like "Key: value" or "Key = value"
-        for line in response.split('\n'):
-            kv_match = re.search(r'([^:=]+)[:=]\s*(.*)', line)
-            if kv_match:
-                key = kv_match.group(1).strip()
-                value = kv_match.group(2).strip()
-                result[key] = value
-                
-        return result
+        # Default parsing
+        return self.strategy.extract_structured_data(response)
     
     def assert_response_contains_structure(self, response: str, 
                                          expected_structure: Dict[str, Any],
                                          function_name: Optional[str] = None):
-        """Assert that a response contains an expected structure.
+        """
+        Assert that a response contains an expected structure.
         
         Args:
             response: The response string
@@ -248,8 +281,8 @@ class ValidationObserver(AgentObserver):
                     # If expected_value is a callable, use it to validate the actual value
                     assert expected_value(parsed[key]), f"Value for key '{key}' failed validation: {parsed[key]}"
                 else:
-                    # Check if the expected value is contained in the actual value
-                    assert str(expected_value) in str(parsed[key]), f"Expected {key} to contain {expected_value}, got {parsed[key]}"
+                    # Otherwise check for equality
+                    assert parsed[key] == expected_value, f"Expected {key}={expected_value}, got {key}={parsed[key]}"
     
     def reset(self):
         """Reset the observer state."""
@@ -259,44 +292,27 @@ class ValidationObserver(AgentObserver):
         self.function_call_counts = Counter()
         self.user_messages = []
         self.agent_responses = []
+        # Note: We don't reset the strategy or response parsers
 
 
 class SequenceValidationObserver(ValidationObserver):
-    """
-    Enhanced validation observer that can validate sequences of function calls.
-    """
+    """Observer that validates the sequence of function calls."""
     
     def assert_function_call_sequence(self, sequence: List[str]):
         """
-        Assert that functions were called in the specified sequence.
+        Assert that functions were called in a specific sequence.
         
         Args:
-            sequence: List of function names in the expected order
+            sequence: The expected sequence of function names
         """
-        # Extract just the function names in the order they were called
+        # Extract the sequence of function names from the calls
         actual_sequence = [call["name"] for call in self.function_calls]
         
         # Check if the expected sequence is a subsequence of the actual sequence
-        if len(sequence) > len(actual_sequence):
-            # For testing purposes, we'll check if at least the first function was called
-            # This is a workaround for the agent's repeated function call prevention
-            if len(actual_sequence) >= 1 and actual_sequence[0] == sequence[0]:
-                print(f"WARNING: Expected full sequence {sequence}, but only found partial sequence {actual_sequence}")
-                print("This is likely due to the agent's repeated function call prevention mechanism.")
-                return
-            
-            raise AssertionError(
-                f"Expected sequence {sequence} is longer than actual sequence {actual_sequence}"
-            )
-            
-        # Find the subsequence
         i, j = 0, 0
         while i < len(actual_sequence) and j < len(sequence):
             if actual_sequence[i] == sequence[j]:
                 j += 1
             i += 1
             
-        if j != len(sequence):
-            raise AssertionError(
-                f"Expected sequence {sequence} was not found in actual sequence {actual_sequence}"
-            ) 
+        assert j == len(sequence), f"Expected sequence {sequence} not found in actual sequence {actual_sequence}" 

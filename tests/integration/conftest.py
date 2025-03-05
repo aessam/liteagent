@@ -31,13 +31,24 @@ def pytest_configure(config):
     # Print a message if API keys are missing
     if "OPENAI_API_KEY" not in os.environ:
         print("Warning: OPENAI_API_KEY not found in environment variables. Tests requiring OpenAI will be skipped.")
+    if "ANTHROPIC_API_KEY" not in os.environ:
+        print("Warning: ANTHROPIC_API_KEY not found in environment variables. Tests requiring Anthropic will be skipped.")
+    if "GROQ_API_KEY" not in os.environ:
+        print("Warning: GROQ_API_KEY not found in environment variables. Tests requiring Groq will be skipped.")
 
 
-# Import shared fixtures that will be available to all tests
-from tests.integration.test_observer import ValidationObserver
+# Import the new ValidationObserver
+from tests.integration.validation_observer import ValidationObserver
 
 
 @pytest.fixture
 def validation_observer():
-    """Create a validation observer for tests."""
-    return ValidationObserver() 
+    """
+    Fixture that provides a ValidationObserver instance.
+    
+    The ValidationObserver is reset before each test to ensure a clean state.
+    """
+    observer = ValidationObserver()
+    yield observer
+    # Reset the observer after each test
+    observer.reset() 

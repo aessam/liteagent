@@ -1,27 +1,18 @@
 """
-Tool calling support for LiteAgent.
+Tool calling implementation for different types of language models.
 
-This module provides abstractions for different tool calling approaches across
-various LLM providers, making it easier to handle the differences in their APIs.
+This module provides classes for handling tool calling interactions with different LLM providers.
 """
 
-import json
-import uuid
 from abc import ABC, abstractmethod
+import json
+import re
 from enum import Enum, auto
-from typing import Any, Dict, List, Optional, Union
+from typing import Dict, List, Optional, Any, Union, Callable, Set, Tuple
 
-from .utils import logger
-
-
-class ToolCallingType(Enum):
-    """Enum representing different tool calling approaches used by LLM providers."""
-    OPENAI = auto()           # OpenAI style with tool_calls array
-    ANTHROPIC = auto()        # Anthropic style with content array and tool_use
-    OLLAMA = auto()           # Ollama style arguments
-    STRUCTURED_OUTPUT = auto() # Models that can reliably output JSON/structured data when prompted
-    TEXT_BASED = auto()       # Fallback text-based extraction for less predictable outputs
-    NONE = auto()             # No function calling support
+from .tools import get_function_definitions
+from .agent_tool import FunctionDefinition
+from .tool_calling_types import ToolCallingType
 
 
 class ToolCallingHandler(ABC):
@@ -639,28 +630,26 @@ class NoopToolCallingHandler(ToolCallingHandler):
 
 def get_tool_calling_handler(tool_calling_type: ToolCallingType) -> ToolCallingHandler:
     """
-    Get the appropriate tool calling handler for a tool calling type.
+    Get a tool calling handler for the specified tool calling type.
     
     Args:
         tool_calling_type: The tool calling type
         
     Returns:
-        ToolCallingHandler: The appropriate handler for the tool calling type
+        A tool calling handler for the specified type
     """
-    if tool_calling_type == ToolCallingType.OPENAI:
+    if tool_calling_type == ToolCallingType.OPENAI_FUNCTION_CALLING:
         return OpenAIToolCallingHandler()
-    elif tool_calling_type == ToolCallingType.ANTHROPIC:
+    elif tool_calling_type == ToolCallingType.ANTHROPIC_TOOL_CALLING:
         return AnthropicToolCallingHandler()
-    elif tool_calling_type == ToolCallingType.OLLAMA:
+    elif tool_calling_type == ToolCallingType.JSON_EXTRACTION:
         return OllamaToolCallingHandler()
-    elif tool_calling_type == ToolCallingType.STRUCTURED_OUTPUT:
-        return StructuredOutputHandler()
-    elif tool_calling_type == ToolCallingType.TEXT_BASED:
+    elif tool_calling_type == ToolCallingType.PROMPT_BASED:
         return TextBasedToolCallingHandler()
     elif tool_calling_type == ToolCallingType.NONE:
         return NoopToolCallingHandler()
     else:
-        logger.warning(f"Unknown tool calling type: {tool_calling_type}, using TEXT_BASED")
+        # Default to text-based handler
         return TextBasedToolCallingHandler()
 
 
@@ -673,11 +662,27 @@ def get_provider_specific_handler(provider: str, tool_calling_type: ToolCallingT
         tool_calling_type: The tool calling type
         
     Returns:
-        ToolCallingHandler: The appropriate handler for the provider and tool calling type
+        A tool calling handler for the provider
     """
-    if provider.lower() == "groq" and tool_calling_type == ToolCallingType.OPENAI:
+    # Provider-specific handlers
+    if provider.lower() == "groq" and tool_calling_type == ToolCallingType.OPENAI_FUNCTION_CALLING:
         return GroqToolCallingHandler()
-    elif provider.lower() == "anthropic" and tool_calling_type == ToolCallingType.ANTHROPIC:
+    elif provider.lower() == "anthropic" and tool_calling_type == ToolCallingType.ANTHROPIC_TOOL_CALLING:
         return AnthropicToolCallingHandler()
+    elif provider.lower() == "ollama" and tool_calling_type == ToolCallingType.JSON_EXTRACTION:
+        return OllamaToolCallingHandler()
+    
+    # Default handlers based on tool calling type
+    if tool_calling_type == ToolCallingType.OPENAI_FUNCTION_CALLING:
+        return OpenAIToolCallingHandler()
+    elif tool_calling_type == ToolCallingType.ANTHROPIC_TOOL_CALLING:
+        return AnthropicToolCallingHandler()
+    elif tool_calling_type == ToolCallingType.JSON_EXTRACTION:
+        return OllamaToolCallingHandler()
+    elif tool_calling_type == ToolCallingType.PROMPT_BASED:
+        return TextBasedToolCallingHandler()
+    elif tool_calling_type == ToolCallingType.NONE:
+        return NoopToolCallingHandler()
     else:
-        return get_tool_calling_handler(tool_calling_type) 
+        # Default to text-based handler
+        return TextBasedToolCallingHandler() 

@@ -9,9 +9,66 @@ from pydantic import create_model, BaseModel
 import inspect
 from typing import Any, Callable, Dict, List, Optional, Type, Union
 import functools
+import random
 
 # Global registry for tools
 TOOLS = {}
+
+# Example tool functions for testing
+def get_weather(city: str) -> str:
+    """Get the current weather for a city."""
+    temperatures = {
+        "Tokyo": (15, 25),
+        "New York": (10, 20),
+        "London": (8, 18),
+        "Paris": (12, 22),
+        "Berlin": (7, 17),
+        "Sydney": (20, 30),
+        "Beijing": (5, 15),
+        "Moscow": (0, 10),
+        "Cairo": (25, 35),
+        "Mumbai": (30, 40),
+    }
+    
+    conditions = ["sunny", "cloudy", "rainy", "foggy", "snowy", "windy"]
+    
+    # Get temperature range for the city or use a default range
+    temp_range = temperatures.get(city, (15, 25))
+    temperature = random.randint(temp_range[0], temp_range[1])
+    condition = random.choice(conditions)
+    
+    return f"The weather in {city} is {temperature}°C and {condition}."
+
+def add_numbers(a: int, b: int) -> int:
+    """Add two numbers together."""
+    return a + b
+
+def calculate_area(width: float, height: float) -> float:
+    """Calculate the area of a rectangle."""
+    return width * height
+
+class ToolsForAgents:
+    """A class containing tools that can be used by agents."""
+    
+    def __init__(self, api_key=None):
+        """Initialize with an optional API key."""
+        self.api_key = api_key
+        
+    def add_numbers(self, a: int, b: int) -> int:
+        """Adds two numbers together."""
+        return a + b
+        
+    def multiply_numbers(self, a: int, b: int) -> int:
+        """Multiplies two numbers together."""
+        return a * b
+        
+    def get_weather(self, city: str) -> str:
+        """Gets weather for a city using API key if provided."""
+        if self.api_key:
+            # Use API key to get real weather (simulated here)
+            return f"Weather in {city} retrieved with API key {self.api_key[:5]}...: 22°C and sunny."
+        else:
+            return get_weather(city)
 
 class BaseTool:
     """Base class for all tools."""

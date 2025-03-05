@@ -8,7 +8,8 @@ They are marked as integration and slow tests since they make real API calls.
 import pytest
 import os
 import time
-from typing import List, Dict
+import re
+from typing import List, Dict, Any, Callable
 
 from liteagent.agent import LiteAgent
 from liteagent.tools import tool, liteagent_tool
@@ -58,30 +59,114 @@ IMPORTANT: You MUST use these tools when applicable. Do not try to answer questi
             observers=[validation_observer]
         )
         
+        # Register a custom parser for the weather response
+        def parse_weather_response(response: str) -> Dict[str, Any]:
+            city_match = re.search(r'(?:weather|temperature)[^.]*?([A-Za-z\s]+)', response, re.IGNORECASE)
+            temp_match = re.search(r'(\d+)[°℃C]', response)
+            
+            result = {}
+            if city_match:
+                result["city"] = city_match.group(1).strip()
+            if temp_match:
+                result["temperature"] = int(temp_match.group(1))
+            
+            # Extract weather condition if present
+            for condition in ["sunny", "cloudy", "rainy", "clear", "stormy"]:
+                if condition in response.lower():
+                    result["condition"] = condition
+                    break
+                    
+            return result
+            
+        validation_observer.register_response_parser("get_weather", parse_weather_response)
+        
         # Test weather tool
         response = agent.chat("What's the weather in Tokyo?")
+        
+        # Verify function calls
         validation_observer.assert_function_called("get_weather")
+        validation_observer.assert_function_call_count("get_weather", 1)
         validation_observer.assert_function_called_with("get_weather", city="Tokyo")
-        assert "Tokyo" in response
+        
+        # Verify function result structure
+        validation_observer.assert_function_result_structure(
+            "get_weather", 
+            {
+                # Using a lambda for flexible validation of the result string
+                # This is better than checking for string containment
+                "city": lambda x: "Tokyo" in x
+            }
+        )
+        
+        # Use structured response validation instead of string matching
+        validation_observer.assert_response_contains_structure(
+            response,
+            {
+                "city": "Tokyo",
+                "temperature": lambda x: x is not None,
+                "condition": lambda x: x in ["sunny", "cloudy", "rainy", "clear", "stormy"]
+            },
+            function_name="get_weather"
+        )
         
         # Reset observer state
         validation_observer.reset()
         
         # Test add_numbers tool
         response = agent.chat("What is 42 + 17?")
+        
+        # Verify function calls
         validation_observer.assert_function_called("add_numbers")
+        validation_observer.assert_function_call_count("add_numbers", 1)
         validation_observer.assert_function_called_with("add_numbers", a=42, b=17)
-        assert "59" in response
+        
+        # Verify function result directly - it's an integer
+        result = validation_observer.get_last_function_result("add_numbers")
+        assert result == 59, f"Expected result 59, got {result}"
+        
+        # For number results, create a simple extractor
+        def parse_number_response(response: str) -> Dict[str, Any]:
+            # Extract numbers from response
+            numbers = re.findall(r'\b\d+\b', response)
+            result = {}
+            if numbers:
+                result["result"] = int(numbers[0])
+            return result
+            
+        validation_observer.register_response_parser("add_numbers", parse_number_response)
+        
+        # Use structured response validation
+        validation_observer.assert_response_contains_structure(
+            response,
+            {"result": 59}
+        )
         
         # Reset observer state
         validation_observer.reset()
         
         # Test search_database tool with limit parameter
         response = agent.chat("Search the database for 'climate change' and limit the results to 3.")
+        
+        # Verify function calls
         validation_observer.assert_function_called("search_database")
+        validation_observer.assert_function_call_count("search_database", 1)
         validation_observer.assert_function_called_with("search_database", query="climate change", limit=3)
-        assert len(validation_observer.function_results[0]["result"]) == 3
-    
+        
+        # Verify list result length
+        validation_observer.assert_function_result_list_length("search_database", 3)
+        
+        # Verify each result has the expected structure
+        search_result = validation_observer.get_last_function_result("search_database")
+        for item in search_result:
+            assert "id" in item, f"Missing 'id' field in result item: {item}"
+            assert "title" in item, f"Missing 'title' field in result item: {item}"
+            assert "score" in item, f"Missing 'score' field in result item: {item}"
+            assert "climate change" in item["title"].lower(), f"Expected 'climate change' in title: {item['title']}"
+            
+        # Validate the response contains information about climate change
+        assert "climate change" in response.lower()
+        assert "result" in response.lower() or "found" in response.lower()
+        
     def test_class_methods_as_tools(self, validation_observer):
         """Test class methods as tools from examples.py."""
         # Create instance of ToolsForAgents
@@ -114,21 +199,56 @@ IMPORTANT: You MUST use these tools when applicable. Do not try to answer questi
         
         # Test multiply_numbers tool
         response = agent.chat("What is 7 times 8?")
-        validation_observer.assert_function_called("multiply_numbers")
-        validation_observer.assert_function_called_with("multiply_numbers", a=7, b=8)
-        assert "56" in response
         
-        # Verify that the counter was incremented
-        assert tools_instance.get_call_count() > 0
+        # First, validate the function call
+        validation_observer.assert_function_called("multiply_numbers")
+        validation_observer.assert_function_call_count("multiply_numbers", 1)
+        validation_observer.assert_function_called_with("multiply_numbers", a=7, b=8)
+        
+        # Then validate the function result directly
+        result = validation_observer.get_last_function_result("multiply_numbers")
+        assert result == 56, f"Expected result 56, got {result}"
+        
+        # Register a number result parser
+        def parse_number_response(response: str) -> Dict[str, Any]:
+            # Extract numbers from response
+            numbers = re.findall(r'\b\d+\b', response)
+            result = {}
+            if numbers:
+                result["result"] = int(numbers[0])
+            return result
+            
+        validation_observer.register_response_parser("multiply_numbers", parse_number_response)
+        
+        # Use structured response validation
+        validation_observer.assert_response_contains_structure(
+            response,
+            {"result": 56}
+        )
+        
+        # Verify internal counter of the tools class matches our observer count
+        assert tools_instance.get_call_count() == 1
         
         # Reset observer state
         validation_observer.reset()
         
         # Test weather with API key
         response = agent.chat("What's the weather in Berlin?")
+        
+        # First, validate the function call
         validation_observer.assert_function_called("get_weather")
+        validation_observer.assert_function_call_count("get_weather", 1)
         validation_observer.assert_function_called_with("get_weather", city="Berlin")
-        assert "API key" in response or "Berlin" in response
+        
+        # Check internal counter was incremented
+        assert tools_instance.get_call_count() == 2, "Tool call count should be 2"
+        
+        # If the response contains API key information, validate that
+        if "API key" in response:
+            assert "fake-api-key" in validation_observer.get_last_function_result("get_weather")
+        # Otherwise validate it contains information about Berlin
+        else:
+            assert "Berlin" in validation_observer.get_last_function_result("get_weather")
     
     def test_decorated_class_methods(self, validation_observer):
         """Test decorated class methods as tools."""

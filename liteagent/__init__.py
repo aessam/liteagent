@@ -12,7 +12,8 @@ from .observer import (AgentObserver, AgentEvent, AgentInitializedEvent, UserMes
                       FunctionResultEvent, AgentResponseEvent, ConsoleObserver, 
                       FileObserver, TreeTraceObserver, generate_context_id)
 from .agent_tool import AgentTool
-from .tool_calling import ToolCallingType, ToolCallingHandler
+from .tool_calling_types import ToolCallingType
+from .tool_calling import ToolCallingHandler
 from .tool_calling_config import get_tool_calling_type
 
 __version__ = "0.1.0"

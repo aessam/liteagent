@@ -11,7 +11,8 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Union
 import litellm
 
-from .tool_calling import ToolCallingType, get_tool_calling_handler, get_provider_specific_handler
+from .tool_calling_types import ToolCallingType
+from .tool_calling import get_tool_calling_handler, get_provider_specific_handler
 from .tool_calling_config import get_tool_calling_type, get_provider_from_model
 from .utils import logger, log_completion_request, log_completion_response
 
@@ -39,31 +40,32 @@ class ModelInterface(ABC):
         Generate a response from the model.
         
         Args:
-            messages: List of conversation messages
+            messages: List of message dictionaries
             functions: Optional list of function definitions
             
         Returns:
-            Dict containing the model's response
+            The model's response
         """
-        kwargs = {"model": self.model_name, "messages": messages}
+        # Prepare kwargs for the API call
+        kwargs = {
+            "model": self.model_name,
+            "messages": messages,
+        }
         
-        # Add temperature if it's been set
-        if self.temperature is not None:
-            kwargs["temperature"] = self.temperature
-        
+        # Add functions if provided and supported
         if functions:
-            # Format tools appropriately for this model
+            # Format functions based on tool calling type
             formatted_tools = self.tool_handler.format_tools_for_model(functions)
             
-            # Handle different tool calling types
-            if self.tool_calling_type == ToolCallingType.OPENAI:
-                kwargs["functions"] = formatted_tools
-                kwargs["function_call"] = "auto"
-            elif self.tool_calling_type == ToolCallingType.ANTHROPIC:
+            # Add functions to kwargs based on tool calling type
+            if self.tool_calling_type == ToolCallingType.OPENAI_FUNCTION_CALLING:
+                # OpenAI-style function calling
                 kwargs["tools"] = formatted_tools
-            elif self.tool_calling_type == ToolCallingType.OLLAMA:
+                kwargs["tool_choice"] = "auto"
+            elif self.tool_calling_type == ToolCallingType.ANTHROPIC_TOOL_CALLING:
+                # Anthropic-style tool calling
                 kwargs["tools"] = formatted_tools
-            elif self.tool_calling_type in [ToolCallingType.STRUCTURED_OUTPUT, ToolCallingType.TEXT_BASED]:
+            elif self.tool_calling_type in [ToolCallingType.JSON_EXTRACTION, ToolCallingType.PROMPT_BASED]:
                 # For these types, we need to modify the system prompt
                 tool_description = formatted_tools
                 if messages and messages[0]["role"] == "system":
@@ -96,16 +98,14 @@ class ModelInterface(ABC):
         log_completion_response(response, elapsed_time)
         
         # Debug log for Ollama responses
-        if self.tool_calling_type == ToolCallingType.OLLAMA:
+        if self.tool_calling_type == ToolCallingType.JSON_EXTRACTION:
             logger.debug(f"Ollama response type: {type(response)}")
             logger.debug(f"Ollama response attributes: {dir(response) if hasattr(response, '__dict__') else 'No attributes'}")
             logger.debug(f"Ollama response dict: {response.__dict__ if hasattr(response, '__dict__') else 'Not a class instance'}")
             
             # Check for message attribute
             if hasattr(response, 'message'):
-                logger.debug(f"Ollama message type: {type(response.message)}")
-                logger.debug(f"Ollama message attributes: {dir(response.message) if hasattr(response.message, '__dict__') else 'No attributes'}")
-                logger.debug(f"Ollama message dict: {response.message.__dict__ if hasattr(response.message, '__dict__') else 'Not a class instance'}")
+                logger.debug(f"Ollama message: {response.message}")
         
         return response
     
@@ -136,16 +136,16 @@ class ModelInterface(ABC):
     
     def extract_content(self, response: Any) -> str:
         """
-        Extract text content from the model's response.
+        Extract the content from a response.
         
         Args:
-            response: The model's response
+            response: The response from the model
             
         Returns:
             str: The text content
         """
         # Extract content based on the model type
-        if self.tool_calling_type == ToolCallingType.OPENAI:
+        if self.tool_calling_type == ToolCallingType.OPENAI_FUNCTION_CALLING:
             if not response or not hasattr(response, 'choices') or len(response.choices) == 0:
                 return ""
                 
@@ -153,85 +153,26 @@ class ModelInterface(ABC):
             content = message_obj.content if hasattr(message_obj, 'content') else ""
             return str(content).strip() if content else ""
             
-        elif self.tool_calling_type == ToolCallingType.ANTHROPIC:
+        elif self.tool_calling_type == ToolCallingType.ANTHROPIC_TOOL_CALLING:
             if not response:
-                logger.warning("Anthropic response is None or empty")
                 return ""
                 
-            # Debug log for Anthropic responses
-            logger.warning(f"Anthropic response type: {type(response)}")
-            logger.warning(f"Anthropic response attributes: {dir(response) if hasattr(response, '__dict__') else 'No attributes'}")
-            
-            if hasattr(response, '__dict__'):
-                logger.warning(f"Anthropic response dict: {response.__dict__}")
-            
-            # Try different ways to extract content from Anthropic responses
+            # Handle different response formats
             if hasattr(response, 'content') and isinstance(response.content, list):
-                logger.warning(f"Anthropic response has content list with {len(response.content)} items")
-                # Concatenate all text content
-                text_content = []
-                for content_item in response.content:
-                    logger.warning(f"Content item type: {content_item.type if hasattr(content_item, 'type') else 'unknown'}")
-                    if hasattr(content_item, "type") and content_item.type == "text":
-                        text_content.append(content_item.text)
-                        logger.warning(f"Added text content: {content_item.text}")
-                return "\n".join(text_content)
+                # Extract text from content blocks
+                text_blocks = []
+                for block in response.content:
+                    if block.get('type') == 'text':
+                        text_blocks.append(block.get('text', ''))
+                return ' '.join(text_blocks)
             
-            # Check for ModelResponse structure from LiteLLM
-            elif hasattr(response, 'choices') and len(response.choices) > 0:
-                logger.warning(f"Anthropic response has choices with {len(response.choices)} items")
-                choice = response.choices[0]
-                if hasattr(choice, 'message'):
-                    message = choice.message
-                    logger.warning(f"Message attributes: {dir(message) if hasattr(message, '__dict__') else 'No attributes'}")
-                    
-                    # Check for content in the message
-                    if hasattr(message, 'content'):
-                        logger.warning(f"Message content type: {type(message.content)}")
-                        if isinstance(message.content, list):
-                            # Concatenate all text content
-                            text_content = []
-                            for content_item in message.content:
-                                if hasattr(content_item, "type") and content_item.type == "text":
-                                    text_content.append(content_item.text)
-                                    logger.warning(f"Added text content from message: {content_item.text}")
-                            return "\n".join(text_content)
-                        else:
-                            logger.warning(f"Message content as string: {message.content}")
-                            return str(message.content).strip() if message.content else ""
-            
-            # If we can't find content, log the response structure for debugging
-            logger.warning(f"Unable to extract content from Anthropic response: {response}")
-            return ""
-            
-        elif self.tool_calling_type == ToolCallingType.OLLAMA:
-            # Ollama responses can have different structures
-            # First check for ModelResponse structure (from litellm)
-            if hasattr(response, 'choices') and len(response.choices) > 0:
-                choice = response.choices[0]
-                if hasattr(choice, 'message') and hasattr(choice.message, 'content'):
-                    content = choice.message.content
-                    if content is not None:
-                        return str(content).strip()
-            
-            # Then check for original Ollama structure
-            if hasattr(response, 'message') and hasattr(response.message, 'content'):
-                return str(response.message.content).strip()
-            elif hasattr(response, 'response'):
-                return str(response.response).strip()
-            elif hasattr(response, 'content'):
-                return str(response.content).strip()
-            elif isinstance(response, dict):
-                if 'message' in response and 'content' in response['message']:
-                    return str(response['message']['content']).strip()
-                elif 'response' in response:
-                    return str(response['response']).strip()
-                elif 'content' in response:
-                    return str(response['content']).strip()
-            
-            # If we can't find content, log the response structure for debugging
-            logger.warning(f"Unable to extract content from Ollama response: {response}")
-            return ""
+        elif self.tool_calling_type == ToolCallingType.JSON_EXTRACTION:
+            if not response:
+                return ""
+                
+            # Try to extract content from Ollama response
+            if hasattr(response, 'message'):
+                return response.message.content if hasattr(response.message, 'content') else ""
             
         else:
             # For other types, use a generic approach

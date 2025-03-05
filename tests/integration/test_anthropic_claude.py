@@ -1,15 +1,15 @@
 """
 Integration tests using Anthropic Claude models.
 
-These tests run against the Anthropic Claude models and validate core functionality
-with models that have native function calling abilities.
+These tests run against the actual Anthropic Claude model and validate core functionality.
 They are marked as integration and slow tests since they make real API calls.
 """
 
 import pytest
 import os
 import time
-from typing import List, Dict
+import re
+from typing import List, Dict, Any, Callable
 
 from liteagent.agent import LiteAgent
 from liteagent.tools import tool, liteagent_tool
@@ -56,24 +56,76 @@ IMPORTANT: Always use the tools when appropriate rather than trying to answer wi
             observers=[validation_observer]
         )
         
+        # Register response parsers for better validation
+        def parse_weather_response(response: str) -> Dict[str, Any]:
+            city_match = re.search(r'(?:weather|temperature)[^.]*?([A-Za-z\s]+)', response, re.IGNORECASE)
+            temp_match = re.search(r'(\d+)[°℃C]', response)
+            
+            result = {}
+            if city_match:
+                result["city"] = city_match.group(1).strip()
+            if temp_match:
+                result["temperature"] = int(temp_match.group(1))
+            
+            # Extract weather condition if present
+            for condition in ["sunny", "cloudy", "rainy", "clear", "stormy"]:
+                if condition in response.lower():
+                    result["condition"] = condition
+                    break
+                    
+            return result
+            
+        def parse_number_response(response: str) -> Dict[str, Any]:
+            # Extract numbers from response
+            numbers = re.findall(r'\b\d+\b', response)
+            result = {}
+            if numbers and len(numbers) > 0:
+                # Use the first number as the result if available
+                result["result"] = int(numbers[0])
+            return result
+            
+        validation_observer.register_response_parser("get_weather", parse_weather_response)
+        validation_observer.register_response_parser("add_numbers", parse_number_response)
+        
         # Test weather tool
         response = agent.chat("What's the weather like in Tokyo?")
         
-        # Validate that the get_weather function was called
+        # Validate function calls
         validation_observer.assert_function_called("get_weather")
+        validation_observer.assert_function_call_count("get_weather", 1)
         validation_observer.assert_function_called_with("get_weather", city="Tokyo")
         
+        # Validate function result
+        weather_result = validation_observer.get_last_function_result("get_weather")
+        assert weather_result is not None, "Weather function result should not be None"
+        assert "Tokyo" in weather_result, "Result should mention Tokyo"
+        
         # For Anthropic, the response might be empty due to how it handles tool calls
-        # So we just check that the function was called correctly
+        # If we have a response, validate it
+        if response:
+            parsed_response = validation_observer.parse_response(response, "get_weather")
+            if "city" in parsed_response:
+                assert "Tokyo" in parsed_response["city"], "Response should mention Tokyo"
         
         validation_observer.reset()
         
         # Test addition tool
         response = agent.chat("What is 25 plus 17?")
         
-        # Validate that the add_numbers function was called
+        # Validate function calls
         validation_observer.assert_function_called("add_numbers")
+        validation_observer.assert_function_call_count("add_numbers", 1)
         validation_observer.assert_function_called_with("add_numbers", a=25, b=17)
+        
+        # Validate function result directly
+        add_result = validation_observer.get_last_function_result("add_numbers")
+        assert add_result == 42, f"Expected add_numbers result to be 42, got {add_result}"
+        
+        # If we have a response, validate it
+        if response:
+            parsed_response = validation_observer.parse_response(response, "add_numbers")
+            if "result" in parsed_response:
+                assert parsed_response["result"] == 42, f"Expected result 42, got {parsed_response['result']}"
     
     def test_class_method_tools(self, validation_observer):
         """Test class method tools with Anthropic's native function calling."""
@@ -101,24 +153,68 @@ IMPORTANT: Always use the tools when appropriate rather than trying to answer wi
             observers=[validation_observer]
         )
         
+        # Register response parsers
+        def parse_weather_response(response: str) -> Dict[str, Any]:
+            city_match = re.search(r'(?:weather|temperature)[^.]*?([A-Za-z\s]+)', response, re.IGNORECASE)
+            result = {}
+            if city_match:
+                result["city"] = city_match.group(1).strip()
+            return result
+            
+        def parse_number_response(response: str) -> Dict[str, Any]:
+            numbers = re.findall(r'\b\d+\b', response)
+            result = {}
+            if numbers and len(numbers) > 0:
+                result["result"] = int(numbers[0])
+            return result
+            
+        validation_observer.register_response_parser("get_weather", parse_weather_response)
+        validation_observer.register_response_parser("add_numbers", parse_number_response)
+        
         # Test weather tool
         response = agent.chat("What's the weather like in Berlin?")
         
-        # Validate that the get_weather function was called
+        # Validate function calls
         validation_observer.assert_function_called("get_weather")
+        validation_observer.assert_function_call_count("get_weather", 1)
         validation_observer.assert_function_called_with("get_weather", city="Berlin")
         
-        # For Anthropic, the response might be empty due to how it handles tool calls
-        # So we just check that the function was called correctly
+        # Validate function result
+        weather_result = validation_observer.get_last_function_result("get_weather")
+        assert weather_result is not None, "Weather function result should not be None"
+        assert "Berlin" in weather_result, "Result should mention Berlin"
+        
+        # Verify internal counter of tools class was incremented
+        assert tools_instance.get_call_count() >= 1, "Tool call count should be at least 1"
+        
+        # If we have a response, validate it
+        if response:
+            parsed_response = validation_observer.parse_response(response, "get_weather")
+            if "city" in parsed_response:
+                assert "Berlin" in parsed_response["city"], "Response should mention Berlin"
         
         validation_observer.reset()
         
         # Test addition tool
         response = agent.chat("What is 7 plus 9?")
         
-        # Validate that the add_numbers function was called
+        # Validate function calls
         validation_observer.assert_function_called("add_numbers")
+        validation_observer.assert_function_call_count("add_numbers", 1)
         validation_observer.assert_function_called_with("add_numbers", a=7, b=9)
+        
+        # Validate function result directly
+        add_result = validation_observer.get_last_function_result("add_numbers")
+        assert add_result == 16, f"Expected add_numbers result to be 16, got {add_result}"
+        
+        # Verify internal counter of tools class increased further
+        assert tools_instance.get_call_count() >= 2, "Tool call count should be at least 2"
+        
+        # If we have a response, validate it
+        if response:
+            parsed_response = validation_observer.parse_response(response, "add_numbers")
+            if "result" in parsed_response:
+                assert parsed_response["result"] == 16, f"Expected result 16, got {parsed_response['result']}"
     
     def test_multi_step_reasoning(self, validation_observer):
         """Test multi-step reasoning with Anthropic's native function calling."""
@@ -144,13 +240,52 @@ If a question requires multiple steps, use the appropriate tools in sequence."""
             observers=[validation_observer]
         )
         
+        # Register response parsers
+        def parse_number_response(response: str) -> Dict[str, Any]:
+            numbers = re.findall(r'\b\d+\b', response)
+            result = {}
+            if numbers and len(numbers) > 0:
+                result["result"] = int(numbers[0])
+            return result
+            
+        validation_observer.register_response_parser("add_numbers", parse_number_response)
+        validation_observer.register_response_parser("calculate_area", parse_number_response)
+        
         # Test multi-step reasoning
         response = agent.chat("What's the sum of the width and height of a rectangle with area 24 and width 6?")
         
-        # For Anthropic, we just check that the appropriate functions were called
-        # We don't check the response content since it might be empty
+        # Track all called functions for logging/debugging
+        called_functions = list(validation_observer.called_functions)
+        print(f"Functions called in multi-step reasoning: {called_functions}")
         
-        # Validate that the calculate_area function was not called (since we're working backwards)
-        # but add_numbers might have been used
+        # For Anthropic, we validate whatever functions were called and their results
+        if "calculate_area" in validation_observer.called_functions:
+            # If calculate_area was called, validate its parameters
+            for call in validation_observer.function_calls:
+                if call["name"] == "calculate_area":
+                    arguments = call["arguments"]
+                    assert "width" in arguments and "height" in arguments, "Calculate area should have width and height"
+        
+        # If add_numbers was called, validate it was called with correct values
+        # The expected answer is width + height = 6 + 4 = 10 (since area = width * height, 24 = 6 * 4)
         if "add_numbers" in validation_observer.called_functions:
-            validation_observer.assert_function_called("add_numbers") 
+            # There might be multiple add_numbers calls with different arguments
+            # Look for one that adds 6 and 4 (or 4 and 6)
+            found_correct_addition = False
+            for call in validation_observer.function_calls:
+                if call["name"] == "add_numbers":
+                    args = call["arguments"]
+                    if (args.get("a") == 6 and args.get("b") == 4) or (args.get("a") == 4 and args.get("b") == 6):
+                        found_correct_addition = True
+                        break
+            
+            if found_correct_addition:
+                # Validate that one of the function results is 10
+                add_result = validation_observer.get_last_function_result("add_numbers")
+                if add_result == 10:
+                    print("Found correct addition result: 10")
+        
+        # If we have a response, validate it mentions the correct result
+        if response:
+            # Check if the correct answer (10) is in the response
+            assert "10" in response or "ten" in response.lower(), "Response should contain the correct answer (10)" 

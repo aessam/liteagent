@@ -1,16 +1,54 @@
 """
-AgentTool - Implementation for using LiteAgent instances as tools.
+Tool definitions and utilities for LiteAgent.
 
-This module provides the AgentTool class that allows using LiteAgent instances
-as tools within other LiteAgent instances, enabling nested agent architectures.
+This module provides classes and functions for defining and working with tools
+that can be called by the LiteAgent.
 """
 
-import json
-from typing import Any, Dict, Optional, List
+from pydantic import create_model, BaseModel
+import inspect
+from typing import Any, Callable, Dict, List, Optional, Type, Union, ForwardRef
 
+# Import tools and observers without circular references
 from .tools import BaseTool
-from .agent import LiteAgent
 from .observer import AgentObserver
+
+# Use a forward reference for LiteAgent to avoid circular imports
+LiteAgent = ForwardRef('LiteAgent')
+
+# Function definition for tool calling
+class FunctionDefinition:
+    """
+    Represents a function definition for tool calling.
+    
+    This class is used to define functions that can be called by an LLM.
+    """
+    
+    def __init__(self, name: str, description: str, parameters: Dict[str, Any]):
+        """
+        Initialize a function definition.
+        
+        Args:
+            name: The name of the function
+            description: A description of what the function does
+            parameters: A dictionary defining the parameters
+        """
+        self.name = name
+        self.description = description
+        self.parameters = parameters
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Convert the function definition to a dictionary.
+        
+        Returns:
+            A dictionary representation of the function definition
+        """
+        return {
+            "name": self.name,
+            "description": self.description,
+            "parameters": self.parameters
+        }
 
 class AgentTool(BaseTool):
     """
@@ -18,7 +56,7 @@ class AgentTool(BaseTool):
     This allows for nested agent architectures where one agent can delegate tasks to other agents.
     """
     
-    def __init__(self, agent: LiteAgent, name: Optional[str] = None, description: Optional[str] = None, 
+    def __init__(self, agent: 'LiteAgent', name: Optional[str] = None, description: Optional[str] = None, 
                  message_template: Optional[str] = None):
         """
         Initialize an AgentTool.
