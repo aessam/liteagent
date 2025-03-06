@@ -34,13 +34,21 @@ LiteAgent is designed with clean abstractions to make it easy to understand and 
 
 ## Installation
 
+### Via pip (recommended)
+
+```bash
+pip install liteagent
+```
+
+### From source
+
 ```bash
 # Clone the repository
 git clone https://github.com/yourusername/liteagent.git
 cd liteagent
 
-# Install dependencies
-pip install -r requirements.txt
+# Install in development mode
+pip install -e .
 ```
 
 ## Quick Start
