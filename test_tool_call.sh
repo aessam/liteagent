@@ -36,7 +36,7 @@ FUNCTION_SCHEMA='{
 usage() {
     echo "Usage: $0 [options]"
     echo "Options:"
-    echo "  -p, --provider PROVIDER    Specify provider (ollama, openai, anthropic, groq)"
+    echo "  -p, --provider PROVIDER    Specify provider (ollama, openai, anthropic, groq, deepseek, mistral)"
     echo "  -m, --model MODEL          Specify model name"
     echo "  -l, --list                 List available models for the selected provider"
     echo "  -r, --run-test             Run tool calling test on specified model"
@@ -48,6 +48,8 @@ usage() {
     echo "  OPENAI_API_KEY             API key for OpenAI"
     echo "  ANTHROPIC_API_KEY          API key for Anthropic"
     echo "  GROQ_API_KEY               API key for Groq"
+    echo "  DEEPSEEK_API_KEY           API key for Deepseek"
+    echo "  MISTRAL_API_KEY            API key for Mistral"
     exit 1
 }
 
@@ -87,6 +89,26 @@ list_models() {
                 -H "Authorization: Bearer $GROQ_API_KEY" \
                 -H "Content-Type: application/json" | jq -r '.data[].id'
             ;;
+        "deepseek")
+            if [ -z "$DEEPSEEK_API_KEY" ]; then
+                echo "Error: DEEPSEEK_API_KEY is not set"
+                exit 1
+            fi
+            echo "Available Deepseek models:"
+            curl -s "https://api.deepseek.com/v1/models" \
+                -H "Authorization: Bearer $DEEPSEEK_API_KEY" \
+                -H "Content-Type: application/json" | jq -r '.data[].id'
+            ;;
+        "mistral")
+            if [ -z "$MISTRAL_API_KEY" ]; then
+                echo "Error: MISTRAL_API_KEY is not set"
+                exit 1
+            fi
+            echo "Available Mistral models:"
+            curl -s "https://api.mistral.ai/v1/models" \
+                -H "Authorization: Bearer $MISTRAL_API_KEY" \
+                -H "Content-Type: application/json" | jq -r '.data[].id'
+            ;;
         *)
             echo "Unknown provider: $PROVIDER"
             exit 1
@@ -112,6 +134,16 @@ get_models_list() {
         "groq")
             echo "$(curl -s "https://api.groq.com/openai/v1/models" \
                 -H "Authorization: Bearer $GROQ_API_KEY" \
+                -H "Content-Type: application/json" | jq -r '.data[].id')"
+            ;;
+        "deepseek")
+            echo "$(curl -s "https://api.deepseek.com/v1/models" \
+                -H "Authorization: Bearer $DEEPSEEK_API_KEY" \
+                -H "Content-Type: application/json" | jq -r '.data[].id')"
+            ;;
+        "mistral")
+            echo "$(curl -s "https://api.mistral.ai/v1/models" \
+                -H "Authorization: Bearer $MISTRAL_API_KEY" \
                 -H "Content-Type: application/json" | jq -r '.data[].id')"
             ;;
     esac
@@ -340,6 +372,108 @@ EOM
     echo -e "Response saved to: $RESPONSE_FILE"
 }
 
+# Function to test a model on Deepseek
+test_deepseek_model() {
+    local MODEL=$1
+    local API_URL="https://api.deepseek.com/v1/chat/completions"
+    local RESPONSE_FILE=".tool_test/response_deepseek_${MODEL//\//_}.json"
+    
+    if [ -z "$DEEPSEEK_API_KEY" ]; then
+        echo "Error: DEEPSEEK_API_KEY is not set"
+        exit 1
+    fi
+    
+    read -r -d '' PAYLOAD << EOM
+{
+    "model": "$MODEL",
+    "messages": [
+        {"role": "user", "content": "What's the weather like in San Francisco?"}
+    ],
+    "tools": [
+        {
+            "type": "function",
+            "function": $FUNCTION_SCHEMA
+        }
+    ],
+    "temperature": 0.1
+}
+EOM
+
+    echo -e "\n\033[1;36mTesting Deepseek model: $MODEL\033[0m"
+    curl -s -X POST "$API_URL" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer $DEEPSEEK_API_KEY" \
+        -d "$PAYLOAD" > "$RESPONSE_FILE"
+
+    # Check for error
+    if jq -e '.error' "$RESPONSE_FILE" >/dev/null 2>&1; then
+        echo -e "\033[1;31m❌ Error:\033[0m"
+        jq '.error' "$RESPONSE_FILE"
+    # Check for tool calls
+    elif jq -e '.choices[0].message.tool_calls' "$RESPONSE_FILE" >/dev/null 2>&1; then
+        echo -e "\033[1;32m✅ Success! Function call detected\033[0m"
+        jq '.choices[0].message.content' "$RESPONSE_FILE"
+        echo -e "\nFunction call details:"
+        jq '.choices[0].message.tool_calls' "$RESPONSE_FILE"
+    else
+        echo -e "\033[1;33m⚠️ Model responded without using the tool\033[0m"
+        jq '.choices[0].message.content' "$RESPONSE_FILE" 2>/dev/null
+    fi
+    
+    echo -e "Response saved to: $RESPONSE_FILE"
+}
+
+# Function to test a model on Mistral
+test_mistral_model() {
+    local MODEL=$1
+    local API_URL="https://api.mistral.ai/v1/chat/completions"
+    local RESPONSE_FILE=".tool_test/response_mistral_${MODEL//\//_}.json"
+    
+    if [ -z "$MISTRAL_API_KEY" ]; then
+        echo "Error: MISTRAL_API_KEY is not set"
+        exit 1
+    fi
+    
+    read -r -d '' PAYLOAD << EOM
+{
+    "model": "$MODEL",
+    "messages": [
+        {"role": "user", "content": "What's the weather like in San Francisco?"}
+    ],
+    "tools": [
+        {
+            "type": "function",
+            "function": $FUNCTION_SCHEMA
+        }
+    ],
+    "temperature": 0.1
+}
+EOM
+
+    echo -e "\n\033[1;36mTesting Mistral model: $MODEL\033[0m"
+    curl -s -X POST "$API_URL" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer $MISTRAL_API_KEY" \
+        -d "$PAYLOAD" > "$RESPONSE_FILE"
+
+    # Check for error
+    if jq -e '.error' "$RESPONSE_FILE" >/dev/null 2>&1; then
+        echo -e "\033[1;31m❌ Error:\033[0m"
+        jq '.error' "$RESPONSE_FILE"
+    # Check for tool calls
+    elif jq -e '.choices[0].message.tool_calls' "$RESPONSE_FILE" >/dev/null 2>&1; then
+        echo -e "\033[1;32m✅ Success! Function call detected\033[0m"
+        jq '.choices[0].message.content' "$RESPONSE_FILE"
+        echo -e "\nFunction call details:"
+        jq '.choices[0].message.tool_calls' "$RESPONSE_FILE"
+    else
+        echo -e "\033[1;33m⚠️ Model responded without using the tool\033[0m"
+        jq '.choices[0].message.content' "$RESPONSE_FILE" 2>/dev/null
+    fi
+    
+    echo -e "Response saved to: $RESPONSE_FILE"
+}
+
 # Function to test a model
 test_model() {
     local MODEL_TO_TEST=$1
@@ -356,6 +490,12 @@ test_model() {
             ;;
         "groq")
             test_groq_model "$MODEL_TO_TEST"
+            ;;
+        "deepseek")
+            test_deepseek_model "$MODEL_TO_TEST"
+            ;;
+        "mistral")
+            test_mistral_model "$MODEL_TO_TEST"
             ;;
         *)
             echo "Unknown provider: $PROVIDER"
@@ -417,6 +557,8 @@ if [ -z "$MODEL" ] && [ "$ALL_MODELS" != true ] && [ "$RUN_ALL" != true ]; then
         "openai") MODEL="gpt-4-turbo" ;;
         "anthropic") MODEL="claude-3-sonnet-20240229" ;;
         "groq") MODEL="llama3-70b-8192" ;;
+        "deepseek") MODEL="deepseek-chat" ;;
+        "mistral") MODEL="mistral-large-latest" ;;
     esac
     if [ "$RUN_TOOL_TEST" = true ]; then
         echo "No model specified, using default model for $PROVIDER: $MODEL"

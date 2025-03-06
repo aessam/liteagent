@@ -5,6 +5,8 @@ This module provides a more structured approach to defining tool calling capabil
 for different language models, with clear separation of concerns and validation strategies.
 """
 
+import json
+import os
 from enum import Enum, auto
 from typing import Dict, Any, Optional, List, Set
 
@@ -27,115 +29,8 @@ class ToolCallingType(Enum):
     PROMPT_BASED = auto()
 
 
-# Model capabilities registry
-MODEL_CAPABILITIES = {
-    # OpenAI models
-    "gpt-4o": {
-        "tool_calling_type": ToolCallingType.OPENAI_FUNCTION_CALLING,
-        "supports_multiple_tools": True,
-        "max_tools_per_request": 128
-    },
-    "gpt-4o-mini": {
-        "tool_calling_type": ToolCallingType.OPENAI_FUNCTION_CALLING,
-        "supports_multiple_tools": True,
-        "max_tools_per_request": 128
-    },
-    "gpt-4": {
-        "tool_calling_type": ToolCallingType.OPENAI_FUNCTION_CALLING,
-        "supports_multiple_tools": True,
-        "max_tools_per_request": 128
-    },
-    "gpt-3.5-turbo": {
-        "tool_calling_type": ToolCallingType.OPENAI_FUNCTION_CALLING,
-        "supports_multiple_tools": True,
-        "max_tools_per_request": 128
-    },
-    
-    # Anthropic models
-    "claude-3-opus": {
-        "tool_calling_type": ToolCallingType.ANTHROPIC_TOOL_CALLING,
-        "supports_multiple_tools": True,
-        "max_tools_per_request": 64
-    },
-    "claude-3-sonnet": {
-        "tool_calling_type": ToolCallingType.ANTHROPIC_TOOL_CALLING,
-        "supports_multiple_tools": True,
-        "max_tools_per_request": 64
-    },
-    "claude-3-haiku": {
-        "tool_calling_type": ToolCallingType.ANTHROPIC_TOOL_CALLING,
-        "supports_multiple_tools": True,
-        "max_tools_per_request": 64
-    },
-    "anthropic/claude-3-opus": {
-        "tool_calling_type": ToolCallingType.ANTHROPIC_TOOL_CALLING,
-        "supports_multiple_tools": True,
-        "max_tools_per_request": 64
-    },
-    "anthropic/claude-3-sonnet": {
-        "tool_calling_type": ToolCallingType.ANTHROPIC_TOOL_CALLING,
-        "supports_multiple_tools": True,
-        "max_tools_per_request": 64
-    },
-    "anthropic/claude-3-haiku": {
-        "tool_calling_type": ToolCallingType.ANTHROPIC_TOOL_CALLING,
-        "supports_multiple_tools": True,
-        "max_tools_per_request": 64
-    },
-    
-    # Groq models
-    "groq/llama-3.1-8b-instant": {
-        "tool_calling_type": ToolCallingType.OPENAI_FUNCTION_CALLING,
-        "supports_multiple_tools": True,
-        "max_tools_per_request": 128
-    },
-    "groq/llama3-70b-8192": {
-        "tool_calling_type": ToolCallingType.OPENAI_FUNCTION_CALLING,
-        "supports_multiple_tools": True,
-        "max_tools_per_request": 128
-    },
-    "groq/llama3-8b-8192": {
-        "tool_calling_type": ToolCallingType.OPENAI_FUNCTION_CALLING,
-        "supports_multiple_tools": True,
-        "max_tools_per_request": 128
-    },
-    "llama-3.1-8b-instant": {
-        "tool_calling_type": ToolCallingType.OPENAI_FUNCTION_CALLING,
-        "supports_multiple_tools": True,
-        "max_tools_per_request": 128
-    },
-    
-    # Text-based models
-    "text-davinci-003": {
-        "tool_calling_type": ToolCallingType.NONE,
-        "supports_multiple_tools": False,
-        "max_tools_per_request": 0
-    },
-    
-    # Ollama models
-    "ollama/llama2": {
-        "tool_calling_type": ToolCallingType.JSON_EXTRACTION,
-        "supports_multiple_tools": False,
-        "max_tools_per_request": 1
-    },
-    "ollama/llama3": {
-        "tool_calling_type": ToolCallingType.JSON_EXTRACTION,
-        "supports_multiple_tools": False,
-        "max_tools_per_request": 1
-    },
-    "ollama/phi": {
-        "tool_calling_type": ToolCallingType.JSON_EXTRACTION,
-        "supports_multiple_tools": False,
-        "max_tools_per_request": 1
-    },
-    
-    # Fallback for undefined models (cautious approach)
-    "default": {
-        "tool_calling_type": ToolCallingType.PROMPT_BASED,
-        "supports_multiple_tools": False,
-        "max_tools_per_request": 1
-    }
-}
+# Path to the capabilities configuration file
+CAPABILITIES_FILE = os.path.join(os.path.dirname(__file__), "model_capabilities.json")
 
 # Default capabilities for unknown models
 DEFAULT_MODEL_CAPABILITIES = {
@@ -144,6 +39,45 @@ DEFAULT_MODEL_CAPABILITIES = {
     "supports_nested_tools": False,
     "max_tools_per_request": 1,
 }
+
+# Initialize empty capabilities dictionary
+MODEL_CAPABILITIES = {
+    # Fallback for undefined models (cautious approach)
+    "default": {
+        "tool_calling_type": ToolCallingType.PROMPT_BASED,
+        "supports_multiple_tools": False,
+        "max_tools_per_request": 1
+    }
+}
+
+# Try to load capabilities from JSON
+try:
+    if os.path.exists(CAPABILITIES_FILE):
+        with open(CAPABILITIES_FILE, "r") as f:
+            capabilities_json = json.load(f)
+            json_capabilities = capabilities_json.get("model_capabilities", {})
+            
+            # Convert string representation of tool calling type to enum
+            for model, caps in json_capabilities.items():
+                model_caps = caps.copy()
+                if "tool_calling_type" in caps:
+                    type_str = caps["tool_calling_type"].upper()
+                    if type_str == "OPENAI" or type_str == "OPENAI_FUNCTION_CALLING":
+                        model_caps["tool_calling_type"] = ToolCallingType.OPENAI_FUNCTION_CALLING
+                    elif type_str == "ANTHROPIC" or type_str == "ANTHROPIC_TOOL_CALLING":
+                        model_caps["tool_calling_type"] = ToolCallingType.ANTHROPIC_TOOL_CALLING
+                    elif type_str == "JSON_EXTRACTION" or type_str == "OLLAMA":
+                        model_caps["tool_calling_type"] = ToolCallingType.JSON_EXTRACTION
+                    elif type_str == "TEXT_BASED" or type_str == "PROMPT_BASED":
+                        model_caps["tool_calling_type"] = ToolCallingType.PROMPT_BASED
+                    elif type_str == "NONE":
+                        model_caps["tool_calling_type"] = ToolCallingType.NONE
+                    
+                # Update the model capabilities
+                MODEL_CAPABILITIES[model] = model_caps
+except Exception as e:
+    # If there's an error loading from JSON, we'll use the hardcoded defaults
+    print(f"Error loading model capabilities from JSON: {e}")
 
 
 def get_model_capabilities(model_name: str) -> Dict[str, Any]:

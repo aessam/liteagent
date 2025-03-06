@@ -1,0 +1,239 @@
+{
+  "model_capabilities": {
+    "gpt-4o": {
+      "tool_calling_type": "OPENAI_FUNCTION_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 128
+    },
+    "gpt-4o-mini": {
+      "tool_calling_type": "OPENAI_FUNCTION_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 128
+    },
+    "gpt-4": {
+      "tool_calling_type": "OPENAI_FUNCTION_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 128
+    },
+    "gpt-3.5-turbo": {
+      "tool_calling_type": "OPENAI_FUNCTION_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 128
+    },
+    "claude-3-opus": {
+      "tool_calling_type": "ANTHROPIC_TOOL_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 64
+    },
+    "claude-3-sonnet": {
+      "tool_calling_type": "ANTHROPIC_TOOL_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 64
+    },
+    "claude-3-haiku": {
+      "tool_calling_type": "ANTHROPIC_TOOL_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 64
+    },
+    "anthropic/claude-3-opus": {
+      "tool_calling_type": "ANTHROPIC_TOOL_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 64
+    },
+    "anthropic/claude-3-sonnet": {
+      "tool_calling_type": "ANTHROPIC_TOOL_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 64
+    },
+    "anthropic/claude-3-haiku": {
+      "tool_calling_type": "ANTHROPIC_TOOL_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 64
+    },
+    "groq/llama-3.1-8b-instant": {
+      "tool_calling_type": "OPENAI_FUNCTION_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 128
+    },
+    "groq/llama3-70b-8192": {
+      "tool_calling_type": "OPENAI_FUNCTION_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 128
+    },
+    "groq/llama3-8b-8192": {
+      "tool_calling_type": "OPENAI_FUNCTION_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 128
+    },
+    "llama-3.1-8b-instant": {
+      "tool_calling_type": "OPENAI_FUNCTION_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 128
+    },
+    "deepseek/deepseek-chat": {
+      "tool_calling_type": "OPENAI_FUNCTION_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 128
+    },
+    "deepseek/deepseek-coder": {
+      "tool_calling_type": "OPENAI_FUNCTION_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 128
+    },
+    "deepseek/deepseek-v2": {
+      "tool_calling_type": "OPENAI_FUNCTION_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 128
+    },
+    "deepseek/deepseek-m-plus": {
+      "tool_calling_type": "OPENAI_FUNCTION_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 128
+    },
+    "deepseek/deepseek-reasoner": {
+      "tool_calling_type": "OPENAI_FUNCTION_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 128
+    },
+    "deepseek-chat": {
+      "tool_calling_type": "OPENAI_FUNCTION_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 128
+    },
+    "deepseek-coder": {
+      "tool_calling_type": "OPENAI_FUNCTION_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 128
+    },
+    "deepseek-reasoner": {
+      "tool_calling_type": "OPENAI_FUNCTION_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 128
+    },
+    "text-davinci-003": {
+      "tool_calling_type": "NONE",
+      "supports_multiple_tools": false,
+      "max_tools_per_request": 0
+    },
+    "ollama/llama2": {
+      "tool_calling_type": "JSON_EXTRACTION",
+      "supports_multiple_tools": false,
+      "max_tools_per_request": 1
+    },
+    "ollama/llama3": {
+      "tool_calling_type": "JSON_EXTRACTION",
+      "supports_multiple_tools": false,
+      "max_tools_per_request": 1
+    },
+    "ollama/phi": {
+      "tool_calling_type": "JSON_EXTRACTION",
+      "supports_multiple_tools": false,
+      "max_tools_per_request": 1
+    },
+    "mistral-large-latest": {
+      "tool_calling_type": "OPENAI_FUNCTION_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 128
+    },
+    "mistral-medium-latest": {
+      "tool_calling_type": "OPENAI_FUNCTION_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 128
+    },
+    "mistral-small-latest": {
+      "tool_calling_type": "OPENAI_FUNCTION_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 128
+    },
+    "mistral-large": {
+      "tool_calling_type": "OPENAI_FUNCTION_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 128
+    },
+    "mistral-medium": {
+      "tool_calling_type": "OPENAI_FUNCTION_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 128
+    },
+    "mistral-small": {
+      "tool_calling_type": "OPENAI_FUNCTION_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 128
+    },
+    "open-mistral-7b": {
+      "tool_calling_type": "OPENAI_FUNCTION_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 128
+    },
+    "open-mixtral-8x7b": {
+      "tool_calling_type": "OPENAI_FUNCTION_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 128
+    },
+    "mistral-7b-instruct": {
+      "tool_calling_type": "OPENAI_FUNCTION_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 128
+    },
+    "mixtral-8x7b-instruct": {
+      "tool_calling_type": "OPENAI_FUNCTION_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 128
+    },
+    "mistral/mistral-large-latest": {
+      "tool_calling_type": "OPENAI_FUNCTION_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 128
+    },
+    "mistral/mistral-medium-latest": {
+      "tool_calling_type": "OPENAI_FUNCTION_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 128
+    },
+    "mistral/mistral-small-latest": {
+      "tool_calling_type": "OPENAI_FUNCTION_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 128
+    },
+    "mistral/mistral-large": {
+      "tool_calling_type": "OPENAI_FUNCTION_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 128
+    },
+    "mistral/mistral-medium": {
+      "tool_calling_type": "OPENAI_FUNCTION_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 128
+    },
+    "mistral/mistral-small": {
+      "tool_calling_type": "OPENAI_FUNCTION_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 128
+    },
+    "mistral/open-mistral-7b": {
+      "tool_calling_type": "OPENAI_FUNCTION_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 128
+    },
+    "mistral/open-mixtral-8x7b": {
+      "tool_calling_type": "OPENAI_FUNCTION_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 128
+    },
+    "mistral/mistral-7b-instruct": {
+      "tool_calling_type": "OPENAI_FUNCTION_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 128
+    },
+    "mistral/mixtral-8x7b-instruct": {
+      "tool_calling_type": "OPENAI_FUNCTION_CALLING",
+      "supports_multiple_tools": true,
+      "max_tools_per_request": 128
+    },
+    "default": {
+      "tool_calling_type": "PROMPT_BASED",
+      "supports_multiple_tools": false,
+      "max_tools_per_request": 1
+    }
+  }
+} 

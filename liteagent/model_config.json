@@ -96,16 +96,19 @@
       }
     },
     "mistral": {
-      "tool_calling_type": "STRUCTURED_OUTPUT",
+      "tool_calling_type": "OPENAI",
       "models": {
-        "default": "STRUCTURED_OUTPUT",
-        "mistral-small": "STRUCTURED_OUTPUT",
-        "mistral-medium": "STRUCTURED_OUTPUT",
-        "mistral-large": "STRUCTURED_OUTPUT",
-        "open-mistral-7b": "STRUCTURED_OUTPUT",
-        "open-mixtral-8x7b": "STRUCTURED_OUTPUT",
-        "mistral-7b-instruct": "STRUCTURED_OUTPUT",
-        "mixtral-8x7b-instruct": "STRUCTURED_OUTPUT"
+        "default": "OPENAI",
+        "mistral-small": "OPENAI",
+        "mistral-medium": "OPENAI",
+        "mistral-large": "OPENAI",
+        "mistral-small-latest": "OPENAI",
+        "mistral-medium-latest": "OPENAI",
+        "mistral-large-latest": "OPENAI",
+        "open-mistral-7b": "OPENAI",
+        "open-mixtral-8x7b": "OPENAI",
+        "mistral-7b-instruct": "OPENAI",
+        "mixtral-8x7b-instruct": "OPENAI"
       }
     },
     "huggingface": {

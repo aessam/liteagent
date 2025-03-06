@@ -32,6 +32,8 @@ coverage.xml
 *.cover
 .hypothesis/
 
+# Tool test results
+.tool_test/
 # Virtual environments
 venv/
 env/

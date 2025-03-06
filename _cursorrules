@@ -1,0 +1,60 @@
+// LiteAgent IDE Rules
+// These rules capture knowledge about common issues and fixes in the codebase
+
+// MODEL RESPONSE HANDLING RULES
+
+// Rule: Handling null content in Anthropic responses with valid tool calls
+// Description: When extracting content from Anthropic responses, check if content is null 
+// but valid tool calls are present. In these cases, return a default message.
+{
+  "pattern": "def extract_content\\(.*?\\).*?content = response\\.choices\\[0\\]\\.message\\.content",
+  "message": "When handling model responses, ensure you check for null content in Anthropic responses that have valid tool calls.",
+  "suggestion": "Add a check for Anthropic responses with null content but valid tool calls, and return a default message in these cases."
+}
+
+// Rule: Handling different model response formats
+// Description: Different models return responses in different formats. Ensure code handles
+// all supported model formats.
+{
+  "pattern": "def extract_content\\(.*?\\).*?(OPENAI_FUNCTION_CALLING|ANTHROPIC_TOOL_CALLING|JSON_EXTRACTION)",
+  "message": "Ensure all model response formats are properly handled (OpenAI, Anthropic, JSON extraction).",
+  "suggestion": "Check that the extract_content method handles all supported model formats and their edge cases."
+}
+
+// TEST MODULE IMPORTS RULES
+
+// Rule: Validation observer import path
+// Description: The ValidationObserver class is in validation_observer.py, not test_observer.py
+{
+  "pattern": "from tests\\.integration\\.test_observer import ValidationObserver",
+  "message": "ValidationObserver is now in validation_observer.py, not test_observer.py",
+  "suggestion": "Change import to: from tests.integration.validation_observer import ValidationObserver"
+}
+
+// GENERAL DEBUGGING HINTS
+
+// Rule: Debug API calls with debug script
+// Description: Use the debug_api_calls.py script to troubleshoot API response issues
+{
+  "pattern": "MODEL RETURNED NONE|None response|null content",
+  "message": "For debugging API call issues, use the debug_api_calls.py script",
+  "suggestion": "Run: python -m tests.integration.debug_api_calls to trace API requests and responses"
+}
+
+// Rule: Test specific test files in isolation
+// Description: Run specific test files to isolate issues
+{
+  "pattern": "ImportError|ModuleNotFoundError",
+  "message": "Test files might have import issues. Try running consolidated tests separately.",
+  "suggestion": "Run: python -m pytest tests/integration/consolidated/ -v"
+}
+
+// CONTENT EXTRACTION KNOWLEDGE
+
+// Rule: Content extraction patterns by model
+// Description: Different models have different content patterns
+{
+  "pattern": "extract_content|extract_tool_calls",
+  "message": "Remember that different models return content in different formats:",
+  "suggestion": "Anthropic may return null content with valid tool calls. OpenAI returns content and tool_calls separately. Other models may embed function calls in content text."
+} 

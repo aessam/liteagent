@@ -100,6 +100,8 @@ def get_provider_from_model(model_name: str) -> str:
         return "anthropic"
     elif model_lower.startswith("llama"):
         return "groq"
+    elif model_lower.startswith("deepseek"):
+        return "deepseek"
     
     # Default to "unknown" if we can't determine the provider
     return "unknown"
