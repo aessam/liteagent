@@ -166,28 +166,44 @@ class ModelInterface(ABC):
                         text_blocks.append(block.get('text', ''))
                 return ' '.join(text_blocks)
             
+            # Handle Anthropic responses via LiteLLM
+            if hasattr(response, 'choices') and len(response.choices) > 0:
+                message_obj = response.choices[0].message
+                content = message_obj.content if hasattr(message_obj, 'content') else ""
+                
+                # If content is None but there are tool calls, return a default message
+                if content is None and hasattr(message_obj, 'tool_calls') and message_obj.tool_calls:
+                    tool_names = [tool.function.name for tool in message_obj.tool_calls if hasattr(tool, 'function')]
+                    if tool_names:
+                        return f"I'm using the {', '.join(tool_names)} tool(s) to help answer your question."
+                    return "I'm using tools to help answer your question."
+                
+                return str(content).strip() if content else ""
+            
         elif self.tool_calling_type == ToolCallingType.JSON_EXTRACTION:
             if not response:
                 return ""
                 
             # Try to extract content from Ollama response
             if hasattr(response, 'message'):
-                return response.message.content if hasattr(response.message, 'content') else ""
+                content = response.message.content if hasattr(response.message, 'content') else ""
+                return str(content).strip() if content else ""
+            
+            # Handle LiteLLM response format
+            if hasattr(response, 'choices') and len(response.choices) > 0:
+                message_obj = response.choices[0].message
+                content = message_obj.content if hasattr(message_obj, 'content') else ""
+                return str(content).strip() if content else ""
             
         else:
             # For other types, use a generic approach
             if hasattr(response, 'choices') and len(response.choices) > 0:
-                content = response.choices[0].message.content
-            elif isinstance(response, dict) and "choices" in response:
-                content = response["choices"][0]["message"].get("content", "")
-            elif hasattr(response, 'content'):
-                content = response.content
-            elif isinstance(response, dict) and "content" in response:
-                content = response["content"]
-            else:
-                content = ""
-                
-            return str(content).strip() if content else ""
+                message_obj = response.choices[0].message
+                content = message_obj.content if hasattr(message_obj, 'content') else ""
+                return str(content).strip() if content else ""
+            
+        # Default fallback
+        return ""
     
     def format_tool_results(self, tool_name: str, result: Any, **kwargs) -> Dict:
         """

@@ -146,6 +146,21 @@ class ValidationObserver(AgentObserver):
                 return result["result"]
         return None
         
+    def get_function_call_args(self, function_name: str) -> List[Dict[str, Any]]:
+        """Get the arguments for all calls to a specific function.
+        
+        Args:
+            function_name: The name of the function
+            
+        Returns:
+            A list of argument dictionaries, one for each call to the function
+        """
+        args_list = []
+        for call in self.function_calls:
+            if call["name"] == function_name:
+                args_list.append(call["arguments"])
+        return args_list
+        
     def assert_function_result_structure(self, function_name: str, 
                                         expected_structure: Dict[str, Any],
                                         strict: bool = False):

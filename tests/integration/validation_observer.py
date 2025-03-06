@@ -49,6 +49,7 @@ class ValidationObserver(AgentObserver):
         
         # Set validation strategy based on tool calling type
         self.strategy: Optional[ToolValidationStrategy] = None
+        self._tool_calling_type: Optional[ToolCallingType] = None
         if tool_calling_type is not None:
             self.set_validation_strategy(tool_calling_type)
         
@@ -60,6 +61,17 @@ class ValidationObserver(AgentObserver):
             tool_calling_type: The tool calling type to use for validation
         """
         self.strategy = get_validation_strategy(tool_calling_type)
+        self._tool_calling_type = tool_calling_type
+        
+    @property
+    def validation_strategy(self) -> Optional[ToolCallingType]:
+        """
+        Get the current validation strategy's tool calling type.
+        
+        Returns:
+            The tool calling type of the current validation strategy, or None if no strategy is set
+        """
+        return self._tool_calling_type
         
     def on_event(self, event: AgentEvent):
         """Base handler for all events."""
@@ -189,6 +201,22 @@ class ValidationObserver(AgentObserver):
             if result["name"] == function_name:
                 return result["result"]
         return None
+        
+    def get_function_call_args(self, function_name: str) -> List[Dict[str, Any]]:
+        """
+        Get the arguments for all calls to a specific function.
+        
+        Args:
+            function_name: The name of the function
+            
+        Returns:
+            A list of argument dictionaries, one for each call to the function
+        """
+        args_list = []
+        for call in self.function_calls:
+            if call["name"] == function_name:
+                args_list.append(call["arguments"])
+        return args_list
         
     def assert_function_result_structure(self, function_name: str, 
                                         expected_structure: Dict[str, Any],
