@@ -49,8 +49,8 @@ def get_str_from_tool_calling_type(enum_val: ToolCallingType) -> str:
         return "OPENAI_FUNCTION_CALLING"
     elif enum_val == ToolCallingType.ANTHROPIC_TOOL_CALLING:
         return "ANTHROPIC_TOOL_CALLING"
-    elif enum_val == ToolCallingType.JSON_EXTRACTION:
-        return "JSON_EXTRACTION"
+    elif enum_val == ToolCallingType.OLLAMA_TOOL_CALLING:
+        return "OLLAMA_TOOL_CALLING"
     elif enum_val == ToolCallingType.PROMPT_BASED:
         return "PROMPT_BASED"
     elif enum_val == ToolCallingType.NONE:

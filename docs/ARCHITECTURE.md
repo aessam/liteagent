@@ -13,7 +13,7 @@ The `ToolCallingType` enum in `liteagent/tool_calling_types.py` defines the diff
 - `NONE`: No tool calling support
 - `OPENAI_FUNCTION_CALLING`: OpenAI-style function calling (includes Groq and compatible models)
 - `ANTHROPIC_TOOL_CALLING`: Anthropic-style tool calling
-- `JSON_EXTRACTION`: Generic JSON output parsing (for models like Ollama that use text-based approaches)
+- `OLLAMA_TOOL_CALLING`: Generic JSON output parsing (for models like Ollama that use text-based approaches)
 - `PROMPT_BASED`: Handles models that need specific prompting to return structured outputs
 
 ### Model Capabilities Registry

@@ -118,8 +118,8 @@ Use the appropriate tool when needed to provide accurate information.""",
             response1 = agent.chat("What's the weather in Tokyo?")
             
             # Switch to a different strategy temporarily
-            temp_strategy = ToolCallingType.JSON_EXTRACTION
-            if current_strategy == ToolCallingType.JSON_EXTRACTION:
+            temp_strategy = ToolCallingType.OLLAMA_TOOL_CALLING
+            if current_strategy == ToolCallingType.OLLAMA_TOOL_CALLING:
                 temp_strategy = ToolCallingType.ANTHROPIC_TOOL_CALLING
                 
             validation_observer.set_validation_strategy(temp_strategy)

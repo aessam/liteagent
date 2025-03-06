@@ -471,7 +471,7 @@ def get_validation_strategy(tool_calling_type: ToolCallingType) -> ToolValidatio
         return OpenAIValidationStrategy()
     elif tool_calling_type == ToolCallingType.ANTHROPIC_TOOL_CALLING:
         return AnthropicValidationStrategy()
-    elif tool_calling_type == ToolCallingType.JSON_EXTRACTION:
+    elif tool_calling_type == ToolCallingType.OLLAMA_TOOL_CALLING:
         return JSONExtractionStrategy()
     elif tool_calling_type == ToolCallingType.PROMPT_BASED:
         return PromptBasedStrategy()

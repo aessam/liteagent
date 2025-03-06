@@ -67,7 +67,7 @@ class ModelInterface(ABC):
             elif self.tool_calling_type == ToolCallingType.ANTHROPIC_TOOL_CALLING:
                 # Anthropic-style tool calling
                 kwargs["tools"] = formatted_tools
-            elif self.tool_calling_type in [ToolCallingType.JSON_EXTRACTION, ToolCallingType.PROMPT_BASED]:
+            elif self.tool_calling_type in [ToolCallingType.OLLAMA_TOOL_CALLING, ToolCallingType.PROMPT_BASED]:
                 # For these types, we need to modify the system prompt
                 tool_description = formatted_tools
                 if messages and messages[0]["role"] == "system":
@@ -100,7 +100,7 @@ class ModelInterface(ABC):
         log_completion_response(response, elapsed_time)
         
         # Debug log for Ollama responses
-        if self.tool_calling_type == ToolCallingType.JSON_EXTRACTION:
+        if self.tool_calling_type == ToolCallingType.OLLAMA_TOOL_CALLING:
             logger.debug(f"Ollama response type: {type(response)}")
             logger.debug(f"Ollama response attributes: {dir(response) if hasattr(response, '__dict__') else 'No attributes'}")
             logger.debug(f"Ollama response dict: {response.__dict__ if hasattr(response, '__dict__') else 'Not a class instance'}")
@@ -182,7 +182,7 @@ class ModelInterface(ABC):
                 
                 return str(content).strip() if content else ""
             
-        elif self.tool_calling_type == ToolCallingType.JSON_EXTRACTION:
+        elif self.tool_calling_type == ToolCallingType.OLLAMA_TOOL_CALLING:
             if not response:
                 return ""
                 

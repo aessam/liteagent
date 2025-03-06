@@ -56,7 +56,7 @@ class TestToolCallingTypes:
         assert get_tool_calling_type("claude-3-sonnet") == ToolCallingType.ANTHROPIC_TOOL_CALLING
         
         # Ollama models
-        assert get_tool_calling_type("ollama/llama2") == ToolCallingType.JSON_EXTRACTION
+        assert get_tool_calling_type("ollama/llama2") == ToolCallingType.OLLAMA_TOOL_CALLING
         
         # Groq models
         assert get_tool_calling_type("groq/llama-3.1-8b-instant") == ToolCallingType.OPENAI_FUNCTION_CALLING
@@ -68,14 +68,14 @@ class TestToolCallingTypes:
         """Test getting tool calling handler type name."""
         assert get_tool_calling_handler_type("gpt-4") == "OPENAI_FUNCTION_CALLING"
         assert get_tool_calling_handler_type("claude-3-opus") == "ANTHROPIC_TOOL_CALLING"
-        assert get_tool_calling_handler_type("ollama/llama2") == "JSON_EXTRACTION"
+        assert get_tool_calling_handler_type("ollama/llama2") == "OLLAMA_TOOL_CALLING"
     
     def test_get_tool_calling_handler(self):
         """Test getting the appropriate handler for a tool calling type."""
         # Test with explicit tool calling types
         assert isinstance(get_tool_calling_handler("gpt-4", ToolCallingType.OPENAI_FUNCTION_CALLING), OpenAIToolCallingHandler)
         assert isinstance(get_tool_calling_handler("claude-3-opus", ToolCallingType.ANTHROPIC_TOOL_CALLING), AnthropicToolCallingHandler)
-        assert isinstance(get_tool_calling_handler("ollama/llama2", ToolCallingType.JSON_EXTRACTION), OllamaToolCallingHandler)
+        assert isinstance(get_tool_calling_handler("ollama/llama2", ToolCallingType.OLLAMA_TOOL_CALLING), OllamaToolCallingHandler)
         assert isinstance(get_tool_calling_handler("unknown-model", ToolCallingType.PROMPT_BASED), StructuredOutputHandler)
         assert isinstance(get_tool_calling_handler("text-davinci-003", ToolCallingType.NONE), NoopToolCallingHandler)
         

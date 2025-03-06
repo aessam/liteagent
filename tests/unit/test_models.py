@@ -90,10 +90,10 @@ class TestModelInterfaces:
         with patch('liteagent.tool_calling_config.get_provider_from_model') as mock_get_provider:
             mock_get_provider.return_value = "ollama"
             with patch('liteagent.tool_calling_config.get_tool_calling_type') as mock_get_type:
-                mock_get_type.return_value = ToolCallingType.JSON_EXTRACTION
+                mock_get_type.return_value = ToolCallingType.OLLAMA_TOOL_CALLING
                 
                 model = create_model_interface("ollama/phi-2")
-                assert model.tool_calling_type == ToolCallingType.JSON_EXTRACTION, "ollama/phi-2 should use JSON extraction"
+                assert model.tool_calling_type == ToolCallingType.OLLAMA_TOOL_CALLING, "ollama/phi-2 should use JSON extraction"
         
         # Test that local models get the right tool calling type
         with patch('liteagent.tool_calling_config.get_provider_from_model') as mock_get_provider:

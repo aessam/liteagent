@@ -1098,7 +1098,7 @@ class AutoDetectToolCallingHandler(ToolCallingHandler):
         self._handlers = {
             ToolCallingType.OPENAI_FUNCTION_CALLING: OpenAIToolCallingHandler(),
             ToolCallingType.ANTHROPIC_TOOL_CALLING: AnthropicToolCallingHandler(),
-            ToolCallingType.JSON_EXTRACTION: OllamaToolCallingHandler(),
+            ToolCallingType.OLLAMA_TOOL_CALLING: OllamaToolCallingHandler(),
             ToolCallingType.PROMPT_BASED: StructuredOutputHandler(),
             "text_based": TextBasedToolCallingHandler()
         }
@@ -1209,7 +1209,7 @@ def get_tool_calling_handler(model_name: str, tool_calling_type: Optional[ToolCa
             return OpenAIToolCallingHandler()
         elif tool_calling_type == ToolCallingType.ANTHROPIC_TOOL_CALLING:
             return AnthropicToolCallingHandler()
-        elif tool_calling_type == ToolCallingType.JSON_EXTRACTION:
+        elif tool_calling_type == ToolCallingType.OLLAMA_TOOL_CALLING:
             return OllamaToolCallingHandler()
         elif tool_calling_type == ToolCallingType.PROMPT_BASED:
             return StructuredOutputHandler()
@@ -1254,7 +1254,7 @@ def get_provider_specific_handler(provider: str, tool_calling_type: ToolCallingT
         return GroqToolCallingHandler()
     elif provider == "anthropic" and tool_calling_type == ToolCallingType.ANTHROPIC_TOOL_CALLING:
         return AnthropicToolCallingHandler()
-    elif provider == "ollama" and tool_calling_type == ToolCallingType.JSON_EXTRACTION:
+    elif provider == "ollama" and tool_calling_type == ToolCallingType.OLLAMA_TOOL_CALLING:
         return OllamaToolCallingHandler()
     
     # Default handlers based on tool calling type
@@ -1262,7 +1262,7 @@ def get_provider_specific_handler(provider: str, tool_calling_type: ToolCallingT
         return OpenAIToolCallingHandler()
     elif tool_calling_type == ToolCallingType.ANTHROPIC_TOOL_CALLING:
         return AnthropicToolCallingHandler()
-    elif tool_calling_type == ToolCallingType.JSON_EXTRACTION:
+    elif tool_calling_type == ToolCallingType.OLLAMA_TOOL_CALLING:
         return OllamaToolCallingHandler()
     elif tool_calling_type == ToolCallingType.PROMPT_BASED:
         return StructuredOutputHandler()

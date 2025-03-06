@@ -23,7 +23,7 @@ class ToolCallingType(Enum):
     ANTHROPIC_TOOL_CALLING = auto()
     
     # Generic JSON output parsing (for models like Ollama that use text-based approaches)
-    JSON_EXTRACTION = auto()
+    OLLAMA_TOOL_CALLING = auto()
     
     # Handles models that need specific prompting to return structured outputs
     PROMPT_BASED = auto()
@@ -48,8 +48,8 @@ def string_to_tool_calling_type(type_str: str) -> ToolCallingType:
         return ToolCallingType.OPENAI_FUNCTION_CALLING
     elif type_str in ("ANTHROPIC", "ANTHROPIC_TOOL_CALLING"):
         return ToolCallingType.ANTHROPIC_TOOL_CALLING
-    elif type_str in ("JSON_EXTRACTION", "OLLAMA"):
-        return ToolCallingType.JSON_EXTRACTION
+    elif type_str in ("OLLAMA_TOOL_CALLING", "OLLAMA"):
+        return ToolCallingType.OLLAMA_TOOL_CALLING
     elif type_str in ("TEXT_BASED", "PROMPT_BASED"):
         return ToolCallingType.PROMPT_BASED
     elif type_str == "NONE":

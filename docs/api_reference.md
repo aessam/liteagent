@@ -167,5 +167,5 @@ Enum defining the types of tool calling supported:
 - `NONE`: No tool calling support
 - `OPENAI_FUNCTION_CALLING`: OpenAI-style function calling
 - `ANTHROPIC_TOOL_CALLING`: Anthropic-style tool calling
-- `JSON_EXTRACTION`: Generic JSON output parsing
+- `OLLAMA_TOOL_CALLING`: Generic JSON output parsing
 - `PROMPT_BASED`: Prompt-based tool calling 

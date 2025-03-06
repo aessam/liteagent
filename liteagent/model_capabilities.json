@@ -27,7 +27,7 @@
         "max_tools_per_request": 128
       },
       "ollama": {
-        "tool_calling_type": "JSON_EXTRACTION",
+        "tool_calling_type": "OLLAMA_TOOL_CALLING",
         "supports_multiple_tools": false,
         "max_tools_per_request": 1
       }
@@ -39,7 +39,7 @@
         "max_tools_per_request": 0
       },
       "ollama/phi4": {
-        "tool_calling_type": "JSON_EXTRACTION",
+        "tool_calling_type": "OLLAMA_TOOL_CALLING",
         "supports_multiple_tools": false,
         "max_tools_per_request": 1
       }

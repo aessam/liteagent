@@ -38,8 +38,8 @@ def detect_tool_calling_format(response: Any) -> ToolCallingType:
         return ToolCallingType.ANTHROPIC_TOOL_CALLING
     
     # 3. Check for JSON extraction format
-    if _detect_json_extraction_format(response_text):
-        return ToolCallingType.JSON_EXTRACTION
+    if _detect_OLLAMA_TOOL_CALLING_format(response_text):
+        return ToolCallingType.OLLAMA_TOOL_CALLING
     
     # 4. Default to prompt-based for unrecognized formats
     return ToolCallingType.PROMPT_BASED
@@ -141,7 +141,7 @@ def _detect_anthropic_format(response: Any) -> bool:
     return False
 
 
-def _detect_json_extraction_format(response_text: str) -> bool:
+def _detect_OLLAMA_TOOL_CALLING_format(response_text: str) -> bool:
     """
     Detect if the response contains JSON that can be extracted.
     
@@ -199,7 +199,7 @@ def extract_tool_calls_from_response(response: Any) -> List[Dict]:
         return _extract_openai_tool_calls(response)
     elif tool_calling_type == ToolCallingType.ANTHROPIC_TOOL_CALLING:
         return _extract_anthropic_tool_calls(response)
-    elif tool_calling_type == ToolCallingType.JSON_EXTRACTION:
+    elif tool_calling_type == ToolCallingType.OLLAMA_TOOL_CALLING:
         return _extract_json_tool_calls(_extract_content(response))
     
     # For PROMPT_BASED or NONE, return empty list
