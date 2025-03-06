@@ -17,7 +17,7 @@ from liteagent.examples import (
     get_weather, add_numbers, search_database, calculate_area
 )
 
-from tests.integration.test_observer import ValidationObserver
+from tests.integration.validation_observer import ValidationObserver
 
 
 # Skip tests if API key is not set
