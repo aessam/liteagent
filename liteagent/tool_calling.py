@@ -134,10 +134,31 @@ class OpenAIToolCallingHandler(ToolCallingHandler):
         """Extract tool calls from an OpenAI-style response."""
         tool_calls = []
         
+        # Handle None response
+        if response is None:
+            logger.debug("Received None response in OpenAIToolCallingHandler")
+            return tool_calls
+            
+        # Log response structure for debugging
+        logger.debug(f"Extracting tool calls from response: {type(response)}")
+        if hasattr(response, 'choices'):
+            logger.debug(f"Response has {len(response.choices)} choices")
+        
         # Modern OpenAI format
-        if hasattr(response, 'choices') and len(response.choices) > 0:
+        if hasattr(response, 'choices') and response.choices and len(response.choices) > 0:
             choice = response.choices[0]
-            if hasattr(choice, 'message') and hasattr(choice.message, 'tool_calls'):
+            
+            # Log choice structure for debugging
+            logger.debug(f"Processing choice: {choice}")
+            
+            # Check for message and tool_calls attributes
+            has_message = hasattr(choice, 'message')
+            has_tool_calls = has_message and hasattr(choice.message, 'tool_calls')
+            tool_calls_not_none = has_tool_calls and choice.message.tool_calls is not None
+            
+            logger.debug(f"Has message: {has_message}, Has tool_calls: {has_tool_calls}, Tool calls not None: {tool_calls_not_none}")
+            
+            if tool_calls_not_none:
                 for tool_call in choice.message.tool_calls:
                     if hasattr(tool_call, 'function'):
                         function_call = tool_call.function
@@ -149,25 +170,62 @@ class OpenAIToolCallingHandler(ToolCallingHandler):
                         tool_calls.append(tool_call_data)
                         # Track this tool call
                         self._track_tool_call(function_call.name, tool_call_data["arguments"])
-        
-        # Dictionary format
-        elif isinstance(response, dict) and 'choices' in response:
-            choice = response['choices'][0]
-            if 'message' in choice and 'tool_calls' in choice['message']:
-                for tool_call in choice['message']['tool_calls']:
-                    if 'function' in tool_call:
-                        function_call = tool_call['function']
+                        
+            # Legacy format - function_call at the message level
+            elif has_message and hasattr(choice.message, 'function_call') and choice.message.function_call is not None:
+                function_call = choice.message.function_call
+                if hasattr(function_call, 'name') and hasattr(function_call, 'arguments'):
+                    try:
+                        args = json.loads(function_call.arguments) if isinstance(function_call.arguments, str) else function_call.arguments
+                    except json.JSONDecodeError:
+                        logger.warning(f"Failed to parse function arguments: {function_call.arguments}")
+                        args = {}
+                        
+                    tool_call_data = {
+                        "name": function_call.name,
+                        "arguments": args,
+                        "id": str(uuid.uuid4())
+                    }
+                    tool_calls.append(tool_call_data)
+                    # Track this tool call
+                    self._track_tool_call(function_call.name, args)
+                    
+        # If we found tool calls, return them
+        if tool_calls:
+            logger.debug(f"Extracted {len(tool_calls)} tool calls")
+            return tool_calls
+            
+        # No tool calls found, check for an 'error' field indicating an API error
+        if hasattr(response, 'error') and response.error is not None:
+            logger.warning(f"API error detected: {response.error}")
+            
+        # Fall back to text-based extraction if no tool calls were found
+        content = self._extract_content(response)
+        if content:
+            # Try to find function calls in the text content using JSON pattern matching
+            json_pattern = r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}'
+            import re
+            matches = re.findall(json_pattern, content)
+            
+            for json_str in sorted(matches, key=len, reverse=True):
+                try:
+                    json_obj = json.loads(json_str)
+                    # Check if this looks like a function call
+                    if "name" in json_obj and ("arguments" in json_obj or "params" in json_obj):
+                        args = json_obj.get("arguments", json_obj.get("params", {}))
                         tool_call_data = {
-                            "name": function_call.get('name', ''),
-                            "arguments": json.loads(function_call.get('arguments', '{}')) 
-                                if isinstance(function_call.get('arguments', '{}'), str) 
-                                else function_call.get('arguments', {}),
-                            "id": tool_call.get('id', str(uuid.uuid4()))
+                            "name": json_obj["name"],
+                            "arguments": args,
+                            "id": str(uuid.uuid4())
                         }
                         tool_calls.append(tool_call_data)
                         # Track this tool call
-                        self._track_tool_call(function_call.get('name', ''), tool_call_data["arguments"])
-                        
+                        self._track_tool_call(json_obj["name"], args)
+                        break
+                except json.JSONDecodeError:
+                    continue
+                    
+        # Return whatever we found, which might be an empty list
         return tool_calls
         
     def format_tools_for_model(self, tools: List[Dict]) -> List[Dict]:
@@ -230,6 +288,23 @@ class OpenAIToolCallingHandler(ToolCallingHandler):
         # Check if the response has a message with tool_calls in OpenAI format
         message = response.choices[0].message
         return hasattr(message, 'tool_calls') and isinstance(message.tool_calls, list)
+
+    def _extract_content(self, response: Any) -> str:
+        """Extract text content from the response."""
+        if hasattr(response, 'choices') and len(response.choices) > 0:
+            if hasattr(response.choices[0], 'message') and hasattr(response.choices[0].message, 'content'):
+                content = response.choices[0].message.content
+                return str(content).strip() if content else ""
+        
+        if hasattr(response, 'content') and isinstance(response.content, list):
+            # Concatenate all text content
+            text_content = []
+            for content_item in response.content:
+                if hasattr(content_item, "type") and content_item.type == "text":
+                    text_content.append(content_item.text)
+            return "\n".join(text_content)
+        
+        return ""
 
 
 class GroqToolCallingHandler(OpenAIToolCallingHandler):

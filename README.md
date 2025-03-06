@@ -72,35 +72,64 @@ print(response)
 
 ## Command-Line Usage
 
-LiteAgent comes with a command-line interface for running examples:
+LiteAgent comes with a command-line interface that can be used in multiple ways:
+
+### Using the installed liteagent command
+
+After installation, you can use the `liteagent` command directly:
 
 ```bash
 # Show help and available options
-python liteagent_main.py --help
-
-# Run all examples with the default model (gpt-3.5-turbo)
-python liteagent_main.py
+liteagent --help
 
 # Run with a specific model
-python liteagent_main.py --model gpt-4o-mini
+liteagent --model gpt-4o-mini
 
 # Run only the class methods example
-python liteagent_main.py --class-methods --model ollama/phi4
+liteagent --class-methods --model ollama/phi4
+```
+
+### Using Python module syntax
+
+You can also run LiteAgent using the Python module syntax:
+
+```bash
+# Show help and available options
+python -m liteagent --help
+
+# Run with a specific model
+python -m liteagent --model gpt-4o-mini
+
+# Run only the class methods example
+python -m liteagent --class-methods --model ollama/phi4
+```
+
+### Available command-line options
+
+```bash
+# Run all examples with the default model (gpt-3.5-turbo)
+liteagent
+
+# Run with a specific model
+liteagent --model gpt-4o-mini
+
+# Run only the class methods example
+liteagent --class-methods --model ollama/phi4
 
 # Run only the custom agents example
-python liteagent_main.py --custom-agents
+liteagent --custom-agents
 
 # Use Ollama for local inference (automatically prepends 'ollama/' to model name)
-python liteagent_main.py --ollama --model phi4
+liteagent --ollama --model phi4
 
 # Show version information
-python liteagent_main.py --version
+liteagent --version
 
 # Enable debug mode
-python liteagent_main.py --debug
+liteagent --debug
 
 # Log to file
-python liteagent_main.py --log-file
+liteagent --log-file
 ```
 
 ### Command-Line Arguments

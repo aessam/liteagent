@@ -10,7 +10,7 @@ readme = "README.md"
 authors = [
     {name = "LiteAgent Team", email = "info@liteagent.org"}
 ]
-license = {text = "MIT"}
+license = {text = "Internal, not decided yet"}
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",
@@ -35,6 +35,9 @@ dependencies = [
 "Homepage" = "https://github.com/yourusername/liteagent"
 "Bug Tracker" = "https://github.com/yourusername/liteagent/issues"
 "Documentation" = "https://github.com/yourusername/liteagent#readme"
+
+[project.scripts]
+liteagent = "liteagent.__main__:main"
 
 [project.optional-dependencies]
 dev = [
