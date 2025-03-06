@@ -86,7 +86,7 @@ def run_test_with_debug():
     """Run a simple test to debug API calls."""
     # Setup the test environment
     model_names = [
-        "anthropic/claude-3-haiku-20240307",
+        "anthropic/claude-3-5-sonnet-latest",
         "groq/llama-3.1-8b-instant",
         "ollama/phi4"
     ]

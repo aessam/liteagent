@@ -12,6 +12,7 @@ from typing import Dict, Optional, Any, List, Set
 from .tool_calling import ToolCallingType
 from .utils import logger
 from .tool_calling_types import ToolCallingType as ToolCallingType_from_types
+from .tool_calling_types import get_provider_from_model as get_provider_from_types
 from litellm import get_llm_provider
 
 # Path to the configuration file
@@ -70,7 +71,7 @@ def get_model_info(model_name: str) -> Dict[str, Any]:
     provider = get_provider_from_model(model_name)
     return {
         "provider": provider,
-        "supports_function_calling": provider in ["openai", "groq", "anthropic"],
+        "supports_function_calling": provider in ["openai", "groq", "anthropic", "mistral", "deepseek"],
         "tool_calling_type": get_tool_calling_type(model_name),
     }
 
@@ -84,27 +85,8 @@ def get_provider_from_model(model_name: str) -> str:
     Returns:
         Provider name
     """
-    if not model_name:
-        return "unknown"
-        
-    # For custom prefixed models like "ollama/phi"
-    if '/' in model_name:
-        provider = model_name.split('/')[0]
-        return provider.lower()
-    
-    # Use a simple mapping for common models
-    model_lower = model_name.lower()
-    if model_lower.startswith(("gpt-", "text-davinci")):
-        return "openai"
-    elif model_lower.startswith("claude"):
-        return "anthropic"
-    elif model_lower.startswith("llama"):
-        return "groq"
-    elif model_lower.startswith("deepseek"):
-        return "deepseek"
-    
-    # Default to "unknown" if we can't determine the provider
-    return "unknown"
+    # Use the provider detection from tool_calling_types to ensure consistency
+    return get_provider_from_types(model_name)
 
 
 def get_tool_calling_type(model_name: str) -> ToolCallingType:

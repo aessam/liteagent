@@ -14,7 +14,7 @@ from liteagent.tool_calling import (
     OpenAIToolCallingHandler, AnthropicToolCallingHandler,
     OllamaToolCallingHandler, TextBasedToolCallingHandler,
     StructuredOutputHandler, NoopToolCallingHandler,
-    get_tool_calling_handler
+    get_tool_calling_handler, AutoDetectToolCallingHandler
 )
 from liteagent.tool_calling_config import (
     get_provider_from_model, get_tool_calling_type,
@@ -72,11 +72,21 @@ class TestToolCallingTypes:
     
     def test_get_tool_calling_handler(self):
         """Test getting the appropriate handler for a tool calling type."""
-        assert isinstance(get_tool_calling_handler(ToolCallingType.OPENAI_FUNCTION_CALLING), OpenAIToolCallingHandler)
-        assert isinstance(get_tool_calling_handler(ToolCallingType.ANTHROPIC_TOOL_CALLING), AnthropicToolCallingHandler)
-        assert isinstance(get_tool_calling_handler(ToolCallingType.JSON_EXTRACTION), OllamaToolCallingHandler)
-        assert isinstance(get_tool_calling_handler(ToolCallingType.PROMPT_BASED), TextBasedToolCallingHandler)
-        assert isinstance(get_tool_calling_handler(ToolCallingType.NONE), NoopToolCallingHandler)
+        # Test with explicit tool calling types
+        assert isinstance(get_tool_calling_handler("gpt-4", ToolCallingType.OPENAI_FUNCTION_CALLING), OpenAIToolCallingHandler)
+        assert isinstance(get_tool_calling_handler("claude-3-opus", ToolCallingType.ANTHROPIC_TOOL_CALLING), AnthropicToolCallingHandler)
+        assert isinstance(get_tool_calling_handler("ollama/llama2", ToolCallingType.JSON_EXTRACTION), OllamaToolCallingHandler)
+        assert isinstance(get_tool_calling_handler("unknown-model", ToolCallingType.PROMPT_BASED), AutoDetectToolCallingHandler)
+        assert isinstance(get_tool_calling_handler("text-davinci-003", ToolCallingType.NONE), NoopToolCallingHandler)
+        
+        # Test with model-based detection
+        assert isinstance(get_tool_calling_handler("gpt-4"), OpenAIToolCallingHandler)
+        assert isinstance(get_tool_calling_handler("claude-3-opus"), AnthropicToolCallingHandler)
+        assert isinstance(get_tool_calling_handler("ollama/llama2"), OllamaToolCallingHandler)
+        assert isinstance(get_tool_calling_handler("text-davinci-003"), NoopToolCallingHandler)
+        
+        # Test with unknown model
+        assert isinstance(get_tool_calling_handler("unknown-model"), AutoDetectToolCallingHandler)
 
 
 class TestOpenAIToolCallingHandler:

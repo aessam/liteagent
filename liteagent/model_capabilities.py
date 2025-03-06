@@ -9,7 +9,11 @@ import json
 import os
 from typing import Dict, Any, Optional, List
 
-from .tool_calling_types import ToolCallingType, get_model_capabilities as get_model_caps_from_module
+from .tool_calling_types import (
+    ToolCallingType, 
+    get_model_capabilities as get_model_caps_from_module,
+    string_to_tool_calling_type
+)
 from .utils import logger
 
 # Path to the capabilities configuration file
@@ -28,21 +32,8 @@ def get_tool_calling_type_from_str(type_str: str) -> ToolCallingType:
     Returns:
         ToolCallingType enum value
     """
-    type_str = type_str.upper()
-    
-    if type_str == "OPENAI" or type_str == "OPENAI_FUNCTION_CALLING":
-        return ToolCallingType.OPENAI_FUNCTION_CALLING
-    elif type_str == "ANTHROPIC" or type_str == "ANTHROPIC_TOOL_CALLING":
-        return ToolCallingType.ANTHROPIC_TOOL_CALLING
-    elif type_str == "JSON_EXTRACTION" or type_str == "OLLAMA":
-        return ToolCallingType.JSON_EXTRACTION
-    elif type_str == "TEXT_BASED" or type_str == "PROMPT_BASED":
-        return ToolCallingType.PROMPT_BASED
-    elif type_str == "NONE":
-        return ToolCallingType.NONE
-    else:
-        logger.warning(f"Unknown tool calling type: {type_str}, using PROMPT_BASED")
-        return ToolCallingType.PROMPT_BASED
+    # Use the consolidated helper function
+    return string_to_tool_calling_type(type_str)
 
 def get_str_from_tool_calling_type(enum_val: ToolCallingType) -> str:
     """

@@ -694,29 +694,127 @@ class NoopToolCallingHandler(ToolCallingHandler):
         }
 
 
-def get_tool_calling_handler(tool_calling_type: ToolCallingType) -> ToolCallingHandler:
+class AutoDetectToolCallingHandler(ToolCallingHandler):
     """
-    Get a tool calling handler for the specified tool calling type.
+    Tool calling handler that automatically detects and adapts to different formats.
+    
+    This is useful for models with unknown capabilities or when testing new models.
+    It will try to detect the format of tool calls in responses and handle them appropriately.
+    """
+    
+    def __init__(self):
+        """Initialize the auto-detect handler."""
+        self._specific_handler = None
+        self._detected_type = None
+    
+    def extract_tool_calls(self, response: Any) -> List[Dict]:
+        """
+        Extract tool calls from the response by auto-detecting the format.
+        
+        Args:
+            response: The model's response
+            
+        Returns:
+            List of extracted tool calls
+        """
+        from .tool_calling_detection import detect_tool_calling_format, extract_tool_calls_from_response
+        
+        # Detect the format if not already detected or if we need to re-detect
+        if self._detected_type is None or self._specific_handler is None:
+            self._detected_type = detect_tool_calling_format(response)
+            self._specific_handler = self._get_handler_for_type(self._detected_type)
+        
+        # Try using the specific handler
+        try:
+            return self._specific_handler.extract_tool_calls(response)
+        except Exception as e:
+            logger.warning(f"Error using specific handler: {e}. Falling back to generic extraction.")
+            # Fall back to the generic extraction method
+            return extract_tool_calls_from_response(response)
+    
+    def format_tools_for_model(self, tools: List[Dict]) -> Any:
+        """
+        Format tools for the model based on detected type.
+        
+        Args:
+            tools: List of tool definitions
+            
+        Returns:
+            Formatted tools
+        """
+        # If we haven't detected a type yet, default to JSON extraction
+        if self._detected_type is None:
+            self._detected_type = ToolCallingType.JSON_EXTRACTION
+            self._specific_handler = self._get_handler_for_type(self._detected_type)
+        
+        return self._specific_handler.format_tools_for_model(tools)
+    
+    def format_tool_results(self, tool_name: str, result: Any, **kwargs) -> Dict:
+        """
+        Format tool results based on detected type.
+        
+        Args:
+            tool_name: Name of the tool
+            result: Result from tool execution
+            **kwargs: Additional parameters
+            
+        Returns:
+            Formatted tool results
+        """
+        # If we haven't detected a type yet, default to JSON extraction
+        if self._detected_type is None:
+            self._detected_type = ToolCallingType.JSON_EXTRACTION
+            self._specific_handler = self._get_handler_for_type(self._detected_type)
+        
+        return self._specific_handler.format_tool_results(tool_name, result, **kwargs)
+    
+    def _get_handler_for_type(self, tool_calling_type: ToolCallingType) -> ToolCallingHandler:
+        """
+        Get a specific handler for the detected type.
+        
+        Args:
+            tool_calling_type: The detected tool calling type
+            
+        Returns:
+            A specific tool calling handler
+        """
+        if tool_calling_type == ToolCallingType.OPENAI_FUNCTION_CALLING:
+            return OpenAIToolCallingHandler()
+        elif tool_calling_type == ToolCallingType.ANTHROPIC_TOOL_CALLING:
+            return AnthropicToolCallingHandler()
+        elif tool_calling_type == ToolCallingType.JSON_EXTRACTION:
+            return OllamaToolCallingHandler()
+        elif tool_calling_type == ToolCallingType.PROMPT_BASED:
+            return TextBasedToolCallingHandler()
+        elif tool_calling_type == ToolCallingType.NONE:
+            return NoopToolCallingHandler()
+        else:
+            return TextBasedToolCallingHandler()
+
+
+def get_tool_calling_handler(model_name: str, tool_calling_type: Optional[ToolCallingType] = None) -> ToolCallingHandler:
+    """
+    Get the appropriate tool calling handler for a model.
     
     Args:
-        tool_calling_type: The tool calling type
+        model_name: The name of the model
+        tool_calling_type: Optional, explicitly specified tool calling type (overrides model default)
         
     Returns:
-        A tool calling handler for the specified type
+        ToolCallingHandler: The appropriate tool calling handler
     """
-    if tool_calling_type == ToolCallingType.OPENAI_FUNCTION_CALLING:
-        return OpenAIToolCallingHandler()
-    elif tool_calling_type == ToolCallingType.ANTHROPIC_TOOL_CALLING:
-        return AnthropicToolCallingHandler()
-    elif tool_calling_type == ToolCallingType.JSON_EXTRACTION:
-        return OllamaToolCallingHandler()
-    elif tool_calling_type == ToolCallingType.PROMPT_BASED:
-        return TextBasedToolCallingHandler()
-    elif tool_calling_type == ToolCallingType.NONE:
-        return NoopToolCallingHandler()
-    else:
-        # Default to text-based handler
-        return TextBasedToolCallingHandler()
+    # Get provider from model name
+    from .tool_calling_config import get_provider_from_model
+    provider = get_provider_from_model(model_name)
+    
+    # Use specified tool calling type or get it from model capabilities
+    actual_tool_calling_type = tool_calling_type
+    if actual_tool_calling_type is None:
+        from .tool_calling_types import get_tool_calling_type
+        actual_tool_calling_type = get_tool_calling_type(model_name)
+    
+    # Get provider-specific handler
+    return get_provider_specific_handler(provider, actual_tool_calling_type)
 
 
 def get_provider_specific_handler(provider: str, tool_calling_type: ToolCallingType) -> ToolCallingHandler:
@@ -731,11 +829,18 @@ def get_provider_specific_handler(provider: str, tool_calling_type: ToolCallingT
         A tool calling handler for the provider
     """
     # Provider-specific handlers
-    if provider.lower() == "groq" and tool_calling_type == ToolCallingType.OPENAI_FUNCTION_CALLING:
+    provider = provider.lower()
+    
+    # Use auto-detection for unknown providers
+    if provider == "unknown":
+        return AutoDetectToolCallingHandler()
+    
+    # Handle providers with custom implementations
+    if provider == "groq" and tool_calling_type == ToolCallingType.OPENAI_FUNCTION_CALLING:
         return GroqToolCallingHandler()
-    elif provider.lower() == "anthropic" and tool_calling_type == ToolCallingType.ANTHROPIC_TOOL_CALLING:
+    elif provider == "anthropic" and tool_calling_type == ToolCallingType.ANTHROPIC_TOOL_CALLING:
         return AnthropicToolCallingHandler()
-    elif provider.lower() == "ollama" and tool_calling_type == ToolCallingType.JSON_EXTRACTION:
+    elif provider == "ollama" and tool_calling_type == ToolCallingType.JSON_EXTRACTION:
         return OllamaToolCallingHandler()
     
     # Default handlers based on tool calling type
@@ -750,5 +855,5 @@ def get_provider_specific_handler(provider: str, tool_calling_type: ToolCallingT
     elif tool_calling_type == ToolCallingType.NONE:
         return NoopToolCallingHandler()
     else:
-        # Default to text-based handler
-        return TextBasedToolCallingHandler() 
+        # Default to auto-detection for PROMPT_BASED or unknown types
+        return AutoDetectToolCallingHandler() 
