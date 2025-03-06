@@ -525,5 +525,99 @@ class TestNoopToolCallingHandler:
         assert '{"temperature": 72, "conditions": "sunny"}' in formatted_result["content"]
 
 
+class TestAutoDetectToolCallingHandler:
+    """Test the auto-detect tool calling handler."""
+    
+    @patch('liteagent.tool_calling_detection.detect_tool_calling_format')
+    @patch('liteagent.tool_calling.OpenAIToolCallingHandler.extract_tool_calls')
+    def test_extract_tool_calls(self, mock_extract, mock_detect):
+        """Test extracting tool calls with auto-detection."""
+        # Setup mocks
+        mock_detect.return_value = ToolCallingType.OPENAI_FUNCTION_CALLING
+        mock_extract.return_value = [{
+            "name": "get_weather",
+            "arguments": {"location": "San Francisco"},
+            "id": "call_123"
+        }]
+        
+        handler = AutoDetectToolCallingHandler()
+        
+        # Test extraction
+        tool_calls = handler.extract_tool_calls({"some": "response"})
+        
+        # Verify mocks were called
+        mock_detect.assert_called_once()
+        mock_extract.assert_called_once()
+        
+        # Verify results
+        assert len(tool_calls) == 1
+        assert tool_calls[0]["name"] == "get_weather"
+        assert tool_calls[0]["arguments"]["location"] == "San Francisco"
+        assert tool_calls[0]["id"] == "call_123"
+    
+    @patch('liteagent.tool_calling.OpenAIToolCallingHandler.format_tools_for_model')
+    def test_format_tools_for_model(self, mock_format):
+        """Test formatting tools with auto-detection."""
+        # Setup mock
+        mock_format.return_value = [{"function": {"name": "get_weather"}}]
+        
+        handler = AutoDetectToolCallingHandler()
+        
+        # Set the detected type manually
+        handler._detected_type = ToolCallingType.OPENAI_FUNCTION_CALLING
+        handler._specific_handler = OpenAIToolCallingHandler()
+        
+        # Create some tools
+        tools = [
+            {
+                "name": "get_weather",
+                "description": "Get the weather for a location",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "location": {"type": "string", "description": "The location"}
+                    }
+                }
+            }
+        ]
+        
+        # Format tools
+        formatted_tools = handler.format_tools_for_model(tools)
+        
+        # Verify mock was called
+        mock_format.assert_called_once()
+        
+        # Verify results
+        assert isinstance(formatted_tools, list)
+        assert formatted_tools[0]["function"]["name"] == "get_weather"
+    
+    @patch('liteagent.tool_calling.OpenAIToolCallingHandler.format_tool_results')
+    def test_format_tool_results(self, mock_format):
+        """Test formatting tool results with auto-detection."""
+        # Setup mock
+        mock_format.return_value = {
+            "role": "tool",
+            "tool_call_id": "call_123",
+            "content": '{"temperature": 72}'
+        }
+        
+        handler = AutoDetectToolCallingHandler()
+        
+        # Set the detected type manually
+        handler._detected_type = ToolCallingType.OPENAI_FUNCTION_CALLING
+        handler._specific_handler = OpenAIToolCallingHandler()
+        
+        # Format results
+        result = handler.format_tool_results("get_weather", {"temperature": 72}, tool_id="call_123")
+        
+        # Verify mock was called
+        mock_format.assert_called_once()
+        
+        # Verify results
+        assert isinstance(result, dict)
+        assert result["role"] == "tool"
+        assert result["tool_call_id"] == "call_123"
+
+
 if __name__ == "__main__":
     pytest.main(["-v", "test_tool_calling.py"]) 
