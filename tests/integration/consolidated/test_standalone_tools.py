@@ -11,6 +11,7 @@ from typing import Dict, Any, List
 from liteagent import LiteAgent
 from liteagent.tool_calling_types import ToolCallingType, get_tool_calling_type
 from liteagent.tools import get_weather, add_numbers
+from liteagent.tool_calling import ToolCallTracker
 
 from tests.utils.validation_helper import ValidationTestHelper
 
@@ -50,6 +51,9 @@ class TestStandaloneTools:
         )
         
         try:
+            # Reset the tracker
+            ToolCallTracker.get_instance().reset()
+            
             # Ask about weather in Tokyo
             response = configured_agent.chat("What's the weather in Tokyo?")
             
@@ -148,6 +152,9 @@ class TestStandaloneTools:
         )
         
         try:
+            # Reset the tracker
+            ToolCallTracker.get_instance().reset()
+            
             # Ask to add 25 and 17
             response = configured_agent.chat("What is 25 + 17?")
             
@@ -256,6 +263,9 @@ class TestStandaloneTools:
         )
         
         try:
+            # Reset the tracker
+            ToolCallTracker.get_instance().reset()
+            
             # Ask a question that requires both tools
             response = configured_agent.chat(
                 "First, tell me the weather in Tokyo. Then, add 25 and 17."

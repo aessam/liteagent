@@ -100,7 +100,12 @@ def get_tool_calling_type(model_name: str) -> ToolCallingType:
         ToolCallingType enum value
     """
     from .tool_calling_types import get_tool_calling_type
-    return get_tool_calling_type(model_name)
+    from liteagent.utils import logger
+    
+    tool_calling_type = get_tool_calling_type(model_name)
+    logger.debug(f"Selected tool calling type for {model_name}: {tool_calling_type}")
+    
+    return tool_calling_type
 
 
 def get_tool_calling_handler_type(model_name: str) -> str:

@@ -81,7 +81,7 @@ class TestModelComparison:
             "marker": skip_if_no_api_key
         },
         "ollama_phi": {
-            "name": "ollama/phi4",
+            "name": "ollama/llama3.3",
             "marker": skip_if_no_ollama
         }
     }

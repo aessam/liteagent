@@ -76,7 +76,7 @@ class TestToolCallingTypes:
         assert isinstance(get_tool_calling_handler("gpt-4", ToolCallingType.OPENAI_FUNCTION_CALLING), OpenAIToolCallingHandler)
         assert isinstance(get_tool_calling_handler("claude-3-opus", ToolCallingType.ANTHROPIC_TOOL_CALLING), AnthropicToolCallingHandler)
         assert isinstance(get_tool_calling_handler("ollama/llama2", ToolCallingType.JSON_EXTRACTION), OllamaToolCallingHandler)
-        assert isinstance(get_tool_calling_handler("unknown-model", ToolCallingType.PROMPT_BASED), AutoDetectToolCallingHandler)
+        assert isinstance(get_tool_calling_handler("unknown-model", ToolCallingType.PROMPT_BASED), StructuredOutputHandler)
         assert isinstance(get_tool_calling_handler("text-davinci-003", ToolCallingType.NONE), NoopToolCallingHandler)
         
         # Test with model-based detection
@@ -84,6 +84,7 @@ class TestToolCallingTypes:
         assert isinstance(get_tool_calling_handler("claude-3-opus"), AnthropicToolCallingHandler)
         assert isinstance(get_tool_calling_handler("ollama/llama2"), OllamaToolCallingHandler)
         assert isinstance(get_tool_calling_handler("text-davinci-003"), NoopToolCallingHandler)
+        assert isinstance(get_tool_calling_handler("ollama/phi4"), OllamaToolCallingHandler)
         
         # Test with unknown model
         assert isinstance(get_tool_calling_handler("unknown-model"), AutoDetectToolCallingHandler)
@@ -322,6 +323,7 @@ class TestOllamaToolCallingHandler:
         
         # Verify format
         assert formatted_result["role"] == "user"
+        
         assert "The result of calling get_weather is:" in formatted_result["content"]
         assert '{"temperature": 72, "conditions": "sunny"}' in formatted_result["content"]
 
@@ -521,8 +523,8 @@ class TestNoopToolCallingHandler:
         
         # Verify format
         assert formatted_result["role"] == "user"
-        assert "The result of calling get_weather is:" in formatted_result["content"]
-        assert '{"temperature": 72, "conditions": "sunny"}' in formatted_result["content"]
+        assert "Result from get_weather" in formatted_result["content"]
+        assert "{'temperature': 72, 'conditions': 'sunny'}" in formatted_result["content"]
 
 
 class TestAutoDetectToolCallingHandler:

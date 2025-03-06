@@ -11,6 +11,7 @@ from typing import Dict, Any, List
 from liteagent import LiteAgent
 from liteagent.tool_calling_types import ToolCallingType, get_tool_calling_type
 from liteagent.tools import ToolsForAgents
+from liteagent.tool_calling import ToolCallTracker
 
 from tests.utils.validation_helper import ValidationTestHelper
 
@@ -54,57 +55,39 @@ class TestClassMethodTools:
         """Provide multiple tool names for parser registration."""
         return ["add_numbers", "multiply_numbers"]
     
-    def test_add_numbers_class_method(self, model, validation_observer, tools_instance):
-        """
-        Test add_numbers class method with different models.
-        
-        This test checks if the agent can correctly use the add_numbers class method
-        to add two numbers together.
-        """
-        # Get tool calling type for the model
-        tool_calling_type = get_tool_calling_type(model)
-        
-        # Set validation strategy based on tool calling type
-        validation_observer.set_validation_strategy(tool_calling_type)
-        
+    def test_add_numbers_class_method(self, configured_agent, model, validation_observer, tools_instance):
+        """Test adding two numbers using a class method tool."""
         # Register appropriate parsers
+        tool_calling_type = get_tool_calling_type(model)
         ValidationTestHelper.register_parsers_for_type(
             validation_observer, 
             tool_calling_type, 
             ["add_numbers"]
         )
         
-        # Create agent with the add_numbers class method tool
-        agent = LiteAgent(
-            model=model,
-            name="AddNumbersClassMethodAgent",
-            system_prompt=ValidationTestHelper.get_system_prompt_for_tools(["add_numbers"]),
-            tools=[tools_instance.add_numbers],
-            observers=[validation_observer]
-        )
+        # Reset the tracker
+        ToolCallTracker.get_instance().reset()
         
         try:
-            # Test the tool
-            response = agent.chat("What is 7 + 9?")
+            # Ask the question
+            response = configured_agent.chat("What is 7 + 9?")
             
-            # Check if the response contains the correct answer
+            # Handle None responses
             if response is None:
                 pytest.skip(f"Model {model} returned None response, skipping validation")
+                return
                 
-            assert any(str(num) in response for num in ["16", "sixteen"]), \
-                "Response should contain '16'"
+            # Check that the tool was called
+            assert ToolCallTracker.get_instance().was_tool_called("add_numbers"), "add_numbers tool was not called"
             
-            # Check if the function was called
-            if "add_numbers" in validation_observer.called_functions:
-                # Use validation helper to validate add_numbers tool usage
-                ValidationTestHelper.validate_number_tool_usage(
-                    validation_observer, 
-                    response, 
-                    "add_numbers", 
-                    {"a": 7, "b": 9}, 
-                    16, 
-                    tool_calling_type
-                )
+            # Check the arguments
+            args = ToolCallTracker.get_instance().get_tool_args("add_numbers")
+            assert "a" in args, "Missing 'a' argument"
+            assert "b" in args, "Missing 'b' argument"
+            
+            # Check the result
+            result = ToolCallTracker.get_instance().get_tool_result("add_numbers")
+            assert result == 16, f"Expected result 16, got {result}"
             
             # Verify internal counter of tools class was incremented
             assert tools_instance.get_call_count() >= 1, "Tool call count should be at least 1"

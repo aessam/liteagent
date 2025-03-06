@@ -37,6 +37,11 @@
         "tool_calling_type": "NONE",
         "supports_multiple_tools": false,
         "max_tools_per_request": 0
+      },
+      "ollama/phi4": {
+        "tool_calling_type": "JSON_EXTRACTION",
+        "supports_multiple_tools": false,
+        "max_tools_per_request": 1
       }
     },
     "default": {

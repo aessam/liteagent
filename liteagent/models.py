@@ -7,9 +7,11 @@ particularly around function/tool calling.
 
 import json
 import time
+import random
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Union
 import litellm
+from litellm.exceptions import RateLimitError, APIError, APIConnectionError, Timeout, ServiceUnavailableError
 
 from .tool_calling_types import ToolCallingType
 from .tool_calling import get_tool_calling_handler, get_provider_specific_handler
@@ -223,9 +225,48 @@ class ModelInterface(ABC):
 class LiteLLMInterface(ModelInterface):
     """Model interface that uses LiteLLM for API calls."""
     
+    def __init__(self, model_name: str, drop_params: bool = True):
+        """Initialize with retry settings."""
+        super().__init__(model_name, drop_params)
+        self.max_retries = 3
+        self.initial_retry_delay = 2.0  # in seconds
+    
     def _call_api(self, kwargs: Dict) -> Any:
-        """Make the API call using LiteLLM."""
-        return litellm.completion(**kwargs)
+        """Make the API call using LiteLLM with retries for rate limits."""
+        retries = 0
+        while True:
+            try:
+                return litellm.completion(**kwargs)
+            except (RateLimitError, ServiceUnavailableError) as e:
+                retries += 1
+                if retries > self.max_retries:
+                    logger.error(f"Exceeded maximum retries ({self.max_retries}) for {self.model_name}")
+                    raise
+                
+                # Calculate backoff with jitter
+                delay = self.initial_retry_delay * (2 ** (retries - 1))
+                jitter = random.uniform(0, 0.1 * delay)  # 10% jitter
+                delay += jitter
+                
+                logger.warning(f"Rate limit hit for {self.model_name} ({self.provider}). Retrying in {delay:.2f}s (attempt {retries}/{self.max_retries})")
+                time.sleep(delay)
+            except (Timeout, APIConnectionError) as e:
+                retries += 1
+                if retries > self.max_retries:
+                    logger.error(f"Connection/timeout errors exceeded maximum retries ({self.max_retries})")
+                    raise
+                
+                # Different backoff strategy for network issues
+                delay = self.initial_retry_delay * 1.5 * (retries)
+                jitter = random.uniform(0, 0.1 * delay)
+                delay += jitter
+                
+                logger.warning(f"Connection error with {self.model_name}: {str(e)}. Retrying in {delay:.2f}s")
+                time.sleep(delay)
+            except Exception as e:
+                # All other exceptions are not retried
+                logger.error(f"Error calling {self.model_name}: {type(e).__name__}: {str(e)}")
+                raise
 
 
 def create_model_interface(model_name: str, drop_params: bool = True) -> ModelInterface:

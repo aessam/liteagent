@@ -61,6 +61,7 @@ STANDARD_TEST_MODELS = [
     "gpt-4o-mini",
     "anthropic/claude-3-5-sonnet-latest",
     "groq/llama-3.1-8b-instant",
+    "ollama/llama3.3", 
     "ollama/phi4"
 ]
 

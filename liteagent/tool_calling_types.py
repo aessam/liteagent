@@ -167,20 +167,27 @@ def get_model_capabilities(model_name: str) -> Dict[str, Any]:
     Returns:
         Dict[str, Any]: The capabilities for the model
     """
+    from liteagent.utils import logger
+    
     model_lower = model_name.lower() if model_name else ""
+    logger.debug(f"Looking up capabilities for model: {model_lower}")
     
     # Check for model exceptions first
     if model_lower in MODEL_CAPABILITIES["model_exceptions"]:
+        logger.debug(f"Found model in exceptions: {model_lower}")
         return MODEL_CAPABILITIES["model_exceptions"][model_lower]
     
     # Get the provider for the model
     provider = get_provider_from_model(model_lower)
+    logger.debug(f"Identified provider for {model_lower}: {provider}")
     
     # Check if we have capabilities for this provider
     if provider in MODEL_CAPABILITIES["provider_capabilities"]:
+        logger.debug(f"Using provider capabilities for {provider}")
         return MODEL_CAPABILITIES["provider_capabilities"][provider]
     
     # Return default capabilities
+    logger.debug(f"No specific capabilities found, using default")
     return MODEL_CAPABILITIES["default"].copy()
 
 
@@ -194,12 +201,17 @@ def get_tool_calling_type(model_name: str) -> ToolCallingType:
     Returns:
         ToolCallingType: The appropriate tool calling type for the model
     """
+    from liteagent.utils import logger
+    
     if not model_name:
+        logger.debug("No model name provided, returning NONE")
         return ToolCallingType.NONE
     
     # Get model capabilities (which checks for model exceptions and provider-based defaults)
     model_caps = get_model_capabilities(model_name)
-    return model_caps["tool_calling_type"]
+    tool_calling_type = model_caps["tool_calling_type"]
+    logger.debug(f"Tool calling type for {model_name}: {tool_calling_type}")
+    return tool_calling_type
 
 
 def supports_tool_calling(model_name: str) -> bool:

@@ -134,7 +134,7 @@ Always introduce yourself as the Calculator Agent.""",
         # Get list of available models with API keys
         available_models = []
         for model in ["openai/gpt-4o-mini", "anthropic/claude-3-5-sonnet-latest", 
-                     "groq/llama-3.1-8b-instant", "ollama/phi4"]:
+                     "groq/llama-3.1-8b-instant", "ollama/llama3.3", "ollama/phi4"]:
             if ValidationTestHelper.has_api_key_for_model(model):
                 available_models.append(model)
         

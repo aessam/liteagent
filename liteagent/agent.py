@@ -18,6 +18,7 @@ from .utils import logger, log_completion_request, log_completion_response
 from .observer import (AgentObserver, AgentEvent, AgentInitializedEvent, UserMessageEvent, 
                       ModelRequestEvent, ModelResponseEvent, FunctionCallEvent, 
                       FunctionResultEvent, AgentResponseEvent, generate_context_id)
+from .tool_calling import ToolCallTracker
 
 class LiteAgent:
     """
@@ -336,10 +337,21 @@ to provide a final text response to the user."""
                     # Execute the function
                     if function_name in self.tool_instances:
                         try:
-                            tool = self.tool_instances[function_name]
-                            # Pass the context_id to the tool so it can set the parent-child relationship
+                            # Use our new tool execution method that tracks calls
+                            tool_call_data = {
+                                "name": function_name,
+                                "arguments": function_args,
+                                "id": function_id
+                            }
+                            
+                            # Add context_id to the arguments
                             function_args['_context_id'] = self.context_id
-                            function_result = tool.execute(**function_args)
+                            
+                            # Execute the tool call
+                            tool_result = self._execute_tool_call(tool_call_data, self.tool_instances)
+                            
+                            # Extract the result
+                            function_result = tool_result.get("result")
                             
                             # Add result to memory with the function call ID
                             self.memory.add_function_result(
@@ -498,3 +510,55 @@ to provide a final text response to the user."""
                 logger.warning(message)
             elif level == "error":
                 logger.error(message)
+
+    def _execute_tool_call(self, tool_call, function_map):
+        """
+        Execute a tool call.
+        
+        Args:
+            tool_call: The tool call to execute
+            function_map: Map of function names to functions or FunctionTool objects
+            
+        Returns:
+            The result of executing the tool
+        """
+        try:
+            function_name = tool_call["name"]
+            function_args = tool_call["arguments"]
+            tool_call_id = tool_call.get("id")
+            
+            logger.debug(f"Executing tool call: {function_name} with args: {function_args}")
+            
+            # Record the tool call for testing purposes
+            ToolCallTracker.get_instance().record_call(function_name, function_args)
+            
+            # Get the function or tool
+            if function_name not in function_map:
+                error_message = f"Unknown function: {function_name}"
+                logger.error(error_message)
+                return {"error": error_message}
+                
+            # Get the function or tool
+            func_or_tool = function_map[function_name]
+            
+            # Execute the function or tool
+            if hasattr(func_or_tool, 'execute'):
+                # It's a BaseTool or derived class
+                result = func_or_tool.execute(**function_args)
+            else:
+                # It's a plain function
+                result = func_or_tool(**function_args)
+            
+            # Record the result for testing purposes
+            ToolCallTracker.get_instance().record_result(function_name, result)
+            
+            logger.debug(f"Tool call result: {result}")
+            return {
+                "name": function_name,
+                "result": result,
+                "tool_call_id": tool_call_id
+            }
+        except Exception as e:
+            error_message = f"Error executing tool call: {str(e)}"
+            logger.error(error_message)
+            return {"error": error_message}

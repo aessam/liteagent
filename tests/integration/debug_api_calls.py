@@ -88,6 +88,7 @@ def run_test_with_debug():
     model_names = [
         "anthropic/claude-3-5-sonnet-latest",
         "groq/llama-3.1-8b-instant",
+        "ollama/llama3.3", 
         "ollama/phi4"
     ]
     

@@ -44,7 +44,7 @@ done
 # Run the unit tests with coverage
 if [ "$RUN_UNIT" = true ]; then
     echo "Running unit tests with coverage..."
-    python -m pytest tests/unit --cov=liteagent --cov-report=term --cov-report=html:tests/.coverage
+    python -m pytest tests/unit --cov=liteagent --cov-report=term --cov-report=html:tests/.coverage_files
     UNIT_EXIT_CODE=${PIPESTATUS[0]}
 else
     UNIT_EXIT_CODE=0
@@ -75,7 +75,7 @@ if [ "$RUN_UNIT" = true ]; then
     echo -e "\nCoverage Report Summary:"
     coverage report
     
-    echo -e "\nHTML coverage report generated at: tests/.coverage/index.html"
+    echo -e "\nHTML coverage report generated at: tests/.coverage_files/index.html"
 fi
 
 # Print usage information
