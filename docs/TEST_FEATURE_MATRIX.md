@@ -2,6 +2,21 @@
 
 This document maps tests to features in the LiteAgent codebase to help maintain test coverage as features evolve.
 
+## LLM-Proof Testing Approach
+
+To ensure reliable testing with LLMs, we follow these principles:
+
+1. **Test functionality that LLMs can't perform without tools**: Focus on tasks that require external information or capabilities that LLMs don't have, such as:
+   - Retrieving user-specific data (`test_get_user_data_class_method`)
+   - Processing complex calculations beyond LLM capabilities (`test_multiply_numbers_class_method`)
+   - Accessing API-only information
+
+2. **Use explicit instructions**: Tests should clearly instruct the LLM to use tools rather than relying on its own knowledge.
+
+3. **Verify tool usage**: Test assertions should primarily verify that tools were called with the correct parameters, rather than relying on response content which may vary.
+
+4. **Use markers for potentially flaky tests**: Tests of functionality that LLMs might try to perform themselves (like simple math) should be marked as optional with `@pytest.mark.optional`.
+
 ## Feature Intersection Matrix
 
 This matrix shows which combinations of features are tested together, highlighting both coverage and gaps with specific test names.
@@ -9,14 +24,14 @@ This matrix shows which combinations of features are tested together, highlighti
 |                        | Agent<br>Core | Function<br>Calling | Observer<br>Events | Memory<br>Mgmt | Tool<br>System | Method<br>Tools | Message<br>Templates | Multi-<br>Agent | Model<br>Types |
 |------------------------|---------------|---------------------|--------------------|-----------------|-----------------|-----------------|-----------------------|----------------|----------------|
 | **Agent Core**         | `test_agent_initialization`<br>`test_agent_simple_chat` | `test_agent_with_function_call`<br>`test_gpt4o_mini::test_decorated_class_methods` | `test_agent_with_observer`<br>`test_observer::*_event` | `test_agent_reset_memory`<br>`test_agent_with_conversation` | `test_base_tool_*`<br>`test_gpt4o_mini::*` | `test_*_method_tool_*`<br>`test_decorated_class_methods` | `test_agent_tool_with_message_template` | `test_nested_agents`<br>`test_multi_agent::test_agent_routing` | `test_gpt4o_mini::*`<br>`test_ollama_phi::*` |
-| **Function Calling**   | `test_agent_with_function_call`<br>`test_gpt4o_mini::*` | `test_consecutive_function_calls`<br>`test_multi_step_reasoning` | `test_function_call_event`<br>`test_function_result_event` | Unit tests only<br>`test_agent::*` | `test_basic_tool_usage`<br>`test_standalone_tools` | `test_decorated_class_methods`<br>`test_class_methods_as_tools` | Unit tests only<br>No integration | `test_multi_agent::test_agent_routing`<br>`test_specialized_agents` | `test_gpt4o_mini::*`<br>`test_ollama_phi::*` |
+| **Function Calling**   | `test_agent_with_function_call`<br>`test_gpt4o_mini::*` | `test_consecutive_function_calls`<br>`test_multi_step_reasoning` | `test_function_call_event`<br>`test_function_result_event` | Unit tests only<br>`test_agent::*` | `test_basic_tool_usage`<br>`test_standalone_tools` | `test_get_user_data_class_method`<br>`test_class_methods_as_tools` | Unit tests only<br>No integration | `test_multi_agent::test_agent_routing`<br>`test_specialized_agents` | `test_gpt4o_mini::*`<br>`test_ollama_phi::*` |
 | **Observer Events**    | `test_agent_with_observer`<br>`test_observer::*_event` | `test_function_call_event`<br>`test_function_result_event` | `test_observer::*`<br>`test_validation::*` | Unit tests only<br>No integration | `test_validation::*`<br>`test_agent_tool_observer_propagation` | Unit tests only<br>`test_observer::*` | Unit tests only<br>No integration | `test_tree_trace_observer_multi_agent` | Unit tests only<br>`test_model_comparison` |
 | **Memory Mgmt**        | `test_agent_reset_memory`<br>`test_agent_with_conversation` | Unit tests only<br>No integration | Unit tests only<br>No integration | `test_agent::*`<br>No integration | Unit tests only<br>No integration | No tests | No tests | Unit tests only<br>No integration | No tests |
-| **Tool System**        | `test_base_tool_*`<br>`test_gpt4o_mini::*` | `test_basic_tool_usage`<br>`test_standalone_tools` | `test_validation::*`<br>`test_agent_tool_observer_propagation` | Unit tests only<br>No integration | `test_base_tool_*`<br>`test_agent_tool::*` | `test_instance_method_tool_*`<br>`test_decorated_class_methods` | Unit tests only<br>No integration | `test_multi_agent::*`<br>`test_specialized_agents` | `test_gpt4o_mini::*`<br>`test_ollama_phi::*` |
-| **Method Tools**       | `test_*_method_tool_*`<br>`test_decorated_class_methods` | `test_decorated_class_methods`<br>`test_class_methods_as_tools` | Unit tests only<br>`test_observer::*` | No tests | `test_instance_method_tool_*`<br>`test_decorated_class_methods` | `test_instance_method_tool_*`<br>`test_decorated_class_methods` | No tests | Unit tests only<br>No integration | `test_gpt4o_mini::test_decorated_class_methods`<br>`test_ollama_phi::test_class_methods_as_tools` |
+| **Tool System**        | `test_base_tool_*`<br>`test_gpt4o_mini::*` | `test_basic_tool_usage`<br>`test_standalone_tools` | `test_validation::*`<br>`test_agent_tool_observer_propagation` | Unit tests only<br>No integration | `test_base_tool_*`<br>`test_agent_tool::*` | `test_instance_method_tool_*`<br>`test_get_user_data_class_method` | Unit tests only<br>No integration | `test_multi_agent::*`<br>`test_specialized_agents` | `test_gpt4o_mini::*`<br>`test_ollama_phi::*` |
+| **Method Tools**       | `test_*_method_tool_*`<br>`test_get_user_data_class_method` | `test_get_user_data_class_method`<br>`test_class_methods_as_tools` | Unit tests only<br>`test_observer::*` | No tests | `test_instance_method_tool_*`<br>`test_get_user_data_class_method` | `test_instance_method_tool_*`<br>`test_decorated_class_methods` | No tests | Unit tests only<br>No integration | `test_gpt4o_mini::test_decorated_class_methods`<br>`test_ollama_phi::test_class_methods_as_tools` |
 | **Message Templates**  | `test_agent_tool_with_message_template` | Unit tests only<br>No integration | Unit tests only<br>No integration | No tests | Unit tests only<br>No integration | No tests | `test_agent_tool_with_message_template` | No tests | No tests |
 | **Multi-Agent**        | `test_agent::test_nested_agents`<br>`test_multi_agent::test_agent_context_isolation` | `test_multi_agent::test_agent_with_different_models`<br>`test_multi_agent::test_agent_routing` | `test_observer::test_tree_trace_observer_multi_agent` | Unit tests only<br>No integration | `test_multi_agent::test_agent_routing`<br>`test_multi_agent::test_agent_context_isolation` | Unit tests only<br>No integration | No tests | `test_multi_agent::test_agent_context_isolation`<br>`test_multi_agent::test_agent_with_different_models` | `test_multi_agent::test_agent_with_different_models` |
-| **Model Types**        | `test_class_method_tools::*`<br>`test_standalone_tools::*` | `test_class_method_tools::*`<br>`test_standalone_tools::*` | `test_model_comparison::*`<br>`test_validation::*` | No tests | `test_standalone_tools::*`<br>`test_class_method_tools::*` | `test_class_method_tools::test_add_numbers_class_method`<br>`test_class_method_tools::test_multiple_class_method_tools` | No tests | `test_multi_agent::test_agent_with_different_models` | `test_model_comparison::test_basic_tool_usage`<br>`test_model_comparison::test_complex_tool_usage` |
+| **Model Types**        | `test_class_method_tools::*`<br>`test_standalone_tools::*` | `test_class_method_tools::*`<br>`test_standalone_tools::*` | `test_model_comparison::*`<br>`test_validation::*` | No tests | `test_standalone_tools::*`<br>`test_class_method_tools::*` | `test_get_user_data_class_method`<br>`test_multiple_class_method_tools` | No tests | `test_multi_agent::test_agent_with_different_models` | `test_model_comparison::test_basic_tool_usage`<br>`test_model_comparison::test_complex_tool_usage` |
 
 ## Model Type and Tool Support Matrix
 
@@ -24,8 +39,8 @@ This matrix shows which model types are tested with different tool implementatio
 
 | Model Type | Native<br>Function<br>Calling | Text-Based<br>Function<br>Calling | Basic<br>Tools | Class<br>Method<br>Tools | Multi-Step<br>Reasoning | Observability |
 |------------|-------------------------------|-----------------------------------|----------------|--------------------------|-------------------------|---------------|
-| **GPT-4o-mini** | `test_gpt4o_mini::test_decorated_class_methods`<br>`test_gpt4o_mini::test_multi_step_reasoning` | N/A | `test_gpt4o_mini::*`<br>`test_model_comparison::test_basic_tool_usage` | `test_gpt4o_mini::test_decorated_class_methods` | `test_gpt4o_mini::test_multi_step_reasoning` | `test_observer::*`<br>`test_validation::*` |
-| **Ollama/phi** | N/A | `test_ollama_phi::test_standalone_tools`<br>`test_ollama_phi::test_basic_tool_usage` | `test_ollama_phi::test_basic_tool_usage`<br>`test_model_comparison::test_basic_tool_usage` | `test_ollama_phi::test_class_methods_as_tools` | Limited tests<br>`test_model_comparison::test_multi_step_problem` | Limited tests<br>No direct integration tests |
+| **GPT-4o-mini** | `test_gpt4o_mini::test_decorated_class_methods`<br>`test_gpt4o_mini::test_multi_step_reasoning` | N/A | `test_gpt4o_mini::*`<br>`test_model_comparison::test_basic_tool_usage` | `test_gpt4o_mini::test_decorated_class_methods`<br>`test_get_user_data_class_method` | `test_gpt4o_mini::test_multi_step_reasoning` | `test_observer::*`<br>`test_validation::*` |
+| **Ollama/phi** | N/A | `test_ollama_phi::test_standalone_tools`<br>`test_ollama_phi::test_basic_tool_usage` | `test_ollama_phi::test_basic_tool_usage`<br>`test_model_comparison::test_basic_tool_usage` | `test_ollama_phi::test_class_methods_as_tools`<br>`test_get_user_data_class_method` | Limited tests<br>`test_model_comparison::test_multi_step_problem` | Limited tests<br>No direct integration tests |
 | **Mock Models** | `test_agent::test_consecutive_function_calls`<br>`test_agent::test_agent_with_function_call` | `test_models::test_mock_model_function_call` | `test_tools::*`<br>`test_agent_tool::*` | `test_tools::test_instance_method_tool_*` | Limited tests<br>`test_agent::test_agent_with_conversation` | `test_observer::*`<br>`test_validation_observer` |
 
 ## Critical Intersections and Gaps
@@ -48,7 +63,7 @@ The following critical feature intersections have limited or no test coverage:
 | **Observer Events** | ✅ test_agent.py::test_agent_with_observer<br>✅ test_agent_tool.py::test_agent_tool_observer_propagation<br>✅ test_observer.py::test_agent_event_base<br>✅ test_observer.py::test_model_response_event<br>✅ test_observer.py::test_user_message_event<br>✅ test_observer.py::test_function_call_event | ✅ test_observer.py |
 | **Memory Management** | ✅ test_agent.py::test_agent_reset_memory<br>✅ test_agent.py::test_agent_with_conversation | ❌ *No dedicated integration tests* |
 | **Tool System** | ✅ test_tools.py::test_base_tool_initialization<br>✅ test_tools.py::test_base_tool_execute<br>✅ test_tools.py::test_base_tool_to_function_definition | ✅ test_gpt4o_mini.py<br>✅ test_ollama_phi.py |
-| **Method Tools** | ✅ test_tools.py::test_instance_method_tool_with_instance_method<br>✅ test_tools.py::test_instance_method_tool_with_class_method<br>✅ test_tools.py::test_instance_method_tool_with_static_method | ✅ test_gpt4o_mini.py::test_decorated_class_methods<br>✅ test_ollama_phi.py::test_class_methods_as_tools |
+| **Method Tools** | ✅ test_tools.py::test_instance_method_tool_with_instance_method<br>✅ test_tools.py::test_instance_method_tool_with_class_method<br>✅ test_tools.py::test_instance_method_tool_with_static_method | ✅ test_get_user_data_class_method<br>✅ test_ollama_phi.py::test_class_methods_as_tools |
 | **Message Templates** | ✅ test_agent_tool.py::test_agent_tool_with_message_template | ❌ *No dedicated integration tests* |
 | **Multi-Agent Communication** | ✅ test_agent.py::test_nested_agents<br>✅ test_agent.py::test_parent_context_propagation | ✅ test_multi_agent.py::test_specialized_agents<br>✅ test_multi_agent.py::test_agent_routing |
 | **Agent Tracing** | ✅ test_observer.py::test_tree_trace_observer_tracking<br>✅ test_observer.py::test_tree_trace_observer_tree_visualization<br>✅ test_observer.py::test_tree_trace_observer_multi_agent | ❌ *No dedicated integration tests* |
@@ -112,3 +127,19 @@ When modifying existing features:
 | test_multi_step_reasoning.py            | Tests multi-step reasoning with multiple tools           | Mix of standalone and class method tools                  | All supported models             |
 | test_multi_agent.py                     | Tests multi-agent communication and routing              | Agent-as-tool pattern                                    | All supported models             |
 | test_validation.py                      | Tests validation patterns and assertions                 | Mix of tool types with validation                         | All supported models             |
+
+## LLM-Proof Testing Strategies
+
+Our testing approach introduces strategies to make tests more reliable with LLMs:
+
+1. **External Knowledge Tests**: Tests like `test_get_user_data_class_method` require retrieving data that the LLM couldn't possibly know, making tool usage essential.
+
+2. **Complex Calculation Tests**: Tests like `test_multiply_numbers_class_method` use calculations that are beyond reasonable LLM capabilities (1299792458 × 6626070040).
+
+3. **Explicit Tool Usage Instructions**: Tests include clear instructions telling the LLM to use tools rather than trying to answer directly.
+
+4. **Tool Execution Verification**: Rather than just checking response content, our tests verify that the appropriate tools were called with correct parameters.
+
+5. **Optional Marking**: Tests that might have reliability issues are marked with `@pytest.mark.optional` so they can be selectively excluded from critical test runs.
+
+These strategies help create more reliable tests that are less susceptible to variability in LLM behavior and better at validating the core functionality of the agent framework.
