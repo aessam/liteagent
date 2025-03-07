@@ -397,6 +397,71 @@ def print_sample_tool_definitions():
     print(json.dumps(function_definitions, indent=2))
     print("\n==== End of Sample Tool Definitions ====\n")
     
+    # Print example code for using these patterns
+    print("\n==== Example Usage Code ====")
+    print("Here's how to implement these patterns in your own code:")
+    print("""
+# Import required components
+from liteagent import LiteAgent
+from liteagent.tools import FunctionTool, InstanceMethodTool, liteagent_tool
+
+# Pattern 1: Regular function + FunctionTool
+def get_weather(city: str) -> str:
+    \"\"\"Gets weather forecast for a city.\"\"\"
+    # Implementation here
+    pass
+
+# Create explicit tool object
+weather_tool = FunctionTool(get_weather)
+
+# Pattern 2: Function with decorator
+@liteagent_tool
+def search_database(query: str) -> list:
+    \"\"\"Search the database for information.\"\"\"
+    # Implementation here
+    pass
+
+# Pattern 3: Decorator with custom parameters
+@liteagent_tool(
+    name="find_user",
+    description="Find a user by ID or email"
+)
+def get_user(user_identifier: str) -> dict:
+    \"\"\"Find user by ID or email.\"\"\"
+    # Implementation here
+    pass
+
+# Pattern 4: Class with decorated methods
+class UserTools:
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+    
+    @liteagent_tool
+    def get_profile(self, user_id: str) -> dict:
+        \"\"\"Get user profile information.\"\"\"
+        # Implementation here
+        pass
+
+# Create an agent with a mix of tools
+user_tools = UserTools(api_key="your-api-key")
+
+agent = LiteAgent(
+    model="gpt-4o-mini",
+    system_prompt="You are a helpful assistant with tools.",
+    tools=[
+        # Mix of different tool types
+        weather_tool,              # Regular FunctionTool
+        search_database,           # Decorated function
+        get_user,                  # Decorated function with custom parameters
+        user_tools.get_profile     # Decorated method from class instance
+    ]
+)
+
+# Use the agent
+response = agent.chat("Please get the weather in San Francisco")
+""")
+    print("\n==== End of Example Usage Code ====\n")
+    
     # Return the definitions for potential further use
     return function_definitions
 
