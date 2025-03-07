@@ -52,4 +52,13 @@ dev = [
 packages = ["liteagent"]
 
 [tool.setuptools.package-data]
-liteagent = ["model_capabilities.json"] 
+liteagent = ["model_capabilities.json"]
+
+[tool.pytest.ini_options]
+addopts = "-v -n auto -m 'not longrun'"
+markers = [
+    "slow: marks tests as slow",
+    "integration: marks tests as integration tests that might need external services",
+    "optional: marks tests as optional",
+    "longrun: marks tests as very long-running tests that should be run explicitly"
+] 
