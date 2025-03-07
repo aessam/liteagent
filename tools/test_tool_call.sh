@@ -166,10 +166,7 @@ test_ollama_model() {
             "type": "function",
             "function": $FUNCTION_SCHEMA
         }
-    ],
-    "options": {
-        "temperature": 0.1
-    }
+    ]
 }
 EOM
 
@@ -221,8 +218,7 @@ test_openai_model() {
             "type": "function",
             "function": $FUNCTION_SCHEMA
         }
-    ],
-    "temperature": 0.1
+    ]
 }
 EOM
 
@@ -284,7 +280,6 @@ test_anthropic_model() {
             }
         }
     ],
-    "temperature": 0.1,
     "max_tokens": 1024
 }
 EOM
@@ -343,8 +338,7 @@ test_groq_model() {
             "type": "function",
             "function": $FUNCTION_SCHEMA
         }
-    ],
-    "temperature": 0.1
+    ]
 }
 EOM
 
@@ -394,8 +388,7 @@ test_deepseek_model() {
             "type": "function",
             "function": $FUNCTION_SCHEMA
         }
-    ],
-    "temperature": 0.1
+    ]
 }
 EOM
 
@@ -445,8 +438,7 @@ test_mistral_model() {
             "type": "function",
             "function": $FUNCTION_SCHEMA
         }
-    ],
-    "temperature": 0.1
+    ]
 }
 EOM
 
