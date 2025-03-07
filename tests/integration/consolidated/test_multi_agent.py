@@ -10,7 +10,7 @@ from typing import Dict, Any, List
 
 from liteagent import LiteAgent
 from liteagent.tool_calling_types import ToolCallingType, get_tool_calling_type
-from liteagent.tools import get_weather, add_numbers
+from tests.utils.test_tools import get_weather, add_numbers
 
 from tests.utils.validation_helper import ValidationTestHelper
 

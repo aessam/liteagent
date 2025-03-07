@@ -12,7 +12,7 @@ from typing import List, Dict, Optional, Any
 import statistics
 
 from liteagent.agent import LiteAgent
-from liteagent.tools import tool, liteagent_tool
+from liteagent import liteagent_tool
 from liteagent.examples import (
     get_weather, add_numbers, search_database, calculate_area
 )
@@ -34,7 +34,7 @@ skip_if_no_ollama = pytest.mark.skipif(
 
 
 # More complex tool for testing model capabilities
-@tool
+@liteagent_tool
 def compute_statistics(numbers: List[float], operations: Optional[List[str]] = None) -> Dict[str, float]:
     """
     Compute statistical measures for a list of numbers.

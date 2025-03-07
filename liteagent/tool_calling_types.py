@@ -225,4 +225,18 @@ def supports_tool_calling(model_name: str) -> bool:
         bool: True if the model supports tool calling, False otherwise
     """
     tool_calling_type = get_tool_calling_type(model_name)
-    return tool_calling_type != ToolCallingType.NONE 
+    return tool_calling_type != ToolCallingType.NONE
+
+
+def get_tool_calling_handler_type(model_name: str) -> str:
+    """
+    Get the tool calling handler type name for a model.
+    
+    Args:
+        model_name: The name of the model
+        
+    Returns:
+        str: The name of the tool calling handler type
+    """
+    tool_calling_type = get_tool_calling_type(model_name)
+    return tool_calling_type.name 

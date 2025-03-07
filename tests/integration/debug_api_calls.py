@@ -1,27 +1,22 @@
 """
-Debug script to print API payloads and responses.
+Debug script for API calls.
 
-This script modifies the LiteLLMInterface to print detailed debug information
-about API requests and responses to help diagnose issues with None responses.
+This script helps debug API calls by showing the request/response details.
 """
 
 import os
 import sys
-from typing import Dict, Any, List
 import json
-import time
+import re
+from typing import Dict, List, Any, Optional, Union
 
-# Add project root to path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
-# Import required modules
 from liteagent import LiteAgent
-from liteagent.models import ModelInterface, LiteLLMInterface
-from liteagent.observer import AgentObserver
-from liteagent.tools import get_weather, add_numbers
-from liteagent.tool_calling_types import ToolCallingType, get_tool_calling_type
-from tests.integration.validation_observer import ValidationObserver
-from tests.utils.validation_helper import ValidationTestHelper
+from liteagent.models import ModelOptions
+from tests.utils.test_tools import get_weather, add_numbers
+
+from liteagent.observer import ConsoleObserver
 
 # Create a debug proxy for the LiteLLMInterface
 class DebugLiteLLMInterface(LiteLLMInterface):

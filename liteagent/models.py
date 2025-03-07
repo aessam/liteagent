@@ -13,9 +13,8 @@ from typing import Any, Dict, List, Optional, Union
 import litellm
 from litellm.exceptions import RateLimitError, APIError, APIConnectionError, Timeout, ServiceUnavailableError
 
-from .tool_calling_types import ToolCallingType
+from .tool_calling_types import ToolCallingType, get_tool_calling_type, get_provider_from_model
 from .tool_calling import get_tool_calling_handler, get_provider_specific_handler
-from .tool_calling_config import get_tool_calling_type, get_provider_from_model
 from .utils import logger, log_completion_request, log_completion_response
 
 

@@ -14,69 +14,48 @@ import random
 # Global registry for tools
 TOOLS = {}
 
-# Example tool functions for testing
-def get_weather(city: str) -> str:
-    """Get the current weather for a city."""
-    temperatures = {
-        "Tokyo": (15, 25),
-        "New York": (10, 20),
-        "London": (8, 18),
-        "Paris": (12, 22),
-        "Berlin": (7, 17),
-        "Sydney": (20, 30),
-        "Beijing": (5, 15),
-        "Moscow": (0, 10),
-        "Cairo": (25, 35),
-        "Mumbai": (30, 40),
-    }
-    
-    conditions = ["sunny", "cloudy", "rainy", "foggy", "snowy", "windy"]
-    
-    # Get temperature range for the city or use a default range
-    temp_range = temperatures.get(city, (15, 25))
-    temperature = random.randint(temp_range[0], temp_range[1])
-    condition = random.choice(conditions)
-    
-    return f"The weather in {city} is {temperature}°C and {condition}."
-
-def add_numbers(a: int, b: int) -> int:
-    """Add two numbers together."""
-    return a + b
-
-def calculate_area(width: float, height: float) -> float:
-    """Calculate the area of a rectangle."""
-    return width * height
-
 class ToolsForAgents:
-    """A class containing tools that can be used by agents."""
+    """
+    A class containing tools that can be used by agents.
+    
+    DEPRECATED: This class has been moved to tests.utils.test_tools.ToolsForAgents as it
+    is primarily intended for testing purposes. Use that version instead.
+    """
     
     def __init__(self, api_key=None):
         """Initialize with an optional API key."""
-        self.api_key = api_key
-        self._call_count = 0
+        import warnings
+        warnings.warn(
+            "ToolsForAgents in the main library is deprecated and will be removed in a future version. "
+            "Import it from tests.utils.test_tools instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        from tests.utils.test_tools import ToolsForAgents as TestToolsForAgents
+        self._instance = TestToolsForAgents(api_key=api_key)
         
     def add_numbers(self, a: int, b: int) -> int:
         """Adds two numbers together."""
-        self._call_count += 1
-        return a + b
+        return self._instance.add_numbers(a, b)
         
     def multiply_numbers(self, a: int, b: int) -> int:
         """Multiplies two numbers together."""
-        self._call_count += 1
-        return a * b
+        return self._instance.multiply_numbers(a, b)
         
     def get_weather(self, city: str) -> str:
         """Gets weather for a city using API key if provided."""
-        self._call_count += 1
-        if self.api_key:
-            # Use API key to get real weather (simulated here)
-            return f"Weather in {city} retrieved with API key {self.api_key[:5]}...: 22°C and sunny."
-        else:
-            return get_weather(city)
+        return self._instance.get_weather(city)
+    
+    def get_user_data(self, user_id: str) -> Dict:
+        """
+        Retrieves user data for a specific user ID.
+        This tool returns information the LLM couldn't possibly know.
+        """
+        return self._instance.get_user_data(user_id)
             
     def get_call_count(self) -> int:
-        """Returns the number of times any tool method has been called."""
-        return self._call_count
+        """Returns the number of times a tool was called."""
+        return self._instance.get_call_count()
 
 class BaseTool:
     """Base class for all tools."""
@@ -214,86 +193,6 @@ class StaticMethodTool(BaseTool):
         super().__init__(method, name, description)
 
 
-def tool(func):
-    """
-    Decorator to auto-register a function as a tool.
-    
-    Args:
-        func: The function to register as a tool
-        
-    Returns:
-        The original function (unchanged)
-    """
-    # Determine the appropriate tool type
-    if inspect.ismethod(func):
-        # For bound methods
-        if func.__self__ is not None:
-            tool_instance = InstanceMethodTool(func, func.__self__)
-        else:
-            # For static/class methods
-            tool_instance = StaticMethodTool(func)
-    else:
-        # For regular functions
-        tool_instance = FunctionTool(func)
-    
-    # Register the tool
-    TOOLS[tool_instance.name] = {
-        "schema": tool_instance.schema,
-        "function": tool_instance.func
-    }
-    
-    return func
-
-
-def register_tool(func=None, *, name=None, description=None):
-    """
-    Enhanced decorator to register a function as a tool with optional customization.
-    
-    Args:
-        func: The function to register
-        name: Optional custom name for the tool
-        description: Optional custom description
-        
-    Returns:
-        Decorator function or decorated function
-    """
-    def decorator(f):
-        # Determine the appropriate tool type
-        if inspect.ismethod(f):
-            # For bound methods
-            if f.__self__ is not None:
-                tool_instance = InstanceMethodTool(f, f.__self__, name, description)
-            else:
-                # For static/class methods
-                tool_instance = StaticMethodTool(f, name, description)
-        else:
-            # For regular functions
-            tool_instance = FunctionTool(f, name, description)
-        
-        # Register the tool
-        TOOLS[tool_instance.name] = {
-            "schema": tool_instance.schema,
-            "function": tool_instance.func
-        }
-        
-        return f
-    
-    # Handle both @register_tool and @register_tool(name="custom")
-    if func is None:
-        return decorator
-    return decorator(func)
-
-
-def get_tools():
-    """
-    Get all registered tools.
-    
-    Returns:
-        dict: Dictionary of registered tools
-    """
-    return TOOLS
-
-
 def get_function_definitions(tool_functions=None):
     """
     Convert tools to function definitions compatible with LLM APIs.
@@ -336,6 +235,8 @@ def liteagent_tool(func=None, *, name=None, description=None):
     """
     Universal decorator to register any function or method as a tool.
     Automatically detects the function type and creates the appropriate tool instance.
+    
+    This is the preferred way to register tools in LiteAgent.
     
     Args:
         func: The function or method to register

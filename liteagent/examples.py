@@ -2,22 +2,22 @@
 Example usage of LiteAgent.
 """
 
-from .tools import tool, register_tool, liteagent_tool, FunctionTool, InstanceMethodTool
+from .tools import liteagent_tool, FunctionTool, InstanceMethodTool
 from .agent import LiteAgent
 from .utils import check_api_keys
 
 # Example standalone tools
-@tool
+@liteagent_tool
 def get_weather(city: str) -> str:
     """Returns weather information for a city."""
     return f"The weather in {city} is 22°C and sunny."
 
-@tool
+@liteagent_tool
 def add_numbers(a: int, b: int) -> int:
     """Adds two numbers together."""
     return a + b
 
-@tool
+@liteagent_tool
 def search_database(query: str, limit: int = 5) -> list:
     """
     Simulates searching a database for information.

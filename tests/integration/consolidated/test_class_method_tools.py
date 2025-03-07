@@ -10,8 +10,8 @@ from typing import Dict, Any, List
 
 from liteagent import LiteAgent
 from liteagent.tool_calling_types import ToolCallingType, get_tool_calling_type
-from liteagent.tools import ToolsForAgents
 from liteagent.tool_calling import ToolCallTracker
+from tests.utils.test_tools import ToolsForAgents
 
 from tests.utils.validation_helper import ValidationTestHelper
 
@@ -48,12 +48,28 @@ class TestClassMethodTools:
     @pytest.fixture
     def tool_names(self):
         """Provide the tool names for parser registration."""
-        return ["add_numbers"]
+        return ["add_numbers", "multiply_numbers", "get_user_data"]
     
-    @pytest.fixture
-    def multiple_tool_names(self):
-        """Provide multiple tool names for parser registration."""
-        return ["add_numbers", "multiply_numbers"]
+    def _handle_test_exception(self, e, model, validation_observer=None):
+        """
+        Common method to handle exceptions in test methods.
+        
+        Args:
+            e: The exception
+            model: The model name
+            validation_observer: Optional validation observer for debug info
+        """
+        if "TypeError: 'NoneType' object is not iterable" in str(e):
+            pytest.skip(f"Model {model} returned None response, skipping validation")
+        elif validation_observer:
+            # Print validation information for debugging
+            print(f"Called functions: {validation_observer.called_functions}")
+            print(f"Function calls: {validation_observer.function_calls}")
+            print(f"Function results: {validation_observer.function_results}")
+            raise e
+        else:
+            # For other exceptions, re-raise
+            raise e
     
     def test_add_numbers_class_method(self, configured_agent, model, validation_observer, tools_instance):
         """Test adding two numbers using a class method tool."""
@@ -93,12 +109,7 @@ class TestClassMethodTools:
             assert tools_instance.get_call_count() >= 1, "Tool call count should be at least 1"
             
         except Exception as e:
-            # Handle different model-specific exceptions
-            if "TypeError: 'NoneType' object is not iterable" in str(e):
-                pytest.skip(f"Model {model} returned None response, skipping validation")
-            else:
-                # For other exceptions, re-raise
-                raise
+            self._handle_test_exception(e, model)
     
     def test_multiply_numbers_class_method(self, model, validation_observer, tools_instance):
         """
@@ -154,16 +165,77 @@ class TestClassMethodTools:
                 result = tools_instance.get_call_count()
                 assert result >= 1, "Tool call count should be at least 1"
                 
-            # Print the response for debugging
             print(f"Response from LLM: {response}")
                 
         except Exception as e:
-            # Handle different model-specific exceptions
-            if "TypeError: 'NoneType' object is not iterable" in str(e):
+            self._handle_test_exception(e, model, validation_observer)
+    
+    def test_get_user_data_class_method(self, model, validation_observer, tools_instance):
+        """
+        Test get_user_data class method with different models.
+        
+        This test checks if the agent can correctly use the get_user_data class method
+        to retrieve information that the LLM couldn't possibly know on its own.
+        """
+        # Get tool calling type for the model
+        tool_calling_type = get_tool_calling_type(model)
+        
+        # Set validation strategy based on tool calling type
+        validation_observer.set_validation_strategy(tool_calling_type)
+        
+        # Register appropriate parsers
+        ValidationTestHelper.register_parsers_for_type(
+            validation_observer, 
+            tool_calling_type, 
+            ["get_user_data"]
+        )
+        
+        # Create agent with the get_user_data class method tool
+        agent = LiteAgent(
+            model=model,
+            name="GetUserDataClassMethodAgent",
+            system_prompt=ValidationTestHelper.get_system_prompt_for_tools(["get_user_data"]),
+            tools=[tools_instance.get_user_data],
+            observers=[validation_observer]
+        )
+        
+        try:
+            # Ask for information the LLM couldn't possibly know
+            user_id = "user123"
+            response = agent.chat(
+                f"I need the email address and subscription tier for the user with ID {user_id}. "
+                f"This information is not publicly available and can only be retrieved using the get_user_data tool. "
+                f"Please execute the get_user_data tool with user_id={user_id} as the parameter and tell me what "
+                f"you find. Don't just acknowledge that you'll use the tool - actually use it and show me the results."
+            )
+            
+            print(f"Full response: {response}")
+            
+            # Check if the response contains the correct information
+            if response is None:
                 pytest.skip(f"Model {model} returned None response, skipping validation")
-            else:
-                # For other exceptions, re-raise
-                raise
+            
+            # The tool must be called to get this information
+            assert "get_user_data" in validation_observer.called_functions, f"get_user_data tool was not called. Response: {response}"
+            
+            # Check the correct user ID was used
+            call_args = validation_observer.get_function_call_args("get_user_data")
+            assert call_args, "Function call arguments should not be empty"
+            
+            # Ensure the most recent call used the correct user_id
+            last_call = call_args[-1]
+            print(f"Function call args: {last_call}")
+            assert last_call.get('user_id') == user_id, f"Expected user_id '{user_id}', got '{last_call.get('user_id')}'"
+            
+            # Verify internal counter was incremented
+            assert tools_instance.get_call_count() >= 1, "Tool call count should be at least 1"
+            
+            # The response should contain information from the tool result
+            assert "alex.j@example.com" in response.lower() or "premium" in response.lower(), \
+                f"Response should contain information from the tool result. Response: {response}"
+            
+        except Exception as e:
+            self._handle_test_exception(e, model, validation_observer)
     
     def test_multiple_class_method_tools(self, model, validation_observer, tools_instance):
         """
@@ -266,17 +338,4 @@ class TestClassMethodTools:
                         pytest.skip(f"Model {model} returned None response for multiplication, skipping validation")
             
         except Exception as e:
-            # Handle different model-specific exceptions
-            if "TypeError: 'NoneType' object is not iterable" in str(e):
-                pytest.skip(f"Model {model} returned None response, skipping validation")
-            elif "AssertionError: Function multiply_numbers was not called" in str(e):
-                # If the test fails because multiply_numbers wasn't called, check if add_numbers was used instead
-                if "add_numbers" in validation_observer.called_functions:
-                    # Just verify some tool was called
-                    pass
-                else:
-                    # If no tool was called, fail the test
-                    raise
-            else:
-                # For other exceptions, re-raise
-                raise 
+            self._handle_test_exception(e, model, validation_observer) 

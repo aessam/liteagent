@@ -51,7 +51,8 @@ class ValidationTestHelper:
             "get_weather": "Get the current weather for a city",
             "add_numbers": "Add two numbers together",
             "multiply_numbers": "Multiply two numbers together",
-            "calculate_area": "Calculate the area of a rectangle"
+            "calculate_area": "Calculate the area of a rectangle",
+            "get_user_data": "Retrieve user data for a specific user ID"
         }
         
         prompt = "You are a helpful assistant that can use tools to answer questions.\n\n"
@@ -78,19 +79,41 @@ class ValidationTestHelper:
             if tool_name == "get_weather":
                 if tool_calling_type == ToolCallingType.OPENAI_FUNCTION_CALLING:
                     validation_observer.register_response_parser(
-                        "get_weather", ValidationTestHelper.parse_weather_response_openai
+                        r"weather\s+in\s+([A-Za-z\s]+).*?(\d+)[°℃C].*?(\w+)",
+                        lambda m: {"city": m.group(1), "temperature": m.group(2), "condition": m.group(3)}
                     )
                 elif tool_calling_type == ToolCallingType.ANTHROPIC_TOOL_CALLING:
                     validation_observer.register_response_parser(
-                        "get_weather", ValidationTestHelper.parse_weather_response_anthropic
+                        r"weather\s+in\s+([A-Za-z\s]+).*?(\d+)[°℃C].*?(\w+)",
+                        lambda m: {"city": m.group(1), "temperature": m.group(2), "condition": m.group(3)}
                     )
                 else:
                     validation_observer.register_response_parser(
                         "get_weather", ValidationTestHelper.parse_weather_response_default
                     )
-            elif tool_name in ["add_numbers", "multiply_numbers"]:
+            elif tool_name == "add_numbers":
                 validation_observer.register_response_parser(
-                    tool_name, ValidationTestHelper.parse_number_response
+                    r"(sum|add|total|addition).*?(\d+).*?(\d+).*?=?\s*(\d+)",
+                    lambda m: {"a": int(m.group(2)), "b": int(m.group(3)), "result": int(m.group(4))}
+                )
+            elif tool_name == "multiply_numbers":
+                validation_observer.register_response_parser(
+                    r"(multiply|product|times|multiplication).*?(\d+).*?(\d+).*?=?\s*(\d+)",
+                    lambda m: {"a": int(m.group(2)), "b": int(m.group(3)), "result": int(m.group(4))}
+                )
+            elif tool_name == "get_user_data":
+                # Parse user data responses
+                validation_observer.register_response_parser(
+                    r"(email|e-mail).*?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})",
+                    lambda m: {"email": m.group(2)}
+                )
+                validation_observer.register_response_parser(
+                    r"(subscription|tier).*?(premium|basic|enterprise)", 
+                    lambda m: {"tier": m.group(2)}
+                )
+                validation_observer.register_response_parser(
+                    r"(user|id).*?([a-zA-Z0-9]+)",
+                    lambda m: {"user_id": m.group(2)}
                 )
             elif tool_name == "calculate_area":
                 validation_observer.register_response_parser(

@@ -11,7 +11,7 @@ import litellm
 import uuid
 from typing import Any, Callable, Dict, List, Optional, Union
 
-from .tools import get_tools, get_function_definitions, BaseTool, FunctionTool, InstanceMethodTool, StaticMethodTool
+from .tools import get_function_definitions, BaseTool, FunctionTool, InstanceMethodTool, StaticMethodTool
 from .models import create_model_interface, ModelInterface
 from .memory import ConversationMemory
 from .utils import logger, log_completion_request, log_completion_response
@@ -74,8 +74,8 @@ to provide a final text response to the user."""
             self._register_tools(tools)
         else:
             # Get all registered tools
-            all_tools = get_tools()
-            self._register_tools(all_tools)
+            from .tools import TOOLS
+            self._register_tools(TOOLS)
             
         # Emit initialization event
         self._emit_event(AgentInitializedEvent(

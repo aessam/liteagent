@@ -16,7 +16,7 @@ from liteagent.tool_calling import (
     StructuredOutputHandler, NoopToolCallingHandler,
     get_tool_calling_handler, AutoDetectToolCallingHandler
 )
-from liteagent.tool_calling_config import (
+from liteagent.tool_calling_types import (
     get_provider_from_model, get_tool_calling_type,
     get_tool_calling_handler_type
 )
