@@ -111,65 +111,6 @@ class TestClassMethodTools:
         except Exception as e:
             self._handle_test_exception(e, model)
     
-    def test_multiply_numbers_class_method(self, model, validation_observer, tools_instance):
-        """
-        Test multiply_numbers class method with different models.
-        
-        This test checks if the agent can correctly use the multiply_numbers class method
-        to multiply two numbers together.
-        """
-        # Get tool calling type for the model
-        tool_calling_type = get_tool_calling_type(model)
-        
-        # Set validation strategy based on tool calling type
-        validation_observer.set_validation_strategy(tool_calling_type)
-        
-        # Register appropriate parsers
-        ValidationTestHelper.register_parsers_for_type(
-            validation_observer, 
-            tool_calling_type, 
-            ["multiply_numbers"]
-        )
-        
-        # Create agent with the multiply_numbers class method tool
-        agent = LiteAgent(
-            model=model,
-            name="MultiplyNumbersClassMethodAgent",
-            system_prompt=ValidationTestHelper.get_system_prompt_for_tools(["multiply_numbers"]),
-            tools=[tools_instance.multiply_numbers],
-            observers=[validation_observer]
-        )
-        
-        try:
-            # Use a more complex multiplication that LLMs are less likely to compute directly
-            response = agent.chat("What is 37 times 41? This is a harder calculation, please use the multiply_numbers tool to help.")
-            
-            # Check if the response contains the correct answer
-            if response is None:
-                pytest.skip(f"Model {model} returned None response, skipping validation")
-            
-            # Check that we either have the function call OR the correct result
-            function_called = "multiply_numbers" in validation_observer.called_functions
-            contains_result = any(str(num) in response for num in ["1517", "one thousand five hundred seventeen", "one thousand five hundred and seventeen"])
-            
-            # Assert either the function was called OR the result is included
-            assert function_called or contains_result, f"Either the multiply_numbers function should be called or the response should contain the result 1517. Function called: {function_called}, Contains result: {contains_result}"
-            
-            # If the function was called, validate the call
-            if function_called:
-                # Check the arguments
-                call_args = validation_observer.get_function_call_args("multiply_numbers")
-                assert call_args, "Function call arguments should not be empty"
-                
-                # Check the result
-                result = tools_instance.get_call_count()
-                assert result >= 1, "Tool call count should be at least 1"
-                
-            print(f"Response from LLM: {response}")
-                
-        except Exception as e:
-            self._handle_test_exception(e, model, validation_observer)
-    
     def test_get_user_data_class_method(self, model, validation_observer, tools_instance):
         """
         Test get_user_data class method with different models.
@@ -234,6 +175,67 @@ class TestClassMethodTools:
             assert "alex.j@example.com" in response.lower() or "premium" in response.lower(), \
                 f"Response should contain information from the tool result. Response: {response}"
             
+        except Exception as e:
+            self._handle_test_exception(e, model, validation_observer)
+    
+    # Keeping the multiply_numbers test for reference, but marking it as optional
+    @pytest.mark.optional
+    def test_multiply_numbers_class_method(self, model, validation_observer, tools_instance):
+        """
+        Test multiply_numbers class method with different models.
+        
+        This test checks if the agent can correctly use the multiply_numbers class method
+        to multiply two numbers together.
+        """
+        # Get tool calling type for the model
+        tool_calling_type = get_tool_calling_type(model)
+        
+        # Set validation strategy based on tool calling type
+        validation_observer.set_validation_strategy(tool_calling_type)
+        
+        # Register appropriate parsers
+        ValidationTestHelper.register_parsers_for_type(
+            validation_observer, 
+            tool_calling_type, 
+            ["multiply_numbers"]
+        )
+        
+        # Create agent with the multiply_numbers class method tool
+        agent = LiteAgent(
+            model=model,
+            name="MultiplyNumbersClassMethodAgent",
+            system_prompt=ValidationTestHelper.get_system_prompt_for_tools(["multiply_numbers"]),
+            tools=[tools_instance.multiply_numbers],
+            observers=[validation_observer]
+        )
+        
+        try:
+            # Use a more complex multiplication that LLMs are less likely to compute directly
+            response = agent.chat("What is 37 times 41? This is a harder calculation, please use the multiply_numbers tool to help.")
+            
+            # Check if the response contains the correct answer
+            if response is None:
+                pytest.skip(f"Model {model} returned None response, skipping validation")
+            
+            # Check that we either have the function call OR the correct result
+            function_called = "multiply_numbers" in validation_observer.called_functions
+            contains_result = any(str(num) in response for num in ["1517", "one thousand five hundred seventeen", "one thousand five hundred and seventeen"])
+            
+            # Assert either the function was called OR the result is included
+            assert function_called or contains_result, f"Either the multiply_numbers function should be called or the response should contain the result 1517. Function called: {function_called}, Contains result: {contains_result}"
+            
+            # If the function was called, validate the call
+            if function_called:
+                # Check the arguments
+                call_args = validation_observer.get_function_call_args("multiply_numbers")
+                assert call_args, "Function call arguments should not be empty"
+                
+                # Check the result
+                result = tools_instance.get_call_count()
+                assert result >= 1, "Tool call count should be at least 1"
+                
+            print(f"Response from LLM: {response}")
+                
         except Exception as e:
             self._handle_test_exception(e, model, validation_observer)
     

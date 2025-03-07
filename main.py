@@ -1,9 +1,9 @@
 """
 Main entry point for running LiteAgent from the project root.
-Uses the shared CLI functionality in liteagent/cli.py.
+Uses the CLI functionality from the cli package.
 """
 
-from liteagent.cli import main
+from cli.commands import main
 
 if __name__ == "__main__":
     main()
