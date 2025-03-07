@@ -2,6 +2,15 @@
 
 This document provides detailed information about the classes and functions in the LiteAgent framework.
 
+## Project Organization
+
+LiteAgent is organized with a clean separation of concerns:
+
+- **Core Library**: The `liteagent/` directory contains the core framework code.
+- **Examples**: The `examples/` directory contains example tools and usage patterns.
+- **CLI**: The `cli/` directory contains the command-line interface.
+- **Tests**: The `tests/` directory contains unit and integration tests.
+
 ## Core Components
 
 ### LiteAgent
@@ -37,7 +46,9 @@ The main agent class that orchestrates interactions between the user, model, and
 #### Decorators
 
 ```python
-@tool
+from liteagent.tools import liteagent_tool
+
+@liteagent_tool
 def my_tool(param1: str, param2: int) -> str:
     """Tool docstring"""
     # implementation

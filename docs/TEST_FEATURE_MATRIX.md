@@ -102,3 +102,13 @@ When modifying existing features:
 1. Verify that existing tests still pass
 2. Update tests as needed to match modified functionality
 3. Update this matrix if test names or feature categorizations change 
+
+## Consolidated Tests
+
+| Test File                                | Purpose                                                 | Tool Types                                                | Supported Models                 |
+|-----------------------------------------|---------------------------------------------------------|----------------------------------------------------------|----------------------------------|
+| test_standalone_tools.py                | Tests standalone function tools across model types       | Standalone functions                                     | All supported models             |
+| test_class_method_tools.py              | Tests class method tools across model types              | Class methods (add_numbers, get_user_data)              | All supported models             |
+| test_multi_step_reasoning.py            | Tests multi-step reasoning with multiple tools           | Mix of standalone and class method tools                  | All supported models             |
+| test_multi_agent.py                     | Tests multi-agent communication and routing              | Agent-as-tool pattern                                    | All supported models             |
+| test_validation.py                      | Tests validation patterns and assertions                 | Mix of tool types with validation                         | All supported models             |

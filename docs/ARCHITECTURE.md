@@ -2,6 +2,17 @@
 
 This document outlines the architecture of the LiteAgent framework, focusing on the tool calling system and validation strategies.
 
+## Project Organization
+
+LiteAgent is organized with a clean separation of concerns:
+
+- **Core Library**: The `liteagent/` directory contains the core framework code.
+- **Examples**: The `examples/` directory contains example tools and usage patterns.
+- **CLI**: The `cli/` directory contains the command-line interface.
+- **Tests**: The `tests/` directory contains unit and integration tests.
+
+This organization makes it easy to focus on the core functionality in the liteagent package while keeping examples and CLI functionality separate.
+
 ## Tool Calling Architecture
 
 The tool calling system is designed to support multiple LLM providers with different tool calling mechanisms:

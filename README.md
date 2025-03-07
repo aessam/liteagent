@@ -91,7 +91,7 @@ liteagent --class-methods --model ollama/phi4
 
 ### Using Python module syntax
 
-You can also run LiteAgent using the Python module syntax:
+LiteAgent's CLI has been reorganized for better separation of concerns. You can run it using:
 
 ```bash
 # Show help and available options
@@ -104,47 +104,46 @@ python -m liteagent --model gpt-4o-mini
 python -m liteagent --class-methods --model ollama/phi4
 ```
 
+You can also run the CLI directly from the cli directory:
+
+```bash
+# Run the CLI directly
+python cli/main.py --model gpt-4o-mini
+```
+
 ### Available command-line options
 
 ```bash
 # Run all examples with the default model (gpt-3.5-turbo)
-liteagent
+python -m liteagent
 
 # Run with a specific model
-liteagent --model gpt-4o-mini
+python -m liteagent --model gpt-4o-mini
 
 # Run only the class methods example
-liteagent --class-methods --model ollama/phi4
-
-# Run only the custom agents example
-liteagent --custom-agents
-
-# Use Ollama for local inference (automatically prepends 'ollama/' to model name)
-liteagent --ollama --model phi4
-
-# Show version information
-liteagent --version
-
-# Enable debug mode
-liteagent --debug
-
-# Log to file
-liteagent --log-file
+python -m liteagent --class-methods --model ollama/phi4
 ```
 
-### Command-Line Arguments
+For more details on examples and CLI usage, see the [Examples and CLI Documentation](docs/examples_and_cli.md).
 
-| Argument | Description |
-|----------|-------------|
-| `--model MODEL` | Model to use for the agent (default: gpt-3.5-turbo) |
-| `--class-methods` | Run only the class methods example |
-| `--custom-agents` | Run only the custom agents example |
-| `--all` | Run all examples (default behavior) |
-| `--ollama` | Use Ollama for local inference (automatically prepends 'ollama/' to model name if needed) |
-| `--debug` | Enable debug mode with verbose logging |
-| `--log-file` | Log output to a file in addition to console |
-| `--version` | Show version information and exit |
-| `--help` | Show help message and exit |
+### Available Command-Line Arguments
+
+The following command-line arguments are available:
+
+- `--model MODEL`: Model to use (e.g., gpt-4o-mini, ollama/phi4)
+- `--class-methods`: Run only the class methods example
+- `--custom-agents`: Run only the custom agents example
+- `--all`: Run all examples (default behavior)
+- `--ollama`: Use Ollama for local inference (automatically prepends 'ollama/' to model name)
+- `--debug`: Enable debug mode with verbose logging
+- `--debug-litellm`: Enable debug mode for LiteLLM
+- `--log-file`: Log output to a file
+- `--no-color`: Disable colored log output
+- `--enable-observability`: Enable observability features
+- `--version`: Show version information and exit
+- `--help`: Show help message and exit
+
+For more details on examples and CLI usage, see the [Examples and CLI Documentation](docs/examples_and_cli.md).
 
 ## Creating Agents with Custom Tools
 

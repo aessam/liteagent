@@ -178,7 +178,6 @@ class TestClassMethodTools:
         except Exception as e:
             self._handle_test_exception(e, model, validation_observer)
     
-    # Keeping the multiply_numbers test for reference, but marking it as optional
     @pytest.mark.optional
     def test_multiply_numbers_class_method(self, model, validation_observer, tools_instance):
         """
@@ -204,25 +203,25 @@ class TestClassMethodTools:
         agent = LiteAgent(
             model=model,
             name="MultiplyNumbersClassMethodAgent",
-            system_prompt=ValidationTestHelper.get_system_prompt_for_tools(["multiply_numbers"]),
+            system_prompt=ValidationTestHelper.get_system_prompt_for_tools(["multiply_numbers"]) + "\nIMPORTANT: DO NOT attempt to calculate the answer yourself. The numbers are intentionally large and will result in errors if you try. You MUST use the multiply_numbers tool.",
             tools=[tools_instance.multiply_numbers],
             observers=[validation_observer]
         )
         
         try:
-            # Use a more complex multiplication that LLMs are less likely to compute directly
-            response = agent.chat("What is 37 times 41? This is a harder calculation, please use the multiply_numbers tool to help.")
+            # Use an extremely difficult multiplication that LLMs cannot compute directly
+            response = agent.chat("What is 1299792458 times 6626070040? This is an intentionally difficult calculation to test the multiply_numbers tool. Do NOT try to calculate this yourself - use the multiply_numbers tool.")
             
             # Check if the response contains the correct answer
             if response is None:
                 pytest.skip(f"Model {model} returned None response, skipping validation")
             
-            # Check that we either have the function call OR the correct result
+            # Only check that the function was called - don't try to verify the result in the response
+            # as it's too complex to extract reliably
             function_called = "multiply_numbers" in validation_observer.called_functions
-            contains_result = any(str(num) in response for num in ["1517", "one thousand five hundred seventeen", "one thousand five hundred and seventeen"])
             
-            # Assert either the function was called OR the result is included
-            assert function_called or contains_result, f"Either the multiply_numbers function should be called or the response should contain the result 1517. Function called: {function_called}, Contains result: {contains_result}"
+            # Assert the function was called - we're only testing tool usage, not response quality
+            assert function_called, f"The multiply_numbers function should be called. Function called: {function_called}"
             
             # If the function was called, validate the call
             if function_called:

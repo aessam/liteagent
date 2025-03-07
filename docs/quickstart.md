@@ -8,6 +8,15 @@ This guide will help you get started with LiteAgent, a lightweight agent framewo
 pip install liteagent
 ```
 
+## Project Structure
+
+LiteAgent is organized with a clean separation of concerns:
+
+- **Core Library**: The `liteagent/` directory contains the core framework code.
+- **Examples**: The `examples/` directory contains example tools and usage patterns.
+- **CLI**: The `cli/` directory contains the command-line interface.
+- **Tests**: The `tests/` directory contains unit and integration tests.
+
 ## Basic Usage
 
 ### Creating a Simple Agent
@@ -30,10 +39,11 @@ print(response)
 ### Using Tools with an Agent
 
 ```python
-from liteagent import LiteAgent, tool
+from liteagent import LiteAgent
+from liteagent.tools import liteagent_tool
 
 # Define tools (functions) for the agent to use
-@tool
+@liteagent_tool
 def get_weather(city: str, date: str = "today") -> str:
     """
     Get the weather for a city.
@@ -48,7 +58,7 @@ def get_weather(city: str, date: str = "today") -> str:
     # In a real application, you would call a weather API here
     return f"The weather in {city} on {date} is sunny and 75°F"
 
-@tool
+@liteagent_tool
 def add_numbers(a: float, b: float) -> float:
     """
     Add two numbers.
@@ -78,8 +88,14 @@ print(response)
 ### Using Observability
 
 ```python
-from liteagent import LiteAgent, ConsoleObserver, TreeTraceObserver
-from liteagent.tools import get_weather
+from liteagent import LiteAgent
+from liteagent.observer import ConsoleObserver, TreeTraceObserver
+from liteagent.tools import liteagent_tool
+
+@liteagent_tool
+def get_weather(city: str) -> str:
+    """Get weather information for a city."""
+    return f"The weather in {city} is sunny and 75°F"
 
 # Create observers
 console_observer = ConsoleObserver()
@@ -107,7 +123,17 @@ print(trace)
 
 ```python
 from liteagent import LiteAgent
-from liteagent.tools import get_weather, add_numbers
+from liteagent.tools import liteagent_tool
+
+@liteagent_tool
+def get_weather(city: str) -> str:
+    """Get weather information for a city."""
+    return f"The weather in {city} is sunny and 75°F"
+
+@liteagent_tool
+def add_numbers(a: float, b: float) -> float:
+    """Add two numbers together."""
+    return a + b
 
 # Create specialized agents
 weather_agent = LiteAgent(
@@ -140,8 +166,30 @@ response = router_agent.chat("What's the weather in Tokyo and what is 25 + 17?")
 print(response)
 ```
 
+## Using Example Tools
+
+LiteAgent comes with example tools that you can use directly:
+
+```python
+from liteagent import LiteAgent
+from examples.tools import get_weather, add_numbers, search_database
+
+# Create an agent with the example tools
+agent = LiteAgent(
+    model="gpt-4o-mini",
+    name="ExampleToolsAgent",
+    system_prompt="You are a helpful assistant that can use various tools.",
+    tools=[get_weather, add_numbers, search_database]
+)
+
+# Chat with the agent
+response = agent.chat("What's the weather in Paris and what is 15 + 27?")
+print(response)
+```
+
 ## Next Steps
 
 - Explore the [API Reference](api_reference.md) for detailed information about LiteAgent classes and methods
-- Check out the [Examples](examples.md) for more advanced use cases
+- Check out the [Examples](examples/) directory for more advanced use cases
+- See [Examples and CLI](examples_and_cli.md) for details on example tools and the command-line interface
 - Learn about [Model Support](model_support.md) to understand which LLM providers and models are supported 
