@@ -16,6 +16,7 @@ A lightweight agent framework using LiteLLM for LLM interactions.
   - Standalone functions
   - Instance methods
   - Static methods
+  - Decorated functions and methods with `@liteagent_tool`
 - **New**: Comprehensive observability layer with:
   - Context ID tracking for multi-agent systems
   - Parent-child relationship tracking between agents
@@ -54,10 +55,11 @@ pip install -e .
 ## Quick Start
 
 ```python
-from liteagent import LiteAgent, tool
+from liteagent import LiteAgent
+from liteagent.tools import liteagent_tool
 
-# Define a tool using the @tool decorator
-@tool
+# Define a tool using the decorator
+@liteagent_tool
 def add_numbers(a: int, b: int) -> int:
     """Adds two numbers together."""
     return a + b
@@ -72,7 +74,7 @@ print(response)
 
 ## Command-Line Usage
 
-LiteAgent comes with a command-line interface that can be used in multiple ways:
+LiteAgent comes with a command-line interface that follows a command-based structure:
 
 ### Using the installed liteagent command
 
@@ -82,66 +84,70 @@ After installation, you can use the `liteagent` command directly:
 # Show help and available options
 liteagent --help
 
-# Run with a specific model
-liteagent --model gpt-4o-mini
+# Run examples with a specific model
+liteagent run --model gpt-4o-mini
 
 # Run only the class methods example
-liteagent --class-methods --model ollama/phi4
+liteagent run --class-methods --model ollama/phi4
+
+# View sample tool definitions
+liteagent tools --sample-output
 ```
 
 ### Using Python module syntax
 
-LiteAgent's CLI has been reorganized for better separation of concerns. You can run it using:
+You can run the CLI using Python module syntax:
 
 ```bash
 # Show help and available options
 python -m liteagent --help
 
-# Run with a specific model
-python -m liteagent --model gpt-4o-mini
+# Run examples with a specific model
+python -m liteagent run --model gpt-4o-mini
 
 # Run only the class methods example
-python -m liteagent --class-methods --model ollama/phi4
+python -m liteagent run --class-methods --model ollama/phi4
+
+# View sample tool definitions
+python -m liteagent tools --sample-output
 ```
 
-You can also run the CLI directly from the cli directory:
+### Available Commands
+
+The CLI now follows a command-based structure with these main commands:
 
 ```bash
-# Run the CLI directly
-python cli/main.py --model gpt-4o-mini
+# Run examples (with various options)
+python -m liteagent run --model gpt-4o-mini [options]
+
+# Tool-related operations
+python -m liteagent tools --sample-output
+
+# Show version information
+python -m liteagent --version
 ```
-
-### Available command-line options
-
-```bash
-# Run all examples with the default model (gpt-3.5-turbo)
-python -m liteagent
-
-# Run with a specific model
-python -m liteagent --model gpt-4o-mini
-
-# Run only the class methods example
-python -m liteagent --class-methods --model ollama/phi4
-```
-
-For more details on examples and CLI usage, see the [Examples and CLI Documentation](docs/examples_and_cli.md).
 
 ### Available Command-Line Arguments
 
 The following command-line arguments are available:
 
+#### Global options (work with any command)
+- `--version`: Show version information and exit
+- `--debug`: Enable debug mode with verbose logging
+- `--debug-litellm`: Enable debug mode for LiteLLM
+- `--log-file`: Log output to a file
+- `--no-color`: Disable colored log output
+
+#### Run command options
 - `--model MODEL`: Model to use (e.g., gpt-4o-mini, ollama/phi4)
 - `--class-methods`: Run only the class methods example
 - `--custom-agents`: Run only the custom agents example
 - `--all`: Run all examples (default behavior)
 - `--ollama`: Use Ollama for local inference (automatically prepends 'ollama/' to model name)
-- `--debug`: Enable debug mode with verbose logging
-- `--debug-litellm`: Enable debug mode for LiteLLM
-- `--log-file`: Log output to a file
-- `--no-color`: Disable colored log output
 - `--enable-observability`: Enable observability features
-- `--version`: Show version information and exit
-- `--help`: Show help message and exit
+
+#### Tools command options
+- `--sample-output` or `-so`: Display sample tool definitions as they would be sent to the LLM
 
 For more details on examples and CLI usage, see the [Examples and CLI Documentation](docs/examples_and_cli.md).
 
@@ -150,15 +156,16 @@ For more details on examples and CLI usage, see the [Examples and CLI Documentat
 You can create multiple agents with different system prompts and tool sets:
 
 ```python
-from liteagent import LiteAgent, tool
+from liteagent import LiteAgent
+from liteagent.tools import liteagent_tool
 
 # Define tools
-@tool
+@liteagent_tool
 def add_numbers(a: int, b: int) -> int:
     """Adds two numbers together."""
     return a + b
 
-@tool
+@liteagent_tool
 def get_weather(city: str) -> str:
     """Returns weather information for a city."""
     return f"The weather in {city} is 22°C and sunny."
@@ -190,19 +197,23 @@ LiteAgent supports using class methods as tools, which is useful for organizing 
 
 ```python
 from liteagent import LiteAgent
+from liteagent.tools import liteagent_tool
 
 class ToolsForAgents:
     def __init__(self, api_key=None):
         self.api_key = api_key
         
+    @liteagent_tool
     def add_numbers(self, a: int, b: int) -> int:
         """Adds two numbers together."""
         return a + b
         
+    @liteagent_tool
     def multiply_numbers(self, a: int, b: int) -> int:
         """Multiplies two numbers together."""
         return a * b
         
+    @liteagent_tool
     def get_weather(self, city: str) -> str:
         """Gets weather for a city using API key if provided."""
         if self.api_key:
@@ -214,7 +225,7 @@ class ToolsForAgents:
 # Create an instance of the tools class
 tools_instance = ToolsForAgents(api_key="your-api-key-here")
 
-# Create an agent with class methods as tools
+# Create an agent with decorated class methods as tools
 agent = LiteAgent(
     model="gpt-3.5-turbo",
     name="MathWeatherAgent",
@@ -233,12 +244,12 @@ print(response)
 
 ### Custom Tool Registration
 
-You can use the enhanced `register_tool` decorator to customize tool names and descriptions:
+You can use the `liteagent_tool` decorator to customize tool names and descriptions:
 
 ```python
-from liteagent import register_tool
+from liteagent.tools import liteagent_tool
 
-@register_tool(name="calculate_sum", description="Calculate the sum of two numbers")
+@liteagent_tool(name="calculate_sum", description="Calculate the sum of two numbers")
 def add_numbers(a: int, b: int) -> int:
     return a + b
 ```
@@ -248,7 +259,7 @@ def add_numbers(a: int, b: int) -> int:
 You can create tools directly using the tool classes:
 
 ```python
-from liteagent import FunctionTool, InstanceMethodTool
+from liteagent.tools import FunctionTool, InstanceMethodTool
 
 # Create a function tool
 def multiply(a: int, b: int) -> int:
@@ -263,21 +274,6 @@ class Calculator:
         
 calc = Calculator()
 add_tool = InstanceMethodTool(calc.add, calc, name="addition")
-```
-
-### Model Interface Selection
-
-You can directly use the model interfaces:
-
-```python
-from liteagent import create_model_interface
-
-# Create the appropriate model interface based on the model name
-model_interface = create_model_interface("gpt-4o-mini")
-
-# Or create a specific interface
-from liteagent import TextBasedFunctionCallingModel
-text_model = TextBasedFunctionCallingModel("ollama/phi4")
 ```
 
 ## Advanced Features

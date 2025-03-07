@@ -38,11 +38,15 @@ print(response)
 
 ### Using Tools with an Agent
 
+There are multiple ways to define tools for your agent:
+
+#### Using the Decorator Approach (Recommended)
+
 ```python
 from liteagent import LiteAgent
 from liteagent.tools import liteagent_tool
 
-# Define tools (functions) for the agent to use
+# Define tools using the decorator
 @liteagent_tool
 def get_weather(city: str, date: str = "today") -> str:
     """
@@ -78,6 +82,38 @@ agent = LiteAgent(
     name="ToolAgent",
     system_prompt="You are a helpful assistant that can check weather and do math.",
     tools=[get_weather, add_numbers]
+)
+
+# Chat with the agent
+response = agent.chat("What's the weather in Tokyo and what is 25 plus 17?")
+print(response)
+```
+
+#### Using Explicit Tool Classes
+
+```python
+from liteagent import LiteAgent
+from liteagent.tools import FunctionTool
+
+# Define functions
+def get_weather(city: str, date: str = "today") -> str:
+    """Get the weather for a city."""
+    return f"The weather in {city} on {date} is sunny and 75°F"
+
+def add_numbers(a: float, b: float) -> float:
+    """Add two numbers."""
+    return a + b
+
+# Create tool objects
+weather_tool = FunctionTool(get_weather)
+add_tool = FunctionTool(add_numbers)
+
+# Create an agent with tool objects
+agent = LiteAgent(
+    model="gpt-4o-mini",
+    name="ToolAgent",
+    system_prompt="You are a helpful assistant that can check weather and do math.",
+    tools=[weather_tool, add_tool]
 )
 
 # Chat with the agent
@@ -164,6 +200,79 @@ router_agent = LiteAgent(
 # Chat with the router agent
 response = router_agent.chat("What's the weather in Tokyo and what is 25 + 17?")
 print(response)
+```
+
+### Using Class Methods as Tools
+
+```python
+from liteagent import LiteAgent
+from liteagent.tools import liteagent_tool
+
+class WeatherService:
+    def __init__(self, api_key=None):
+        self.api_key = api_key
+        
+    @liteagent_tool
+    def get_current_weather(self, city: str) -> str:
+        """Get current weather for a city."""
+        # In a real app, you would use the API key to call a weather API
+        return f"The weather in {city} is sunny and 75°F"
+        
+    @liteagent_tool
+    def get_forecast(self, city: str, days: int = 3) -> list:
+        """Get weather forecast for a city."""
+        # Mock implementation
+        return [f"Day {i+1}: Sunny, {70+i}°F" for i in range(days)]
+        
+    @liteagent_tool(
+        name="historical_weather",
+        description="Get historical weather data for a location"
+    )
+    def get_historical(self, city: str, date: str) -> dict:
+        """Get historical weather for a specific date."""
+        return {
+            "city": city,
+            "date": date,
+            "temperature": "72°F",
+            "conditions": "Partly cloudy"
+        }
+
+# Create service instance
+weather_service = WeatherService(api_key="demo-api-key")
+
+# Create an agent with decorated class methods as tools
+agent = LiteAgent(
+    model="gpt-4o-mini",
+    name="WeatherAgent",
+    system_prompt="You are a helpful weather assistant.",
+    tools=[
+        weather_service.get_current_weather,
+        weather_service.get_forecast,
+        weather_service.get_historical
+    ]
+)
+
+# Chat with the agent
+response = agent.chat("What's the weather in Paris?")
+print(response)
+```
+
+## Command-Line Usage
+
+LiteAgent provides a command-based CLI for running examples and viewing tool definitions:
+
+```bash
+# Show help
+python -m liteagent --help
+
+# Run examples with a specific model
+python -m liteagent run --model gpt-4o-mini
+
+# View sample tool definitions
+python -m liteagent tools --sample-output
+
+# Run only the class methods example
+python -m liteagent run --class-methods --model gpt-4o-mini
 ```
 
 ## Using Example Tools
