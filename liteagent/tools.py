@@ -71,15 +71,71 @@ class BaseTool:
         """
         self.func = func
         self.name = name or func.__name__
-        self.description = description or func.__doc__ or f"Execute {self.name}"
+        self.raw_description = description or func.__doc__ or f"Execute {self.name}"
+        self.description = self._clean_docstring(self.raw_description)
         self.schema = self._create_schema()
+        
+    def _clean_docstring(self, docstring: str) -> str:
+        """
+        Clean and format a docstring for use in tool definitions.
+        
+        This removes excessive whitespace, normalizes indentation, and
+        formats the docstring to be more readable when sent to LLMs.
+        """
+        if not docstring:
+            return f"Execute {self.name}"
+        
+        # Split by lines and remove empty lines at start/end
+        lines = docstring.split('\n')
+        while lines and not lines[0].strip():
+            lines.pop(0)
+        while lines and not lines[-1].strip():
+            lines.pop()
+            
+        if not lines:
+            return f"Execute {self.name}"
+        
+        # Determine the indentation level (from the first non-empty line)
+        indent = 0
+        for line in lines:
+            if line.strip():
+                # Count leading spaces
+                indent = len(line) - len(line.lstrip())
+                break
+        
+        # Remove common indentation from all lines
+        cleaned_lines = []
+        for line in lines:
+            if line.strip():  # If line is not empty
+                # Remove only up to 'indent' spaces to preserve nested indentation
+                if len(line) > indent and line[:indent].isspace():
+                    cleaned_lines.append(line[indent:])
+                else:
+                    cleaned_lines.append(line.lstrip())
+            else:
+                cleaned_lines.append("")  # Keep empty lines for paragraph breaks
+                
+        # Join lines and cleanup extra whitespace
+        result = '\n'.join(cleaned_lines)
+        
+        # If the result has "Args:" or similar sections, simplify for the main description
+        # by taking just the first paragraph
+        if "Args:" in result or "Parameters:" in result or "Returns:" in result:
+            # Extract just the first paragraph for the description
+            first_para_end = result.find("\n\n")
+            if first_para_end > 0:
+                result = result[:first_para_end]
+        
+        return result.strip()
         
     def _create_schema(self) -> Type[BaseModel]:
         """Create a Pydantic model from the function signature."""
         sig = inspect.signature(self.func)
         fields = self._get_schema_fields(sig)
         ToolSchema = create_model(self.name + "Schema", **fields)
-        ToolSchema.__doc__ = self.description
+        
+        # Add docstring to the schema
+        ToolSchema.__doc__ = self.raw_description
         return ToolSchema
     
     def _get_schema_fields(self, sig: inspect.Signature) -> Dict:
@@ -102,10 +158,17 @@ class BaseTool:
     
     def to_function_definition(self) -> Dict:
         """Convert tool to function definition compatible with LLM APIs."""
+        schema_dict = self.schema.model_json_schema()
+        
+        # Replace schema description with our cleaned description to avoid duplication
+        if 'description' in schema_dict:
+            # Use a concise version in the parameters section
+            pass  # Keep the schema description for parameter details
+        
         return {
             "name": self.name,
             "description": self.description,
-            "parameters": self.schema.model_json_schema()  # Convert Pydantic model to JSON schema
+            "parameters": schema_dict
         }
         
     def to_dict(self) -> Dict:
