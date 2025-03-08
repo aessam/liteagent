@@ -16,17 +16,27 @@ class ToolCallingType(Enum):
     # No tool calling support
     NONE = auto()
     
-    # OpenAI-style function calling (includes Groq and compatible models)
-    OPENAI_FUNCTION_CALLING = auto()
+    # OpenAI-style function calling (includes compatible models)
+    OPENAI = auto()
+    OPENAI_FUNCTION_CALLING = OPENAI  # Legacy alias for backward compatibility
     
     # Anthropic-style tool calling
-    ANTHROPIC_TOOL_CALLING = auto()
+    ANTHROPIC = auto()
+    ANTHROPIC_TOOL_CALLING = ANTHROPIC  # Legacy alias for backward compatibility
     
-    # Generic JSON output parsing (for models like Ollama that use text-based approaches)
-    OLLAMA_TOOL_CALLING = auto()
+    # Groq style (OpenAI-compatible, but explicitly for Groq models)
+    GROQ = auto()
+    
+    # Generic JSON output parsing for models that use text-based approaches
+    OLLAMA = auto()
+    OLLAMA_TOOL_CALLING = OLLAMA  # Legacy alias for backward compatibility
+    
+    # Simple text-based function call patterns
+    TEXT_BASED = auto()
     
     # Handles models that need specific prompting to return structured outputs
-    PROMPT_BASED = auto()
+    STRUCTURED_OUTPUT = auto()
+    PROMPT_BASED = STRUCTURED_OUTPUT  # Legacy alias for backward compatibility
 
 
 def string_to_tool_calling_type(type_str: str) -> ToolCallingType:
@@ -45,18 +55,22 @@ def string_to_tool_calling_type(type_str: str) -> ToolCallingType:
     type_str = type_str.upper()
     
     if type_str in ("OPENAI", "OPENAI_FUNCTION_CALLING"):
-        return ToolCallingType.OPENAI_FUNCTION_CALLING
+        return ToolCallingType.OPENAI
     elif type_str in ("ANTHROPIC", "ANTHROPIC_TOOL_CALLING"):
-        return ToolCallingType.ANTHROPIC_TOOL_CALLING
-    elif type_str in ("OLLAMA_TOOL_CALLING", "OLLAMA"):
-        return ToolCallingType.OLLAMA_TOOL_CALLING
-    elif type_str in ("TEXT_BASED", "PROMPT_BASED"):
-        return ToolCallingType.PROMPT_BASED
-    elif type_str == "NONE":
+        return ToolCallingType.ANTHROPIC
+    elif type_str in ("GROQ"):
+        return ToolCallingType.GROQ
+    elif type_str in ("OLLAMA", "OLLAMA_TOOL_CALLING"):
+        return ToolCallingType.OLLAMA
+    elif type_str in ("TEXT_BASED"):
+        return ToolCallingType.TEXT_BASED
+    elif type_str in ("STRUCTURED_OUTPUT", "PROMPT_BASED"):
+        return ToolCallingType.STRUCTURED_OUTPUT
+    elif type_str in ("NONE"):
         return ToolCallingType.NONE
     else:
-        # Default to prompt-based for unknown types
-        return ToolCallingType.PROMPT_BASED
+        # Default to None for unknown types
+        return ToolCallingType.NONE
 
 
 # Path to the capabilities configuration file

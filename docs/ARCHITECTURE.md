@@ -1,6 +1,96 @@
 # LiteAgent Architecture
 
-This document outlines the architecture of the LiteAgent framework, focusing on the tool calling system and validation strategies.
+This document describes the high-level architecture of the LiteAgent library.
+
+## Core Components
+
+LiteAgent is organized around these key components:
+
+- `LiteAgent`: The main agent class that coordinates interactions between tools and LLMs
+- `Models`: Interfaces for different LLM providers
+- `Tools`: Registry and implementation of tools (functions) that agents can use
+- `Memory`: Conversation history management
+- `Observer`: Event notification system for monitoring agent behavior
+
+## Tool Calling
+
+LiteAgent supports multiple different tool calling strategies:
+
+### Tool Calling Types
+
+The `ToolCallingType` enum defines the different types of tool calling:
+
+- `NONE`: No tool calling support
+- `OPENAI`: OpenAI-style function calling (includes Groq and compatible models)
+- `ANTHROPIC`: Anthropic-style tool calling
+- `GROQ`: Groq-specific tool calling
+- `OLLAMA`: Generic JSON output parsing for Ollama models
+- `TEXT_BASED`: Simple text-based function call patterns
+- `STRUCTURED_OUTPUT`: Models that need specific prompting to return structured outputs
+
+### Tool Calling Handlers
+
+Tool calls are handled by specialized handler classes in the `handlers` module:
+
+- `OpenAIToolCallingHandler`: Handles OpenAI-style function calling
+- `AnthropicToolCallingHandler`: Handles Anthropic-style tool calling
+- `GroqToolCallingHandler`: Handles Groq-specific function calling
+- `OllamaToolCallingHandler`: Handles Ollama-style tool calling
+- `TextBasedToolCallingHandler`: Handles text-based function calling
+- `StructuredOutputHandler`: Handles structured output tool calling
+- `NoopToolCallingHandler`: Used when no tool calling is supported
+- `AutoDetectToolCallingHandler`: Auto-detects the appropriate handler based on the response
+
+## Agent-Tool Interaction Flow
+
+1. Agent receives a user input
+2. Agent prepares LLM request with tools and conversation history
+3. LLM response is processed to extract potential tool calls
+4. If a tool call is detected:
+   - Tool is executed with the provided arguments
+   - Result is added to the conversation history
+   - Updated conversation is sent back to the LLM
+5. Final LLM response is returned to the user
+
+## Multi-Agent Composition
+
+LiteAgent supports creating multiple agents that can interact with each other:
+
+```python
+manager = LiteAgent(model="gpt-4", name="manager")
+coder = LiteAgent(model="claude-3-opus", name="coder", parent_context_id=manager.context_id)
+tester = LiteAgent(model="gpt-3.5-turbo", name="tester", parent_context_id=manager.context_id)
+
+# Agents can now coordinate through the manager
+```
+
+## Observer Pattern
+
+The observer pattern allows tracking agent behavior and integrating with external systems:
+
+```python
+observer = AgentObserver()
+observer.register_callback(AgentEvent.MODEL_RESPONSE, my_callback_function)
+
+agent = LiteAgent(model="gpt-4", observers=[observer])
+```
+
+Events include:
+- Agent initialization
+- User messages
+- Model requests/responses
+- Function calls/results
+- Agent responses
+
+## Memory Management
+
+The `ConversationMemory` class manages conversation history, including:
+- System prompts
+- User messages
+- Assistant messages
+- Function calls and results
+
+The memory system also tracks tool usage to detect potential loops and repetitive behaviors.
 
 ## Project Organization
 
@@ -13,21 +103,7 @@ LiteAgent is organized with a clean separation of concerns:
 
 This organization makes it easy to focus on the core functionality in the liteagent package while keeping examples and CLI functionality separate.
 
-## Tool Calling Architecture
-
-The tool calling system is designed to support multiple LLM providers with different tool calling mechanisms:
-
-### Tool Calling Types
-
-The `ToolCallingType` enum in `liteagent/tool_calling_types.py` defines the different types of tool calling supported:
-
-- `NONE`: No tool calling support
-- `OPENAI_FUNCTION_CALLING`: OpenAI-style function calling (includes Groq and compatible models)
-- `ANTHROPIC_TOOL_CALLING`: Anthropic-style tool calling
-- `OLLAMA_TOOL_CALLING`: Generic JSON output parsing (for models like Ollama that use text-based approaches)
-- `PROMPT_BASED`: Handles models that need specific prompting to return structured outputs
-
-### Model Capabilities Registry
+## Model Capabilities Registry
 
 The `MODEL_CAPABILITIES` dictionary in `liteagent/tool_calling_types.py` maps model names to their capabilities, including:
 
@@ -36,35 +112,6 @@ The `MODEL_CAPABILITIES` dictionary in `liteagent/tool_calling_types.py` maps mo
 - `max_tools_per_request`: The maximum number of tools that can be included in a single request
 
 These capabilities are also stored in `model_capabilities.json` for easier maintenance, and additional utility functions for managing model capabilities are available in `liteagent/model_capabilities.py`.
-
-### Tool Calling Handlers
-
-The `ToolCallingHandler` class hierarchy in `liteagent/tool_calling.py` provides implementations for different tool calling types:
-
-- `OpenAIToolCallingHandler`: For OpenAI-compatible function calling
-- `AnthropicToolCallingHandler`: For Anthropic-style tool calling
-- `OllamaToolCallingHandler`: For JSON extraction from Ollama and similar models
-- `TextBasedToolCallingHandler`: For prompt-based tool calling
-- `NoopToolCallingHandler`: For models that don't support tool calling
-
-## Agent Architecture
-
-The agent architecture is built around the core `LiteAgent` class:
-
-### Core Agent Components
-
-- `LiteAgent`: The main agent class that handles conversation flow, tool calling, and memory management
-- `Memory`: Manages conversation history and token tracking
-- `AgentTool`: Wraps standalone tools or class methods as tools for agent use
-
-### Multi-Agent Support
-
-The framework supports creating hierarchies of agents that can communicate:
-
-- Parent agents can delegate tasks to child agents
-- Context can be propagated from parent to child
-- Specialized agents can handle specific tools or tasks
-- Agent routing allows distribution of tasks based on capabilities
 
 ## Validation Architecture
 

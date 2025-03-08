@@ -1,156 +1,172 @@
 """
-Model capabilities management.
+Model capabilities registry and detection module.
 
-This module provides utilities for managing model capabilities stored in JSON format,
-including loading, saving, and retrieving capability information.
+This module provides functions for detecting and registering model capabilities,
+including tool calling support and other features.
 """
 
 import json
 import os
-from typing import Dict, Any, Optional, List
+import re
+from enum import Enum
+from typing import Dict, Optional, Any, List, Union, Set
 
-from .tool_calling_types import (
-    ToolCallingType, 
-    get_model_capabilities as get_model_caps_from_module,
-    string_to_tool_calling_type
-)
-from .utils import logger
+from .tool_calling_types import ToolCallingType
 
-# Path to the capabilities configuration file
-CAPABILITIES_FILE = os.path.join(os.path.dirname(__file__), "model_capabilities.json")
+# Load model capabilities from JSON file
+_CAPABILITIES_FILE = os.path.join(os.path.dirname(__file__), "model_capabilities.json")
+_MODEL_CAPABILITIES = {}
 
-# Global capabilities cache
-_capabilities_cache = None
+try:
+    with open(_CAPABILITIES_FILE, "r") as f:
+        _MODEL_CAPABILITIES = json.load(f)
+except Exception as e:
+    # Fail gracefully and use empty dict if file can't be loaded
+    print(f"Error loading model capabilities: {e}")
 
-def get_tool_calling_type_from_str(type_str: str) -> ToolCallingType:
+
+def enum_to_string(enum_val: Enum) -> str:
     """
-    Convert a string representation of tool calling type to enum.
+    Convert an enum value to its string representation.
     
     Args:
-        type_str: String representation of tool calling type
+        enum_val: The enum value to convert
         
     Returns:
-        ToolCallingType enum value
+        The string representation of the enum value
     """
-    # Use the consolidated helper function
-    return string_to_tool_calling_type(type_str)
-
-def get_str_from_tool_calling_type(enum_val: ToolCallingType) -> str:
-    """
-    Convert a ToolCallingType enum to a string representation for JSON.
-    
-    Args:
-        enum_val: The ToolCallingType enum value
-        
-    Returns:
-        str: String representation of the enum
-    """
-    if enum_val == ToolCallingType.OPENAI_FUNCTION_CALLING:
-        return "OPENAI_FUNCTION_CALLING"
-    elif enum_val == ToolCallingType.ANTHROPIC_TOOL_CALLING:
-        return "ANTHROPIC_TOOL_CALLING"
-    elif enum_val == ToolCallingType.OLLAMA_TOOL_CALLING:
-        return "OLLAMA_TOOL_CALLING"
-    elif enum_val == ToolCallingType.PROMPT_BASED:
-        return "PROMPT_BASED"
+    if enum_val == ToolCallingType.OPENAI:
+        return "OPENAI"
+    elif enum_val == ToolCallingType.ANTHROPIC:
+        return "ANTHROPIC"
+    elif enum_val == ToolCallingType.OLLAMA:
+        return "OLLAMA"
+    elif enum_val == ToolCallingType.STRUCTURED_OUTPUT:
+        return "STRUCTURED_OUTPUT"
+    elif enum_val == ToolCallingType.TEXT_BASED:
+        return "TEXT_BASED"
+    elif enum_val == ToolCallingType.GROQ:
+        return "GROQ"
     elif enum_val == ToolCallingType.NONE:
         return "NONE"
     else:
-        return "UNKNOWN"
+        return str(enum_val)
 
-def save_capabilities_to_json(capabilities_dict: Dict[str, Dict[str, Any]] = None) -> bool:
+
+def _matches_pattern(model_name: str, pattern: str) -> bool:
     """
-    Save the given capabilities dictionary (or the current loaded one) to the JSON file.
+    Check if a model name matches a pattern using regular expressions.
     
     Args:
-        capabilities_dict: Dictionary of model capabilities to save, or None to use current ones
+        model_name: The model name to check
+        pattern: The pattern to match against
         
     Returns:
-        bool: True if successful, False otherwise
+        True if the model name matches the pattern
     """
     try:
-        # If no dict provided, get the current capabilities from the module
-        if capabilities_dict is None:
-            from .tool_calling_types import MODEL_CAPABILITIES
-            capabilities_dict = MODEL_CAPABILITIES
-        
-        # Convert ToolCallingType enum to string representation for JSON serialization
-        serializable_capabilities = {}
-        for model, caps in capabilities_dict.items():
-            serializable_capabilities[model] = caps.copy()
-            if "tool_calling_type" in caps:
-                serializable_capabilities[model]["tool_calling_type"] = get_str_from_tool_calling_type(caps["tool_calling_type"])
-        
-        with open(CAPABILITIES_FILE, "w") as f:
-            json.dump({"model_capabilities": serializable_capabilities}, f, indent=2)
-        return True
-    except Exception as e:
-        logger.error(f"Error saving model capabilities to JSON: {e}")
+        return bool(re.match(pattern, model_name))
+    except:
+        # If the pattern is invalid, return False
         return False
+        
 
-def get_model_capability(model_name: str, capability: str, default=None) -> Any:
+def get_model_capabilities(model_name: str) -> Dict[str, Any]:
     """
-    Get a specific capability for a model.
+    Get the capabilities of a model.
     
     Args:
         model_name: The name of the model
-        capability: The capability to get
-        default: Default value if capability not found
         
     Returns:
-        Any: The capability value or default
+        A dictionary of model capabilities
     """
-    # Get capabilities from tool_calling_types module
-    model_caps = get_model_caps_from_module(model_name)
-    return model_caps.get(capability, default)
-
-def is_capability_enabled(model_name: str, capability: str) -> bool:
-    """
-    Check if a capability is enabled for a model.
+    # Normalize model name
+    model_name = model_name.lower()
     
-    Args:
-        model_name: The name of the model
-        capability: The capability to check
-        
-    Returns:
-        bool: True if capability is enabled, False otherwise
-    """
-    return bool(get_model_capability(model_name, capability, False))
-
-def add_or_update_model_capability(model_name: str, capabilities: Dict[str, Any]) -> bool:
-    """
-    Add or update capabilities for a model in the JSON file.
-    
-    Args:
-        model_name: The name of the model
-        capabilities: Dictionary of capabilities to add/update
-        
-    Returns:
-        bool: True if successful, False otherwise
-    """
-    try:
-        # Load current capabilities
-        with open(CAPABILITIES_FILE, "r") as f:
-            current_capabilities = json.load(f)
-        
-        # Add or update model capabilities
-        current_capabilities.setdefault("model_capabilities", {})[model_name] = capabilities
-        
-        # Save back to file
-        with open(CAPABILITIES_FILE, "w") as f:
-            json.dump(current_capabilities, f, indent=2)
+    # Check for model matches by exact name
+    for config_name, config in _MODEL_CAPABILITIES.items():
+        if "exact_match" in config and config_name.lower() == model_name:
+            return config
             
-        # Reload capabilities in the module
-        from .tool_calling_types import MODEL_CAPABILITIES
+    # Check for pattern matches
+    for config_name, config in _MODEL_CAPABILITIES.items():
+        if "pattern" in config and _matches_pattern(model_name, config["pattern"]):
+            return config
+    
+    # Default capabilities
+    default_capabilities = {
+        "tool_calling_type": ToolCallingType.NONE,
+        "supports_image_input": False,
+        "supports_multiple_tools": False,
+        "max_tools": 0,
+        "tools_schema": "openai"
+    }
+    
+    # Return default capabilities for unknown models
+    return default_capabilities
+
+
+def get_tool_calling_type(model_name: str) -> ToolCallingType:
+    """
+    Determine the tool calling type for a model.
+    
+    Args:
+        model_name: The name of the model
         
-        # Convert string tool calling type to enum if needed
-        if "tool_calling_type" in capabilities and isinstance(capabilities["tool_calling_type"], str):
-            capabilities = capabilities.copy()
-            capabilities["tool_calling_type"] = get_tool_calling_type_from_str(capabilities["tool_calling_type"])
-            
-        MODEL_CAPABILITIES[model_name] = capabilities
+    Returns:
+        The appropriate tool calling type
+    """
+    model_name = model_name.lower()
+    
+    # Special case models
+    if "gpt-4" in model_name or "gpt-3.5" in model_name:
+        return ToolCallingType.OPENAI
         
-        return True
-    except Exception as e:
-        logger.error(f"Error updating model capability: {e}")
-        return False 
+    if "claude" in model_name:
+        return ToolCallingType.ANTHROPIC
+        
+    if model_name.startswith("ollama/") or "/phi" in model_name:
+        return ToolCallingType.OLLAMA
+        
+    if "groq" in model_name or "llama-3" in model_name:
+        return ToolCallingType.OPENAI  # Groq uses OpenAI-compatible format
+        
+    # Lookup from capabilities registry
+    capabilities = get_model_capabilities(model_name)
+    tool_calling_type = capabilities.get("tool_calling_type", ToolCallingType.NONE)
+    
+    # Handle string or enum values
+    if isinstance(tool_calling_type, str):
+        from .tool_calling_types import string_to_tool_calling_type
+        return string_to_tool_calling_type(tool_calling_type)
+    
+    return tool_calling_type
+
+
+def supports_tool_calling(model_name: str) -> bool:
+    """
+    Check if a model supports tool calling.
+    
+    Args:
+        model_name: The name of the model
+        
+    Returns:
+        True if the model supports tool calling
+    """
+    tool_calling_type = get_tool_calling_type(model_name)
+    return tool_calling_type != ToolCallingType.NONE
+
+
+def get_tool_calling_handler_type(model_name: str) -> str:
+    """
+    Get the tool calling handler type name for a model.
+    
+    Args:
+        model_name: The name of the model
+        
+    Returns:
+        The string representation of the tool calling type
+    """
+    tool_calling_type = get_tool_calling_type(model_name)
+    return enum_to_string(tool_calling_type) 

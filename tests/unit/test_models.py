@@ -7,7 +7,7 @@ communication with various LLM providers, focusing especially on function callin
 
 import json
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, ANY
 
 # Import LiteAgent components
 from liteagent.models import ModelInterface, create_model_interface
@@ -41,9 +41,9 @@ class TestModelInterfaces:
         for model_name in supported_models:
             with patch('liteagent.tool_calling_types.get_tool_calling_type') as mock_get_type:
                 if model_name.startswith("gpt"):
-                    mock_get_type.return_value = ToolCallingType.OPENAI_FUNCTION_CALLING
+                    mock_get_type.return_value = ToolCallingType.OPENAI
                 elif model_name.startswith("claude"):
-                    mock_get_type.return_value = ToolCallingType.ANTHROPIC_TOOL_CALLING
+                    mock_get_type.return_value = ToolCallingType.ANTHROPIC
                 
                 interface = create_model_interface(model_name)
                 assert interface.tool_calling_type != ToolCallingType.NONE
@@ -63,44 +63,44 @@ class TestModelInterfaces:
             mock_get_provider.return_value = "openai"
             
             with patch('liteagent.tool_calling_types.get_tool_calling_type') as mock_get_type:
-                mock_get_type.return_value = ToolCallingType.OPENAI_FUNCTION_CALLING
+                mock_get_type.return_value = ToolCallingType.OPENAI
                 
                 interface = create_model_interface("gpt-4")
-                assert interface.tool_calling_type == ToolCallingType.OPENAI_FUNCTION_CALLING
+                assert interface.tool_calling_type == ToolCallingType.OPENAI
         
         # Test that Anthropic-style models get the right tool calling type
         with patch('liteagent.tool_calling_types.get_provider_from_model') as mock_get_provider:
             mock_get_provider.return_value = "anthropic"
             
             with patch('liteagent.tool_calling_types.get_tool_calling_type') as mock_get_type:
-                mock_get_type.return_value = ToolCallingType.ANTHROPIC_TOOL_CALLING
+                mock_get_type.return_value = ToolCallingType.ANTHROPIC
                 
                 interface = create_model_interface("claude-3-opus")
-                assert interface.tool_calling_type == ToolCallingType.ANTHROPIC_TOOL_CALLING
+                assert interface.tool_calling_type == ToolCallingType.ANTHROPIC
         
         # Test that Ollama models get the right tool calling type
         with patch('liteagent.tool_calling_types.get_provider_from_model') as mock_get_provider:
             mock_get_provider.return_value = "ollama"
             with patch('liteagent.tool_calling_types.get_tool_calling_type') as mock_get_type:
-                mock_get_type.return_value = ToolCallingType.OLLAMA_TOOL_CALLING
+                mock_get_type.return_value = ToolCallingType.OLLAMA
                 
                 interface = create_model_interface("ollama/phi-2")
-                assert interface.tool_calling_type == ToolCallingType.OLLAMA_TOOL_CALLING, "ollama/phi-2 should use JSON extraction"
+                assert interface.tool_calling_type == ToolCallingType.OLLAMA, "ollama/phi-2 should use JSON extraction"
         
         # Test that local models get the right tool calling type
         with patch('liteagent.tool_calling_types.get_provider_from_model') as mock_get_provider:
             mock_get_provider.return_value = "local"
             with patch('liteagent.tool_calling_types.get_tool_calling_type') as mock_get_type:
-                mock_get_type.return_value = ToolCallingType.PROMPT_BASED
+                mock_get_type.return_value = ToolCallingType.STRUCTURED_OUTPUT
                 
                 interface = create_model_interface("local/phi-2")
-                assert interface.tool_calling_type == ToolCallingType.PROMPT_BASED, "local/phi-2 should use text-based tool calling"
+                assert interface.tool_calling_type == ToolCallingType.STRUCTURED_OUTPUT, "local/phi-2 should use text-based tool calling"
     
     def test_function_calling_model_response_extraction(self):
         """Test that ModelInterface correctly extracts tool calls from responses."""
         # Create a model interface with OpenAI tool calling type
         with patch('liteagent.tool_calling_types.get_tool_calling_type') as mock_get_type:
-            mock_get_type.return_value = ToolCallingType.OPENAI_FUNCTION_CALLING
+            mock_get_type.return_value = ToolCallingType.OPENAI
             
             with patch('liteagent.tool_calling.get_provider_specific_handler') as mock_get_handler:
                 # Mock the handler with a simple implementation that extracts known tool calls
@@ -131,7 +131,7 @@ class TestModelInterfaces:
         """Test that ModelInterface correctly extracts content from responses."""
         # Create a model interface with OpenAI tool calling type
         with patch('liteagent.tool_calling_types.get_tool_calling_type') as mock_get_type:
-            mock_get_type.return_value = ToolCallingType.OPENAI_FUNCTION_CALLING
+            mock_get_type.return_value = ToolCallingType.OPENAI
             
             with patch('liteagent.tool_calling.get_provider_specific_handler') as mock_get_handler:
                 # Mock the handler

@@ -467,13 +467,13 @@ def get_validation_strategy(tool_calling_type: ToolCallingType) -> ToolValidatio
     Returns:
         ToolValidationStrategy: The validation strategy for the tool calling type
     """
-    if tool_calling_type == ToolCallingType.OPENAI_FUNCTION_CALLING:
+    if tool_calling_type == ToolCallingType.OPENAI:
         return OpenAIValidationStrategy()
-    elif tool_calling_type == ToolCallingType.ANTHROPIC_TOOL_CALLING:
+    elif tool_calling_type == ToolCallingType.ANTHROPIC:
         return AnthropicValidationStrategy()
-    elif tool_calling_type == ToolCallingType.OLLAMA_TOOL_CALLING:
+    elif tool_calling_type == ToolCallingType.OLLAMA:
         return JSONExtractionStrategy()
-    elif tool_calling_type == ToolCallingType.PROMPT_BASED:
+    elif tool_calling_type == ToolCallingType.STRUCTURED_OUTPUT:
         return PromptBasedStrategy()
     else:
         raise ValueError(f"No validation strategy available for tool calling type {tool_calling_type}") 

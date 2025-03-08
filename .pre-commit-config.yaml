@@ -1,0 +1,55 @@
+repos:
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v4.4.0
+  hooks:
+  - id: trailing-whitespace
+  - id: end-of-file-fixer
+  - id: check-yaml
+  - id: check-added-large-files
+  - id: check-toml
+  - id: mixed-line-ending
+    args: [--fix=lf]
+
+- repo: https://github.com/charliermarsh/ruff-pre-commit
+  rev: v0.0.265
+  hooks:
+  - id: ruff
+    args: [
+      --fix,
+      --exit-non-zero-on-fix,
+      --line-length=120,
+      --select=E,F,I,W,  # Include isort functionality
+      --ignore=E203,
+    ]
+
+- repo: https://github.com/psf/black
+  rev: 23.3.0
+  hooks:
+  - id: black
+    args: [--target-version=py38, --line-length=120]
+
+- repo: https://github.com/pre-commit/mirrors-mypy
+  rev: v1.3.0
+  hooks:
+  - id: mypy
+    additional_dependencies:
+      - types-requests
+      - types-PyYAML
+      - types-setuptools
+    args: [--python-version=3.8]
+
+- repo: local
+  hooks:
+  - id: pytest-check
+    name: pytest-check
+    entry: pytest
+    language: system
+    pass_filenames: false
+    always_run: true
+    args: [tests/unit/]
+  - id: check-file-length
+    name: check-file-length
+    entry: python -c 'import sys, os; files = [f for f in sys.argv[1:] if f.endswith(".py")]; long_files = [f for f in files if os.path.exists(f) and len(open(f).readlines()) > 1000]; sys.exit(1 if long_files else 0) if long_files else print("No Python files exceed 1000 lines.")'
+    language: system
+    types: [python]
+    pass_filenames: true

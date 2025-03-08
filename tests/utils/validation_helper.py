@@ -77,12 +77,12 @@ class ValidationTestHelper:
         """
         for tool_name in tool_names:
             if tool_name == "get_weather":
-                if tool_calling_type == ToolCallingType.OPENAI_FUNCTION_CALLING:
+                if tool_calling_type == ToolCallingType.OPENAI:
                     validation_observer.register_response_parser(
                         r"weather\s+in\s+([A-Za-z\s]+).*?(\d+)[°℃C].*?(\w+)",
                         lambda m: {"city": m.group(1), "temperature": m.group(2), "condition": m.group(3)}
                     )
-                elif tool_calling_type == ToolCallingType.ANTHROPIC_TOOL_CALLING:
+                elif tool_calling_type == ToolCallingType.ANTHROPIC:
                     validation_observer.register_response_parser(
                         r"weather\s+in\s+([A-Za-z\s]+).*?(\d+)[°℃C].*?(\w+)",
                         lambda m: {"city": m.group(1), "temperature": m.group(2), "condition": m.group(3)}

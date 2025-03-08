@@ -59,14 +59,14 @@ class ModelInterface(ABC):
             formatted_tools = self.tool_handler.format_tools_for_model(functions)
             
             # Add functions to kwargs based on tool calling type
-            if self.tool_calling_type == ToolCallingType.OPENAI_FUNCTION_CALLING:
+            if self.tool_calling_type == ToolCallingType.OPENAI:
                 # OpenAI-style function calling
                 kwargs["tools"] = formatted_tools
                 kwargs["tool_choice"] = "auto"
-            elif self.tool_calling_type == ToolCallingType.ANTHROPIC_TOOL_CALLING:
+            elif self.tool_calling_type == ToolCallingType.ANTHROPIC:
                 # Anthropic-style tool calling
                 kwargs["tools"] = formatted_tools
-            elif self.tool_calling_type in [ToolCallingType.OLLAMA_TOOL_CALLING, ToolCallingType.PROMPT_BASED]:
+            elif self.tool_calling_type in [ToolCallingType.OLLAMA, ToolCallingType.TEXT_BASED, ToolCallingType.STRUCTURED_OUTPUT]:
                 # For these types, we need to modify the system prompt
                 tool_description = formatted_tools
                 if messages and messages[0]["role"] == "system":
@@ -99,7 +99,7 @@ class ModelInterface(ABC):
         log_completion_response(response, elapsed_time)
         
         # Debug log for Ollama responses
-        if self.tool_calling_type == ToolCallingType.OLLAMA_TOOL_CALLING:
+        if self.tool_calling_type == ToolCallingType.OLLAMA:
             logger.debug(f"Ollama response type: {type(response)}")
             logger.debug(f"Ollama response attributes: {dir(response) if hasattr(response, '__dict__') else 'No attributes'}")
             logger.debug(f"Ollama response dict: {response.__dict__ if hasattr(response, '__dict__') else 'Not a class instance'}")
@@ -146,7 +146,7 @@ class ModelInterface(ABC):
             str: The text content
         """
         # Extract content based on the model type
-        if self.tool_calling_type == ToolCallingType.OPENAI_FUNCTION_CALLING:
+        if self.tool_calling_type == ToolCallingType.OPENAI:
             if not response or not hasattr(response, 'choices') or len(response.choices) == 0:
                 return ""
                 
@@ -154,7 +154,7 @@ class ModelInterface(ABC):
             content = message_obj.content if hasattr(message_obj, 'content') else ""
             return str(content).strip() if content else ""
             
-        elif self.tool_calling_type == ToolCallingType.ANTHROPIC_TOOL_CALLING:
+        elif self.tool_calling_type == ToolCallingType.ANTHROPIC:
             if not response:
                 return ""
                 
@@ -181,7 +181,7 @@ class ModelInterface(ABC):
                 
                 return str(content).strip() if content else ""
             
-        elif self.tool_calling_type == ToolCallingType.OLLAMA_TOOL_CALLING:
+        elif self.tool_calling_type == ToolCallingType.OLLAMA:
             if not response:
                 return ""
                 

@@ -1,407 +1,381 @@
 """
-Tool calling format detection module.
+Auto-detection of tool calling formats from model responses.
 
-This module provides functionality to detect the tool calling format used by a model
-by analyzing its response. This is useful for models with unknown capabilities or
-for implementing automatic detection.
+This module provides helper functions to detect which type of tool calling format
+a model response is using, making it possible to automatically handle different
+model outputs without explicitly specifying their type.
 """
 
 import json
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Union, Any, Optional, List, Dict, Set
 
 from .tool_calling_types import ToolCallingType
-from .utils import logger
-
 
 def detect_tool_calling_format(response: Any) -> ToolCallingType:
     """
-    Detect the tool calling format used in a model's response.
+    Auto-detect the tool calling format used in a model response.
     
     Args:
-        response: The model's response object or string
+        response: The model response object
         
     Returns:
-        ToolCallingType: The detected tool calling type
+        The detected ToolCallingType
     """
-    # Convert response to string if it's not already
-    response_text = _extract_content(response)
+    # Extract response text if available
+    response_text = _extract_response_text(response)
     
-    # Try different detection strategies in priority order
-    
-    # 1. Check for OpenAI-style function calling format
+    # Try to detect OpenAI-style tool calling
     if _detect_openai_format(response):
-        return ToolCallingType.OPENAI_FUNCTION_CALLING
+        return ToolCallingType.OPENAI
     
-    # 2. Check for Anthropic-style tool calling format
+    # Try to detect Anthropic-style tool calling
     if _detect_anthropic_format(response):
-        return ToolCallingType.ANTHROPIC_TOOL_CALLING
+        return ToolCallingType.ANTHROPIC
     
-    # 3. Check for JSON extraction format
-    if _detect_OLLAMA_TOOL_CALLING_format(response_text):
-        return ToolCallingType.OLLAMA_TOOL_CALLING
+    # Try to detect Ollama-style tool calling in text response
+    if _detect_ollama_format(response_text):
+        return ToolCallingType.OLLAMA
     
-    # 4. Default to prompt-based for unrecognized formats
-    return ToolCallingType.PROMPT_BASED
+    # Default to structured output format
+    return ToolCallingType.STRUCTURED_OUTPUT
 
 
-def _extract_content(response: Any) -> str:
+def _extract_response_text(response: Any) -> str:
     """
-    Extract text content from various response formats.
+    Extract the text content from a model response.
     
     Args:
-        response: Response object or string
+        response: The model response object
         
     Returns:
-        str: Extracted text content
+        The extracted text or empty string if no text is found
     """
-    if isinstance(response, str):
-        return response
-    
-    # Handle OpenAI-style response
-    if isinstance(response, dict):
-        if "choices" in response:
-            choices = response.get("choices", [])
-            if choices and isinstance(choices[0], dict):
-                message = choices[0].get("message", {})
-                if isinstance(message, dict) and "content" in message:
-                    return message.get("content") or ""
-        
-        # Handle Anthropic-style response
-        if "content" in response:
-            content = response.get("content", [])
-            if isinstance(content, list):
-                text_parts = [item.get("text", "") for item in content if isinstance(item, dict) and item.get("type") == "text"]
-                return " ".join(text_parts)
-        
-        # Generic content extraction
-        if "text" in response:
-            return response.get("text", "")
-    
-    # For any other format, convert to string
+    # Try various response formats that might contain text
     try:
-        return str(response)
-    except Exception:
-        return ""
+        # OpenAI/LiteLLM wrapped response format
+        if hasattr(response, 'choices') and response.choices:
+            if hasattr(response.choices[0], 'message') and hasattr(response.choices[0].message, 'content'):
+                if response.choices[0].message.content:
+                    return response.choices[0].message.content
+        
+        # Anthropic direct API format
+        if hasattr(response, 'content') and isinstance(response.content, list):
+            content_text = ""
+            for item in response.content:
+                if hasattr(item, 'type') and item.type == 'text':
+                    if hasattr(item, 'text'):
+                        content_text += item.text + "\n"
+            if content_text:
+                return content_text
+                
+        # Ollama format
+        if hasattr(response, 'message') and hasattr(response.message, 'content'):
+            return response.message.content
+            
+        # Raw string or dict
+        if isinstance(response, str):
+            return response
+        if isinstance(response, dict) and 'content' in response:
+            if isinstance(response['content'], str):
+                return response['content']
+                
+    except:
+        # Fallback for any errors during extraction
+        pass
+        
+    return ""
 
 
 def _detect_openai_format(response: Any) -> bool:
     """
-    Detect if the response uses OpenAI-style function calling format.
+    Detect if the response uses OpenAI-style function calling.
     
     Args:
-        response: The model's response
+        response: The model response
         
     Returns:
-        bool: True if OpenAI format is detected
+        True if OpenAI format is detected
     """
-    if not isinstance(response, dict):
-        return False
-    
-    # Check for OpenAI API response structure
-    if "choices" in response:
-        choices = response.get("choices", [])
-        if choices and isinstance(choices[0], dict):
-            message = choices[0].get("message", {})
-            
-            # Look for tool_calls in the message
-            if isinstance(message, dict) and "tool_calls" in message:
-                return True
-            
-            # Look for function_call in the message (older format)
-            if isinstance(message, dict) and "function_call" in message:
-                return True
+    # Check for OpenAI-style tool_calls in the response
+    try:
+        if hasattr(response, 'choices') and response.choices:
+            if hasattr(response.choices[0], 'message'):
+                message = response.choices[0].message
+                if hasattr(message, 'tool_calls') and message.tool_calls:
+                    return True
+    except:
+        pass
     
     return False
 
 
 def _detect_anthropic_format(response: Any) -> bool:
     """
-    Detect if the response uses Anthropic-style tool calling format.
+    Detect if the response uses Anthropic-style tool calling.
     
     Args:
-        response: The model's response
+        response: The model response
         
     Returns:
-        bool: True if Anthropic format is detected
+        True if Anthropic format is detected
     """
-    if not isinstance(response, dict):
-        return False
-    
-    # Check for Anthropic API response structure
-    if "content" in response:
-        content = response.get("content", [])
-        
-        # Look for tool_use blocks in content
-        if isinstance(content, list):
-            for item in content:
-                if isinstance(item, dict) and item.get("type") == "tool_use":
+    # Check for Anthropic-style tool_use blocks
+    try:
+        # Direct Anthropic API format
+        if hasattr(response, 'content') and isinstance(response.content, list):
+            for block in response.content:
+                if hasattr(block, 'type') and block.type == 'tool_use':
                     return True
+        
+        # LiteLLM wrapped format
+        if hasattr(response, 'choices') and response.choices:
+            if hasattr(response.choices[0], 'message') and hasattr(response.choices[0].message, 'content'):
+                if isinstance(response.choices[0].message.content, list):
+                    for block in response.choices[0].message.content:
+                        if hasattr(block, 'type') and block.type == 'tool_use':
+                            return True
+    except:
+        pass
+        
+    return False
+
+
+def _detect_ollama_format(response_text: str) -> bool:
+    """
+    Detect if the response uses Ollama-style function calling in text.
+    
+    Args:
+        response_text: The text response from the model
+        
+    Returns:
+        True if Ollama format is detected
+    """
+    # Check for common patterns that indicate text-based function calls
+    
+    # Check for [FUNCTION_CALL] format
+    if "[FUNCTION_CALL]" in response_text and "[/FUNCTION_CALL]" in response_text:
+        return True
+    
+    # Check for code block format that might be used
+    if "```" in response_text and "(" in response_text and ")" in response_text:
+        # This might be a code block with a function call
+        return True
+    
+    # Check for direct function call patterns
+    function_call_pattern = r'(\w+)\s*\(\s*[\'\"a-zA-Z0-9_]+\s*[=:]\s*[\'\"a-zA-Z0-9_]+\s*\)'
+    if re.search(function_call_pattern, response_text):
+        return True
     
     return False
 
 
-def _detect_OLLAMA_TOOL_CALLING_format(response_text: str) -> bool:
+def extract_tool_calls_from_text(tool_calling_type: ToolCallingType, response_text: str) -> List[Dict]:
     """
-    Detect if the response contains JSON that can be extracted.
+    Extract tool calls from text based on the specified tool calling type.
     
     Args:
-        response_text: The model's response as text
+        tool_calling_type: The tool calling type to use for extraction
+        response_text: The text to extract tool calls from
         
     Returns:
-        bool: True if JSON format is detected
+        List of extracted tool calls
     """
-    # Look for JSON-like patterns in the text
-    json_pattern = r'```(?:json)?\s*({[\s\S]*?})```'
-    matches = re.findall(json_pattern, response_text)
+    # Handle different extraction strategies based on tool calling type
+    if tool_calling_type == ToolCallingType.OPENAI:
+        return _extract_tools_from_openai_text(response_text)
+    elif tool_calling_type == ToolCallingType.ANTHROPIC:
+        return _extract_tools_from_anthropic_text(response_text)
+    elif tool_calling_type == ToolCallingType.OLLAMA:
+        return _extract_tools_from_ollama_text(response_text)
     
-    if matches:
-        for match in matches:
-            try:
-                parsed = json.loads(match)
-                # If it has function/name/args structure, it's likely a tool call
-                if isinstance(parsed, dict) and ('function' in parsed or 'name' in parsed or 'args' in parsed):
-                    return True
-            except json.JSONDecodeError:
-                continue
-    
-    # Look for direct JSON objects without code blocks
-    direct_json_pattern = r'{[\s\S]*?"(?:function|name)"[\s\S]*?}'
-    matches = re.findall(direct_json_pattern, response_text)
-    
-    if matches:
-        for match in matches:
-            try:
-                parsed = json.loads(match)
-                if isinstance(parsed, dict) and ('function' in parsed or 'name' in parsed or 'args' in parsed):
-                    return True
-            except json.JSONDecodeError:
-                continue
-    
-    return False
-
-
-def extract_tool_calls_from_response(response: Any) -> List[Dict]:
-    """
-    Extract tool calls from a model response regardless of format.
-    
-    Args:
-        response: The model's response
-        
-    Returns:
-        List[Dict]: Extracted tool calls with unified format
-    """
-    # Detect the format
-    tool_calling_type = detect_tool_calling_format(response)
-    
-    # Extract using the appropriate method based on detected format
-    if tool_calling_type == ToolCallingType.OPENAI_FUNCTION_CALLING:
-        return _extract_openai_tool_calls(response)
-    elif tool_calling_type == ToolCallingType.ANTHROPIC_TOOL_CALLING:
-        return _extract_anthropic_tool_calls(response)
-    elif tool_calling_type == ToolCallingType.OLLAMA_TOOL_CALLING:
-        return _extract_json_tool_calls(_extract_content(response))
-    
-    # For PROMPT_BASED or NONE, return empty list
+    # For STRUCTURED_OUTPUT or NONE, return empty list
     return []
 
 
-def _extract_openai_tool_calls(response: Any) -> List[Dict]:
+def _extract_tools_from_openai_text(response_text: str) -> List[Dict]:
     """
-    Extract tool calls from OpenAI-style response.
+    Extract OpenAI-style tool calls from text.
     
     Args:
-        response: OpenAI API response
+        response_text: The text to extract from
         
     Returns:
-        List[Dict]: Extracted tool calls
+        List of extracted tool calls
     """
-    result = []
+    # Look for JSON objects that look like function calls
+    tool_calls = []
     
-    if not isinstance(response, dict):
-        return result
+    # Find all JSON objects in the text
+    json_pattern = r'{.*?}'
+    json_matches = re.findall(json_pattern, response_text, re.DOTALL)
     
-    try:
-        choices = response.get("choices", [])
-        if not choices:
-            return result
-        
-        message = choices[0].get("message", {})
-        
-        # Check for new tool_calls format
-        if "tool_calls" in message:
-            tool_calls = message.get("tool_calls", [])
-            for tool_call in tool_calls:
-                if not isinstance(tool_call, dict):
-                    continue
-                
-                tool_id = tool_call.get("id")
-                function = tool_call.get("function", {})
-                
-                if not function:
-                    continue
-                
-                name = function.get("name")
-                arguments = function.get("arguments", "{}")
-                
-                try:
-                    args_dict = json.loads(arguments) if isinstance(arguments, str) else arguments
-                except json.JSONDecodeError:
-                    args_dict = {}
-                
-                result.append({
-                    "name": name,
-                    "arguments": args_dict,
-                    "id": tool_id
-                })
-        
-        # Check for old function_call format
-        elif "function_call" in message:
-            function_call = message.get("function_call", {})
-            if function_call:
-                name = function_call.get("name")
-                arguments = function_call.get("arguments", "{}")
-                
-                try:
-                    args_dict = json.loads(arguments) if isinstance(arguments, str) else arguments
-                except json.JSONDecodeError:
-                    args_dict = {}
-                
-                result.append({
-                    "name": name,
-                    "arguments": args_dict,
-                    "id": f"call_{name}"
-                })
-    
-    except Exception as e:
-        logger.error(f"Error extracting OpenAI tool calls: {e}")
-    
-    return result
-
-
-def _extract_anthropic_tool_calls(response: Any) -> List[Dict]:
-    """
-    Extract tool calls from Anthropic-style response.
-    
-    Args:
-        response: Anthropic API response
-        
-    Returns:
-        List[Dict]: Extracted tool calls
-    """
-    result = []
-    
-    if not isinstance(response, dict):
-        return result
-    
-    try:
-        content = response.get("content", [])
-        
-        for item in content:
-            if not isinstance(item, dict):
-                continue
+    for json_str in json_matches:
+        try:
+            # Try to parse as JSON
+            data = json.loads(json_str)
             
-            if item.get("type") == "tool_use":
-                tool_use = item.get("tool_use", {})
-                if not tool_use:
-                    continue
+            # Check if it looks like a function call
+            if 'function' in data and 'name' in data['function']:
+                name = data['function']['name']
+                arguments = data['function'].get('arguments', {})
                 
-                name = tool_use.get("name")
-                tool_id = tool_use.get("id", f"call_{name}")
-                input_data = tool_use.get("input", {})
+                # Convert string arguments to dict if needed
+                if isinstance(arguments, str):
+                    try:
+                        arguments = json.loads(arguments)
+                    except:
+                        arguments = {}
                 
-                if not name:
-                    continue
+                tool_call_id = data.get('id', str(uuid.uuid4()))
                 
-                result.append({
+                tool_call = {
                     "name": name,
-                    "arguments": input_data,
-                    "id": tool_id
-                })
+                    "arguments": arguments,
+                    "id": tool_call_id
+                }
+                
+                tool_calls.append(tool_call)
+        except:
+            pass
     
-    except Exception as e:
-        logger.error(f"Error extracting Anthropic tool calls: {e}")
-    
-    return result
+    return tool_calls
 
 
-def _extract_json_tool_calls(text: str) -> List[Dict]:
+def _extract_tools_from_anthropic_text(response_text: str) -> List[Dict]:
     """
-    Extract tool calls from text with JSON formats.
+    Extract Anthropic-style tool calls from text.
     
     Args:
-        text: Response text containing JSON
+        response_text: The text to extract from
         
     Returns:
-        List[Dict]: Extracted tool calls
+        List of extracted tool calls
     """
-    result = []
+    # For Anthropic, look for <tool></tool> blocks or similar patterns
+    tool_calls = []
     
-    try:
-        # Try to find JSON blocks in code fences
-        json_pattern = r'```(?:json)?\s*({[\s\S]*?})```'
-        matches = re.findall(json_pattern, text)
-        
-        for match in matches:
-            try:
-                parsed = json.loads(match)
-                
-                # Handle various JSON formats
-                if isinstance(parsed, dict):
-                    if "function" in parsed and "arguments" in parsed:
-                        result.append({
-                            "name": parsed["function"],
-                            "arguments": parsed["arguments"],
-                            "id": f"json_{len(result)}"
-                        })
-                    elif "name" in parsed and "args" in parsed:
-                        result.append({
-                            "name": parsed["name"],
-                            "arguments": parsed["args"],
-                            "id": f"json_{len(result)}"
-                        })
-                    elif "name" in parsed and "arguments" in parsed:
-                        result.append({
-                            "name": parsed["name"],
-                            "arguments": parsed["arguments"],
-                            "id": f"json_{len(result)}"
-                        })
-            except json.JSONDecodeError:
-                continue
-        
-        # If no valid JSON blocks were found, try direct JSON objects
-        if not result:
-            direct_json_pattern = r'{[\s\S]*?"(?:function|name)"[\s\S]*?}'
-            matches = re.findall(direct_json_pattern, text)
+    # Look for <tool:NAME> or similar patterns
+    tool_pattern = r'<tool(?::|name=|:name=)([^>]+)>(.*?)</tool>'
+    tool_matches = re.findall(tool_pattern, response_text, re.DOTALL)
+    
+    for name, content in tool_matches:
+        try:
+            # Try to parse content as JSON
+            arguments = json.loads(content.strip())
             
-            for match in matches:
-                try:
-                    parsed = json.loads(match)
+            tool_call = {
+                "name": name.strip(),
+                "arguments": arguments,
+                "id": f"call_{uuid.uuid4()}"
+            }
+            
+            tool_calls.append(tool_call)
+        except:
+            # If JSON parsing fails, use the raw content
+            tool_call = {
+                "name": name.strip(),
+                "arguments": {"input": content.strip()},
+                "id": f"call_{uuid.uuid4()}"
+            }
+            
+            tool_calls.append(tool_call)
+    
+    return tool_calls
+
+
+def _extract_tools_from_ollama_text(response_text: str) -> List[Dict]:
+    """
+    Extract Ollama-style tool calls from text.
+    
+    Args:
+        response_text: The text to extract from
+        
+    Returns:
+        List of extracted tool calls
+    """
+    tool_calls = []
+    
+    # Check for [FUNCTION_CALL] format
+    function_call_pattern = r'\[FUNCTION_CALL\]\s*(\w+)\((.*?)\)\s*\[/FUNCTION_CALL\]'
+    matches = re.findall(function_call_pattern, response_text, re.DOTALL)
+    
+    if matches:
+        for func_name, args_str in matches:
+            # Parse the arguments
+            args_dict = {}
+            
+            # Try key=value format
+            arg_pattern = r'(\w+)\s*=\s*(?:"([^"]*?)"|\'([^\']*?)\'|([^,\s\)]+))'
+            arg_matches = re.findall(arg_pattern, args_str)
+            
+            if arg_matches:
+                for arg_match in arg_matches:
+                    key = arg_match[0]
+                    # Find the first non-empty value
+                    value = next((v for v in arg_match[1:] if v), "")
+                    # Convert to appropriate type
+                    if value.isdigit():
+                        value = int(value)
+                    elif value.replace('.', '', 1).isdigit() and value.count('.') <= 1:
+                        value = float(value)
+                    args_dict[key] = value
+            else:
+                # Try positional arguments
+                pos_args = [arg.strip() for arg in args_str.split(',')]
+                if len(pos_args) > 0:
+                    for i, arg in enumerate(pos_args):
+                        args_dict[f"arg{i+1}"] = arg
+            
+            tool_call = {
+                "name": func_name,
+                "arguments": args_dict,
+                "id": f"call_{uuid.uuid4()}"
+            }
+            
+            tool_calls.append(tool_call)
+    
+    # Also check for code block format
+    code_block_pattern = r'```(?:python|json)?(.+?)```'
+    matches = re.findall(code_block_pattern, response_text, re.DOTALL)
+    
+    if matches and not tool_calls:
+        for code_block in matches:
+            # Look for function calls in the code block
+            func_pattern = r'(\w+)\((.*?)\)'
+            func_matches = re.findall(func_pattern, code_block)
+            
+            if func_matches:
+                for func_name, args_str in func_matches:
+                    # Similar argument parsing as above
+                    args_dict = {}
                     
-                    # Handle various JSON formats (same logic as above)
-                    if isinstance(parsed, dict):
-                        if "function" in parsed and "arguments" in parsed:
-                            result.append({
-                                "name": parsed["function"],
-                                "arguments": parsed["arguments"],
-                                "id": f"json_{len(result)}"
-                            })
-                        elif "name" in parsed and "args" in parsed:
-                            result.append({
-                                "name": parsed["name"],
-                                "arguments": parsed["args"],
-                                "id": f"json_{len(result)}"
-                            })
-                        elif "name" in parsed and "arguments" in parsed:
-                            result.append({
-                                "name": parsed["name"],
-                                "arguments": parsed["arguments"],
-                                "id": f"json_{len(result)}"
-                            })
-                except json.JSONDecodeError:
-                    continue
+                    # Try key=value format
+                    arg_pattern = r'(\w+)\s*=\s*(?:"([^"]*?)"|\'([^\']*?)\'|([^,\s\)]+))'
+                    arg_matches = re.findall(arg_pattern, args_str)
+                    
+                    if arg_matches:
+                        for arg_match in arg_matches:
+                            key = arg_match[0]
+                            value = next((v for v in arg_match[1:] if v), "")
+                            if value.isdigit():
+                                value = int(value)
+                            elif value.replace('.', '', 1).isdigit() and value.count('.') <= 1:
+                                value = float(value)
+                            args_dict[key] = value
+                    else:
+                        # Try positional arguments
+                        pos_args = [arg.strip() for arg in args_str.split(',')]
+                        if len(pos_args) > 0:
+                            for i, arg in enumerate(pos_args):
+                                args_dict[f"arg{i+1}"] = arg
+                    
+                    tool_call = {
+                        "name": func_name,
+                        "arguments": args_dict,
+                        "id": f"call_{uuid.uuid4()}"
+                    }
+                    
+                    tool_calls.append(tool_call)
     
-    except Exception as e:
-        logger.error(f"Error extracting JSON tool calls: {e}")
-    
-    return result 
+    return tool_calls 

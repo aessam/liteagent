@@ -176,7 +176,7 @@ Generate a unique context ID for tracking agent interactions.
 Enum defining the types of tool calling supported:
 
 - `NONE`: No tool calling support
-- `OPENAI_FUNCTION_CALLING`: OpenAI-style function calling
-- `ANTHROPIC_TOOL_CALLING`: Anthropic-style tool calling
-- `OLLAMA_TOOL_CALLING`: Generic JSON output parsing
-- `PROMPT_BASED`: Prompt-based tool calling 
+- `OPENAI`: OpenAI-style function calling
+- `ANTHROPIC`: Anthropic-style tool calling
+- `OLLAMA`: Ollama-style tool calling
+- `STRUCTURED_OUTPUT`: Structured output tool calling 
