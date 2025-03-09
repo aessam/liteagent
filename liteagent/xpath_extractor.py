@@ -47,7 +47,7 @@ def get_node_by_xpath(data: Any, path: str) -> Any:
                 if token == 'type':
                     # Special case for matches by "type" field
                     for item in node:
-                        if isinstance(item, dict) and item.get('type') == rest[0]:
+                        if isinstance(item, dict) and len(rest) > 0 and item.get('type') == rest[0]:
                             return search(item, rest[1:])
                 
                 # Handle token[condition] syntax
@@ -139,6 +139,25 @@ class XPathExtractor:
             token = tokens[0]
             rest = tokens[1:]
             
+            # Handle direct attribute matching (key=value)
+            if '=' in token and '[' not in token:
+                attr_name, attr_value = token.split('=', 1)
+                # If the value is quoted, remove the quotes
+                if attr_value.startswith(("'", '"')) and attr_value.endswith(("'", '"')):
+                    attr_value = attr_value[1:-1]
+
+                if isinstance(node, list):
+                    for item in node:
+                        if isinstance(item, dict) and item.get(attr_name) == attr_value:
+                            _collect_nodes(item, rest, results)
+                elif isinstance(node, dict):
+                    # If node is a dict, check all values that are lists or dicts
+                    for key, value in node.items():
+                        if isinstance(value, (list, dict)):
+                            _collect_nodes(value, tokens, results)
+                return
+            
+            # Handle wildcard
             if token == '*':
                 if isinstance(node, dict):
                     for key in node:

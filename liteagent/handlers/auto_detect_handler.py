@@ -17,6 +17,7 @@ from .anthropic_handler import AnthropicToolCallingHandler
 from .ollama_handler import OllamaToolCallingHandler
 from .text_based_handler import TextBasedToolCallingHandler
 from .structured_output_handler import StructuredOutputHandler
+from ..tool_calling_detection import detect_tool_calling_format
 
 
 class AutoDetectToolCallingHandler(PatternToolHandler):
@@ -38,9 +39,6 @@ class AutoDetectToolCallingHandler(PatternToolHandler):
         Returns:
             A list of extracted tool calls
         """
-        # For patched test cases, import and use detect_tool_calling_format
-        from ..tool_calling_detection import detect_tool_calling_format
-        
         # First, try to detect format with the dedicated detection function
         if not self._detected_type:
             try:

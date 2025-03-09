@@ -76,13 +76,13 @@ class TestToolCallingTypes:
     
     def test_get_tool_calling_handler(self):
         """Test getting tool calling handler for models."""
-        assert isinstance(get_tool_calling_handler("gpt-4", ToolCallingType.OPENAI), OpenAIToolCallingHandler)
-        assert isinstance(get_tool_calling_handler("claude-3-opus", ToolCallingType.ANTHROPIC), AnthropicToolCallingHandler)
-        assert isinstance(get_tool_calling_handler("ollama/llama2", ToolCallingType.OLLAMA), OllamaToolCallingHandler)
-        assert isinstance(get_tool_calling_handler("unknown-model", ToolCallingType.STRUCTURED_OUTPUT), StructuredOutputHandler)
+        assert isinstance(get_tool_calling_handler(ToolCallingType.OPENAI), OpenAIToolCallingHandler)
+        assert isinstance(get_tool_calling_handler(ToolCallingType.ANTHROPIC), AnthropicToolCallingHandler)
+        assert isinstance(get_tool_calling_handler(ToolCallingType.OLLAMA), OllamaToolCallingHandler)
+        assert isinstance(get_tool_calling_handler(ToolCallingType.STRUCTURED_OUTPUT), StructuredOutputHandler)
         
         # Auto detect fallback
-        assert isinstance(get_tool_calling_handler("unknown-model"), AutoDetectToolCallingHandler)
+        assert isinstance(get_tool_calling_handler(), AutoDetectToolCallingHandler)
 
 
 class TestOpenAIToolCallingHandler:
@@ -527,7 +527,7 @@ class TestNoopToolCallingHandler:
 class TestAutoDetectToolCallingHandler:
     """Test the auto-detect tool calling handler."""
     
-    @patch('liteagent.tool_calling_detection.detect_tool_calling_format')
+    @patch('liteagent.handlers.auto_detect_handler.detect_tool_calling_format')
     @patch('liteagent.handlers.openai_handler.OpenAIToolCallingHandler.extract_tool_calls')
     def test_extract_tool_calls(self, mock_extract, mock_detect):
         """Test that the handler correctly delegates to the right implementation."""

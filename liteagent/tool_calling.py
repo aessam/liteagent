@@ -74,12 +74,11 @@ from .handlers.structured_output_handler import StructuredOutputHandler
 from .handlers.noop_handler import NoopToolCallingHandler
 from .handlers.auto_detect_handler import AutoDetectToolCallingHandler
 
-def get_tool_calling_handler(model_name: str, tool_calling_type: Optional[ToolCallingType] = None) -> ToolCallingHandlerBase:
+def get_tool_calling_handler(tool_calling_type: Optional[ToolCallingType] = None) -> ToolCallingHandlerBase:
     """
     Get a tool calling handler for a given model.
     
     Args:
-        model_name: The name of the model
         tool_calling_type: The tool calling type to use (overrides automatic detection)
         
     Returns:
@@ -130,4 +129,4 @@ def get_provider_specific_handler(provider: str, tool_calling_type: ToolCallingT
         return OllamaToolCallingHandler()
     else:
         # Return the handler for the specified tool calling type
-        return get_tool_calling_handler("", tool_calling_type) 
+        return get_tool_calling_handler(tool_calling_type) 
