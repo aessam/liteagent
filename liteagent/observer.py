@@ -1,17 +1,20 @@
 """
-Observer pattern implementation for LiteAgent observability.
+Simplified observer pattern implementation for LiteAgent.
 
-This module provides the observer interface and implementations for tracking
-agent operations, function calls, and inter-agent communication.
+This module provides a streamlined observer interface and implementation for tracking
+agent operations and tool usage.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, TextIO, Set
 import uuid
 import time
 import json
+import os
+import sys
 from collections import defaultdict
 
+# ---- Event Classes ----
 
 class AgentEvent:
     """Base class for all agent events."""
@@ -21,7 +24,9 @@ class AgentEvent:
                  agent_name: str, 
                  context_id: str, 
                  parent_context_id: Optional[str] = None,
-                 timestamp: Optional[float] = None):
+                 timestamp: Optional[float] = None,
+                 event_data: Optional[Dict[str, Any]] = None,
+                 **kwargs):
         """
         Initialize a new agent event.
         
@@ -31,6 +36,8 @@ class AgentEvent:
             context_id: Context ID of the current execution
             parent_context_id: Optional parent context ID if this agent was created by another agent
             timestamp: Event timestamp (defaults to current time)
+            event_data: Additional event-specific data
+            **kwargs: Additional keyword arguments for backward compatibility
         """
         self.agent_id = agent_id
         self.agent_name = agent_name
@@ -38,151 +45,145 @@ class AgentEvent:
         self.parent_context_id = parent_context_id
         self.timestamp = timestamp or time.time()
         self.event_type = self.__class__.__name__
+        self.event_data = event_data or {}
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert event to dictionary representation."""
-        return {
+        result = {
             "event_type": self.event_type,
             "agent_id": self.agent_id,
             "agent_name": self.agent_name,
             "context_id": self.context_id,
-            "parent_context_id": self.parent_context_id,
             "timestamp": self.timestamp
         }
-
-
-class AgentInitializedEvent(AgentEvent):
-    """Event emitted when an agent is initialized."""
-    
-    def __init__(self, 
-                 agent_id: str, 
-                 agent_name: str, 
-                 context_id: str, 
-                 parent_context_id: Optional[str] = None,
-                 model_name: str = None,
-                 system_prompt: str = None,
-                 **kwargs):
-        """
-        Initialize an agent initialized event.
         
-        Args:
-            agent_id: Unique identifier of the agent
-            agent_name: Name of the agent
-            context_id: Context ID of the current execution
-            parent_context_id: Optional parent context ID if this agent was created by another agent
-            model_name: Name of the model used by the agent
-            system_prompt: System prompt used by the agent
-        """
-        super().__init__(agent_id, agent_name, context_id, parent_context_id)
-        self.model_name = model_name
-        self.system_prompt = system_prompt
+        if self.parent_context_id:
+            result["parent_context_id"] = self.parent_context_id
+            
+        # Add event-specific data
+        result.update(self.event_data)
+        
+        return result
     
+    def __str__(self) -> str:
+        """Convert event to string representation."""
+        return f"{self.event_type}(agent={self.agent_name}, context={self.context_id})"
+
+
+# Specialized event types
+class AgentInitializedEvent(AgentEvent):
+    """Event fired when an agent is initialized."""
+    
+    def __init__(self, agent_id: str, agent_name: str, context_id: str, 
+                 model: Optional[str] = None, system_prompt: Optional[str] = None, tools: Optional[List[str]] = None,
+                 parent_context_id: Optional[str] = None, model_name: Optional[str] = None, **kwargs):
+        """Initialize an agent initialized event."""
+        # Handle backward compatibility
+        model = model or model_name or kwargs.get('model_name', 'unknown')
+        
+        super().__init__(
+            agent_id=agent_id,
+            agent_name=agent_name,
+            context_id=context_id,
+            parent_context_id=parent_context_id,
+            event_data={
+                "model": model,
+                "system_prompt": system_prompt or kwargs.get('system_prompt', ''),
+                "tools": tools or kwargs.get('tools', [])
+            }
+        )
+        self.model_name = model  # For backward compatibility
+        self.system_prompt = system_prompt or kwargs.get('system_prompt', '')
+        self.tools = tools or kwargs.get('tools', [])
+        
     def to_dict(self) -> Dict[str, Any]:
         """Convert event to dictionary representation."""
         result = super().to_dict()
-        result.update({
-            "model_name": self.model_name,
-            "system_prompt": self.system_prompt
-        })
+        # For backward compatibility, make sure these keys are included
+        result["model_name"] = self.model_name
+        result["system_prompt"] = self.system_prompt
         return result
 
 
 class UserMessageEvent(AgentEvent):
-    """Event emitted when a user message is received."""
+    """Event fired when a user sends a message to an agent."""
     
-    def __init__(self, 
-                 agent_id: str, 
-                 agent_name: str, 
-                 context_id: str, 
-                 parent_context_id: Optional[str] = None,
-                 message: str = None,
-                 **kwargs):
-        """
-        Initialize a user message event.
+    def __init__(self, agent_id: str, agent_name: str, context_id: str,
+                 message: Optional[str] = None, parent_context_id: Optional[str] = None, **kwargs):
+        """Initialize a user message event."""
+        message = message or kwargs.get('message', '')
         
-        Args:
-            agent_id: Unique identifier of the agent
-            agent_name: Name of the agent
-            context_id: Context ID of the current execution
-            parent_context_id: Optional parent context ID if this agent was created by another agent
-            message: User message content
-        """
-        super().__init__(agent_id, agent_name, context_id, parent_context_id)
+        super().__init__(
+            agent_id=agent_id,
+            agent_name=agent_name,
+            context_id=context_id,
+            parent_context_id=parent_context_id,
+            event_data={"message": message}
+        )
         self.message = message
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert event to dictionary representation."""
-        result = super().to_dict()
-        result.update({
-            "message": self.message
-        })
-        return result
 
 
 class ModelRequestEvent(AgentEvent):
-    """Event emitted before a request is sent to the model."""
+    """Event fired when a request is sent to a model."""
     
-    def __init__(self, 
-                 agent_id: str, 
-                 agent_name: str, 
-                 context_id: str, 
-                 parent_context_id: Optional[str] = None,
-                 messages: List[Dict] = None,
-                 functions: List[Dict] = None,
-                 **kwargs):
-        """
-        Initialize a model request event.
+    def __init__(self, agent_id: str, agent_name: str, context_id: str,
+                 messages: Optional[List[Dict[str, Any]]] = None, model: Optional[str] = None,
+                 parent_context_id: Optional[str] = None, functions: Optional[List[Dict]] = None, **kwargs):
+        """Initialize a model request event."""
+        messages = messages or kwargs.get('messages', [])
         
-        Args:
-            agent_id: Unique identifier of the agent
-            agent_name: Name of the agent
-            context_id: Context ID of the current execution
-            parent_context_id: Optional parent context ID if this agent was created by another agent
-            messages: Messages being sent to the model
-            functions: Function definitions being sent to the model
-        """
-        super().__init__(agent_id, agent_name, context_id, parent_context_id)
+        event_data = {
+            "messages": messages,
+            "model": model or kwargs.get('model', 'unknown')
+        }
+        
+        # For backward compatibility, also include functions if provided
+        if functions or 'functions' in kwargs:
+            event_data["functions"] = functions or kwargs.get('functions', [])
+        
+        super().__init__(
+            agent_id=agent_id,
+            agent_name=agent_name,
+            context_id=context_id,
+            parent_context_id=parent_context_id,
+            event_data=event_data
+        )
         self.messages = messages
-        self.functions = functions
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert event to dictionary representation."""
-        result = super().to_dict()
-        result.update({
-            "messages": self.messages,
-            "functions": self.functions
-        })
-        return result
+        self.model = model or kwargs.get('model', 'unknown')
+        self.functions = functions or kwargs.get('functions', [])  # For backward compatibility
 
 
 class ModelResponseEvent(AgentEvent):
-    """Event emitted after a response is received from the model."""
+    """Event fired when a response is received from a model."""
     
-    def __init__(self, 
-                 agent_id: str, 
-                 agent_name: str, 
-                 context_id: str, 
-                 parent_context_id: Optional[str] = None,
-                 response: Any = None,
-                 **kwargs):
-        """
-        Initialize a model response event.
+    def __init__(self, agent_id: str, agent_name: str, context_id: str,
+                 response: Optional[Any] = None, model: Optional[str] = None, 
+                 parent_context_id: Optional[str] = None, **kwargs):
+        """Initialize a model response event."""
+        # For backward compatibility
+        response = response or kwargs.get('response')
+        model = model or kwargs.get('model', 'unknown')
         
-        Args:
-            agent_id: Unique identifier of the agent
-            agent_name: Name of the agent
-            context_id: Context ID of the current execution
-            parent_context_id: Optional parent context ID if this agent was created by another agent
-            response: Model response
-        """
-        super().__init__(agent_id, agent_name, context_id, parent_context_id)
+        # Don't include full response in event_data to avoid serialization issues
+        super().__init__(
+            agent_id=agent_id,
+            agent_name=agent_name,
+            context_id=context_id,
+            parent_context_id=parent_context_id,
+            event_data={
+                "model": model,
+                "response_summary": str(response)[:100] + "..." if response and len(str(response)) > 100 else str(response or "")
+            }
+        )
         self.response = response
-    
+        self.model = model
+        
+    # Override to_dict for backward compatibility
     def to_dict(self) -> Dict[str, Any]:
         """Convert event to dictionary representation."""
         result = super().to_dict()
         
-        # Handle non-serializable response objects
+        # Handle non-serializable response objects for backward compatibility
         if self.response is not None:
             try:
                 # Try to convert to dict if the response has a to_dict method
@@ -200,91 +201,86 @@ class ModelResponseEvent(AgentEvent):
                 
             result["response"] = response_dict
         else:
+            # Make sure response is always in the dict, even if None
             result["response"] = None
             
         return result
 
 
 class FunctionCallEvent(AgentEvent):
-    """Event emitted before a function/tool is called."""
+    """Event fired when a function is called."""
     
-    def __init__(self, 
-                 agent_id: str, 
-                 agent_name: str, 
-                 context_id: str, 
-                 parent_context_id: Optional[str] = None,
-                 function_name: str = None,
-                 function_args: Dict = None,
-                 function_call_id: str = None,
-                 **kwargs):
-        """
-        Initialize a function call event.
+    def __init__(self, agent_id: str, agent_name: str, context_id: str,
+                 function_name: Optional[str] = None, function_args: Optional[Dict[str, Any]] = None, 
+                 function_call_id: Optional[str] = None,
+                 parent_context_id: Optional[str] = None, **kwargs):
+        """Initialize a function call event."""
+        function_name = function_name or kwargs.get('function_name', '')
+        function_args = function_args or kwargs.get('function_args', {})
+        function_call_id = function_call_id or kwargs.get('function_call_id', str(uuid.uuid4()))
         
-        Args:
-            agent_id: Unique identifier of the agent
-            agent_name: Name of the agent
-            context_id: Context ID of the current execution
-            parent_context_id: Optional parent context ID if this agent was created by another agent
-            function_name: Name of the function being called
-            function_args: Arguments being passed to the function
-            function_call_id: Unique ID to link this call with its result
-        """
-        super().__init__(agent_id, agent_name, context_id, parent_context_id)
+        super().__init__(
+            agent_id=agent_id,
+            agent_name=agent_name,
+            context_id=context_id,
+            parent_context_id=parent_context_id,
+            event_data={
+                "function_name": function_name,
+                "function_args": function_args,
+                "function_call_id": function_call_id
+            }
+        )
         self.function_name = function_name
         self.function_args = function_args
         self.function_call_id = function_call_id
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert event to dictionary representation."""
-        result = super().to_dict()
-        result.update({
-            "function_name": self.function_name,
-            "function_args": self.function_args,
-            "function_call_id": self.function_call_id
-        })
-        return result
 
 
 class FunctionResultEvent(AgentEvent):
-    """Event emitted after a function/tool returns a result."""
+    """Event fired when a function call returns a result."""
     
-    def __init__(self, 
-                 agent_id: str, 
-                 agent_name: str, 
-                 context_id: str, 
-                 parent_context_id: Optional[str] = None,
-                 function_name: str = None,
-                 function_args: Dict = None,
-                 result: Any = None,
-                 error: str = None,
-                 function_call_id: str = None,
-                 **kwargs):
-        """
-        Initialize a function result event.
+    def __init__(self, agent_id: str, agent_name: str, context_id: str,
+                 function_name: Optional[str] = None, result: Optional[Any] = None, 
+                 function_call_id: Optional[str] = None, function_args: Optional[Dict[str, Any]] = None,
+                 error: Optional[str] = None, parent_context_id: Optional[str] = None, **kwargs):
+        """Initialize a function result event."""
+        function_name = function_name or kwargs.get('function_name', '')
+        result = result or kwargs.get('result')
+        function_call_id = function_call_id or kwargs.get('function_call_id', str(uuid.uuid4()))
+        error = error or kwargs.get('error')
         
-        Args:
-            agent_id: Unique identifier of the agent
-            agent_name: Name of the agent
-            context_id: Context ID of the current execution
-            parent_context_id: Optional parent context ID if this agent was created by another agent
-            function_name: Name of the function that was called
-            function_args: Arguments that were passed to the function
-            result: Result returned by the function
-            error: Error message if the function call failed
-            function_call_id: Unique ID linking this result to its function call
-        """
-        super().__init__(agent_id, agent_name, context_id, parent_context_id)
+        # Don't include full result in event_data to avoid serialization issues
+        event_data = {
+            "function_name": function_name,
+            "function_call_id": function_call_id,
+            "result_summary": str(result)[:100] + "..." if result is not None and len(str(result)) > 100 else str(result or "")
+        }
+        
+        # For backward compatibility
+        if function_args or kwargs.get('function_args'):
+            event_data["function_args"] = function_args or kwargs.get('function_args', {})
+        
+        if error:
+            event_data["error"] = error
+            
+        super().__init__(
+            agent_id=agent_id,
+            agent_name=agent_name,
+            context_id=context_id,
+            parent_context_id=parent_context_id,
+            event_data=event_data
+        )
         self.function_name = function_name
-        self.function_args = function_args
         self.result = result
-        self.error = error
         self.function_call_id = function_call_id
-    
+        self.error = error
+        self.function_args = function_args or kwargs.get('function_args', {})  # For backward compatibility
+        
+    # Override to_dict for backward compatibility
     def to_dict(self) -> Dict[str, Any]:
         """Convert event to dictionary representation."""
         result_dict = super().to_dict()
         
-        # Ensure result is serializable
+        # Ensure result is serializable for backward compatibility
         if self.result is not None:
             try:
                 # Test if it's directly serializable
@@ -295,48 +291,36 @@ class FunctionResultEvent(AgentEvent):
                 serialized_result = str(self.result)
         else:
             serialized_result = None
-            
+        
+        # Add fields expected by older code    
         result_dict.update({
-            "function_name": self.function_name,
             "function_args": self.function_args,
             "result": serialized_result,
-            "error": self.error,
-            "function_call_id": self.function_call_id
+            "error": self.error  # Always include error, even if None
         })
+            
         return result_dict
 
 
 class AgentResponseEvent(AgentEvent):
-    """Event emitted when an agent generates a final response."""
+    """Event fired when an agent generates a response."""
     
-    def __init__(self, 
-                 agent_id: str, 
-                 agent_name: str, 
-                 context_id: str, 
-                 parent_context_id: Optional[str] = None,
-                 response: str = None,
-                 **kwargs):
-        """
-        Initialize an agent response event.
+    def __init__(self, agent_id: str, agent_name: str, context_id: str,
+                 response: Optional[str] = None, parent_context_id: Optional[str] = None, **kwargs):
+        """Initialize an agent response event."""
+        response = response or kwargs.get('response', '')
         
-        Args:
-            agent_id: Unique identifier of the agent
-            agent_name: Name of the agent
-            context_id: Context ID of the current execution
-            parent_context_id: Optional parent context ID if this agent was created by another agent
-            response: Agent's response content
-        """
-        super().__init__(agent_id, agent_name, context_id, parent_context_id)
+        super().__init__(
+            agent_id=agent_id,
+            agent_name=agent_name,
+            context_id=context_id,
+            parent_context_id=parent_context_id,
+            event_data={"response": response}
+        )
         self.response = response
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert event to dictionary representation."""
-        result = super().to_dict()
-        result.update({
-            "response": self.response
-        })
-        return result
 
+
+# ---- Observer Interface ----
 
 class AgentObserver(ABC):
     """
@@ -356,92 +340,105 @@ class AgentObserver(ABC):
         pass
     
     def on_agent_initialized(self, event: AgentInitializedEvent) -> None:
-        """
-        Handle an agent initialized event.
-        
-        Args:
-            event: The event to handle
-        """
+        """Handle an agent initialized event."""
         self.on_event(event)
     
     def on_user_message(self, event: UserMessageEvent) -> None:
-        """
-        Handle a user message event.
-        
-        Args:
-            event: The event to handle
-        """
+        """Handle a user message event."""
         self.on_event(event)
     
     def on_model_request(self, event: ModelRequestEvent) -> None:
-        """
-        Handle a model request event.
-        
-        Args:
-            event: The event to handle
-        """
+        """Handle a model request event."""
         self.on_event(event)
     
     def on_model_response(self, event: ModelResponseEvent) -> None:
-        """
-        Handle a model response event.
-        
-        Args:
-            event: The event to handle
-        """
+        """Handle a model response event."""
         self.on_event(event)
     
     def on_function_call(self, event: FunctionCallEvent) -> None:
-        """
-        Handle a function call event.
-        
-        Args:
-            event: The event to handle
-        """
+        """Handle a function call event."""
         self.on_event(event)
     
     def on_function_result(self, event: FunctionResultEvent) -> None:
-        """
-        Handle a function result event.
-        
-        Args:
-            event: The event to handle
-        """
+        """Handle a function result event."""
         self.on_event(event)
     
     def on_agent_response(self, event: AgentResponseEvent) -> None:
-        """
-        Handle an agent response event.
-        
-        Args:
-            event: The event to handle
-        """
+        """Handle an agent response event."""
         self.on_event(event)
 
 
-class ConsoleObserver(AgentObserver):
+# ---- Unified Observer Implementation ----
+
+class UnifiedObserver(AgentObserver):
     """
-    Observer that logs events to the console.
+    Configurable observer that combines console, file, and tree trace functionality.
     
-    This is a simple implementation for debugging purposes.
+    This observer can be configured to log events to the console, a file, or both,
+    and can also build a hierarchical trace of agent interactions.
     """
+    
+    def __init__(self, 
+                 console_output: bool = True,
+                 file_output: bool = False, 
+                 file_path: str = "agent_events.jsonl",
+                 build_trace: bool = False,
+                 verbose: bool = False):
+        """
+        Initialize a unified observer.
+        
+        Args:
+            console_output: Whether to log events to the console
+            file_output: Whether to log events to a file
+            file_path: Path to the file to log events to
+            build_trace: Whether to build a hierarchical trace of agent interactions
+            verbose: Whether to include verbose details in console output
+        """
+        self.console_output = console_output
+        self.file_output = file_output
+        self.file_path = file_path
+        self.build_trace = build_trace
+        self.verbose = verbose
+        
+        # For tree trace
+        self.events = []
+        self.agents = {}  # agent_id -> agent info
+        self.context_map = {}  # context_id -> agent_id
+        self.parent_map = {}  # context_id -> parent_context_id
+        self.children_map = defaultdict(list)  # parent_context_id -> [child_context_ids]
+        self.agent_events = defaultdict(list)  # agent_id -> [events]
+        self.context_events = defaultdict(list)  # context_id -> [events]
+        self.function_calls = {}  # function_call_id -> call event
+        self.function_results = {}  # function_call_id -> result event
     
     def on_event(self, event: AgentEvent) -> None:
-        """Log event to console."""
-        event_dict = event.to_dict()
-        print(f"[{event.event_type}] Agent: {event.agent_name} ({event.agent_id})")
-        print(f"  Context: {event.context_id}")
-        if event.parent_context_id:
-            print(f"  Parent Context: {event.parent_context_id}")
+        """Handle an agent event by delegating to the appropriate outputs."""
+        # Store event for trace
+        if self.build_trace:
+            self._store_event_for_trace(event)
         
-        # Print event-specific details
-        if isinstance(event, AgentInitializedEvent):
+        # Log to console
+        if self.console_output:
+            self._log_to_console(event)
+        
+        # Log to file
+        if self.file_output:
+            self._log_to_file(event)
+    
+    def _log_to_console(self, event: AgentEvent) -> None:
+        """Log an event to the console."""
+        print(f"[{event.event_type}] Agent: {event.agent_name}")
+        
+        # Print event-specific details based on event type
+        if isinstance(event, AgentInitializedEvent) and self.verbose:
             print(f"  Model: {event.model_name}")
+            print(f"  Tools: {', '.join(event.tools) if event.tools else 'None'}")
         elif isinstance(event, UserMessageEvent):
             print(f"  User Message: {event.message}")
         elif isinstance(event, FunctionCallEvent):
             print(f"  Function Call: {event.function_name}")
-            print(f"  Arguments: {event.function_args}")
+            if self.verbose:
+                print(f"  Arguments: {event.function_args}")
         elif isinstance(event, FunctionResultEvent):
             print(f"  Function Result: {event.function_name}")
             print(f"  Result: {event.result}")
@@ -450,10 +447,188 @@ class ConsoleObserver(AgentObserver):
         elif isinstance(event, AgentResponseEvent):
             print(f"  Response: {event.response}")
         
-        print("\n")
+        if self.verbose and event.parent_context_id:
+            print(f"  Context: {event.context_id}")
+            print(f"  Parent Context: {event.parent_context_id}")
+            
+        print("")
+    
+    def _log_to_file(self, event: AgentEvent) -> None:
+        """Log an event to a file in JSON format."""
+        try:
+            event_dict = event.to_dict()
+            with open(self.file_path, 'a') as f:
+                f.write(json.dumps(event_dict) + '\n')
+        except Exception as e:
+            print(f"Error logging event to file: {str(e)}")
+    
+    def _store_event_for_trace(self, event: AgentEvent) -> None:
+        """Store an event for trace building."""
+        self.events.append(event)
+        
+        # Track agent info
+        if event.agent_id not in self.agents:
+            self.agents[event.agent_id] = {
+                "name": event.agent_name,
+                "contexts": set([event.context_id])
+            }
+        else:
+            self.agents[event.agent_id]["contexts"].add(event.context_id)
+        
+        # Track context relationships
+        self.context_map[event.context_id] = event.agent_id
+        
+        if event.parent_context_id:
+            self.parent_map[event.context_id] = event.parent_context_id
+            self.children_map[event.parent_context_id].append(event.context_id)
+        
+        # Track events by agent and context
+        self.agent_events[event.agent_id].append(event)
+        self.context_events[event.context_id].append(event)
+        
+        # Track function calls and results
+        if isinstance(event, FunctionCallEvent):
+            self.function_calls[event.function_call_id] = event
+        elif isinstance(event, FunctionResultEvent):
+            self.function_results[event.function_call_id] = event
+    
+    def print_trace(self, output: TextIO = sys.stdout) -> None:
+        """
+        Print the hierarchical trace of agent interactions.
+        
+        Args:
+            output: Output stream to write to (default: sys.stdout)
+        """
+        if not self.build_trace or not self.events:
+            print("No trace available or trace building is disabled", file=output)
+            return
+        
+        # Find root contexts (those without parents)
+        root_contexts = set(self.context_map.keys()) - set(self.parent_map.keys())
+        
+        print("\n=== Agent Interaction Trace ===\n", file=output)
+        
+        # Print the trace for each root context
+        for context_id in root_contexts:
+            self._print_context_trace(context_id, 0, output)
+    
+    def _print_context_trace(self, context_id: str, indent: int, output: TextIO) -> None:
+        """
+        Print the trace for a specific context.
+        
+        Args:
+            context_id: Context ID to print trace for
+            indent: Current indentation level
+            output: Output stream to write to
+        """
+        agent_id = self.context_map.get(context_id)
+        if not agent_id:
+            return
+        
+        agent_name = self.agents[agent_id]["name"]
+        indent_str = "  " * indent
+        
+        print(f"{indent_str}Context: {context_id} (Agent: {agent_name})", file=output)
+        
+        # Print events for this context
+        for event in self.context_events[context_id]:
+            event_summary = self._get_event_summary(event)
+            print(f"{indent_str}  {event.event_type}: {event_summary}", file=output)
+        
+        # Print child contexts
+        for child_context_id in self.children_map.get(context_id, []):
+            self._print_context_trace(child_context_id, indent + 1, output)
+    
+    # Add alias for backward compatibility
+    def _print_agent_tree(self, context_id: str, prefix: str, is_last: bool, output: TextIO = sys.stdout) -> None:
+        """
+        Alias for _print_context_trace for backward compatibility.
+        
+        Args:
+            context_id: Context ID to print trace for
+            prefix: Ignored, kept for backward compatibility
+            is_last: Ignored, kept for backward compatibility
+            output: Output stream to write to
+        """
+        self._print_context_trace(context_id, 0, output)
+    
+    def _print_agent_events(self, agent_id: str, prefix: str = "") -> None:
+        """
+        Alias method for backward compatibility that prints events for an agent.
+        
+        Args:
+            agent_id: The agent ID to print events for
+            prefix: Prefix string for indentation (ignored, for compatibility)
+        """
+        if agent_id not in self.agents or agent_id not in self.agent_events:
+            return
+            
+        # Print events for this agent
+        for event in self.agent_events[agent_id]:
+            event_summary = self._get_event_summary(event)
+            print(f"  {event.event_type}: {event_summary}")
+    
+    def _get_event_summary(self, event: AgentEvent) -> str:
+        """Get a summary string for an event."""
+        if isinstance(event, UserMessageEvent):
+            return f"User: {event.message}"
+        elif isinstance(event, AgentResponseEvent):
+            return f"Agent: {event.response[:50]}..." if len(event.response) > 50 else event.response
+        elif isinstance(event, FunctionCallEvent):
+            args_str = ", ".join(f"{k}={repr(v)}" for k, v in event.function_args.items())
+            return f"{event.function_name}({args_str})"
+        elif isinstance(event, FunctionResultEvent):
+            result_str = str(event.result)
+            return f"{event.function_name} -> {result_str[:50]}..." if len(result_str) > 50 else result_str
+        elif isinstance(event, AgentInitializedEvent):
+            return f"Model: {event.model_name}, Tools: {len(event.tools)}"
+        else:
+            return str(event)
+
+    def _format_args(self, args: Dict) -> str:
+        """
+        Format function arguments as a string.
+        
+        Args:
+            args: Dictionary of function arguments
+            
+        Returns:
+            Formatted string representation of arguments
+        """
+        if not args:
+            return ""
+        
+        parts = []
+        for key, value in args.items():
+            parts.append(f"{key}={repr(value)}")
+        
+        return ", ".join(parts)
 
 
-class FileObserver(AgentObserver):
+# Simple observer implementations for backward compatibility
+class ConsoleObserver(UnifiedObserver):
+    """
+    Observer that logs events to the console.
+    
+    This is a simple implementation for debugging purposes.
+    """
+    
+    def __init__(self, verbose: bool = False):
+        """
+        Initialize a console observer.
+        
+        Args:
+            verbose: Whether to include verbose details in console output
+        """
+        super().__init__(
+            console_output=True,
+            file_output=False,
+            build_trace=False,
+            verbose=verbose
+        )
+
+
+class FileObserver(UnifiedObserver):
     """
     Observer that logs events to a file in JSON format.
     
@@ -467,171 +642,33 @@ class FileObserver(AgentObserver):
         Args:
             filename: Name of the file to log events to
         """
-        self.filename = filename
-    
-    def on_event(self, event: AgentEvent) -> None:
-        """Log event to file."""
-        try:
-            event_dict = event.to_dict()
-            with open(self.filename, 'a') as f:
-                f.write(json.dumps(event_dict) + '\n')
-        except Exception as e:
-            print(f"Error logging event to file: {str(e)}")
+        super().__init__(
+            console_output=False,
+            file_output=True,
+            file_path=filename,
+            build_trace=False
+        )
 
 
-class TreeTraceObserver(AgentObserver):
+class TreeTraceObserver(UnifiedObserver):
     """
     Observer that builds and displays a hierarchical tree visualization of agent interactions.
     
     This provides a clear view of parent-child relationships and event sequences.
     """
     
-    def __init__(self):
-        """Initialize the tree trace observer."""
-        self.events = []
-        self.agents = {}  # agent_id -> agent info
-        self.context_map = {}  # context_id -> agent_id
-        self.parent_map = {}  # context_id -> parent_context_id
-        self.children_map = defaultdict(list)  # parent_context_id -> [child_context_ids]
-        self.agent_events = defaultdict(list)  # agent_id -> [events]
-        self.function_calls = {}  # function_call_id -> call event
-        self.function_results = {}  # function_call_id -> result event
-        
-    def on_event(self, event: AgentEvent) -> None:
-        """Record all events."""
-        self.events.append(event)
-        
-        # Track agents
-        if event.agent_id not in self.agents:
-            self.agents[event.agent_id] = {
-                "name": event.agent_name,
-                "context_id": event.context_id,
-                "parent_context_id": event.parent_context_id
-            }
-            
-            # Update parent-child relationships
-            if event.parent_context_id:
-                self.parent_map[event.context_id] = event.parent_context_id
-                self.children_map[event.parent_context_id].append(event.context_id)
-            
-        # Map contexts to agents
-        if event.context_id not in self.context_map:
-            self.context_map[event.context_id] = event.agent_id
-            
-        # Store events by agent
-        self.agent_events[event.agent_id].append(event)
-        
-        # Track function calls and results
-        if isinstance(event, FunctionCallEvent) and hasattr(event, 'function_call_id') and event.function_call_id:
-            self.function_calls[event.function_call_id] = event
-            
-        if isinstance(event, FunctionResultEvent) and hasattr(event, 'function_call_id') and event.function_call_id:
-            self.function_results[event.function_call_id] = event
-    
-    def print_trace(self) -> None:
-        """Print a hierarchical tree visualization of agent interactions."""
-        print("\n=== Agent Interaction Tree ===")
-        
-        # Find root contexts (those without parents)
-        root_contexts = []
-        for context_id in self.context_map.keys():
-            if context_id not in self.parent_map:
-                root_contexts.append(context_id)
-        
-        # Print each tree starting from root contexts
-        for root_context in root_contexts:
-            self._print_agent_tree(root_context, "", True)
-    
-    def _print_agent_tree(self, context_id: str, prefix: str, is_last: bool) -> None:
+    def __init__(self, console_output: bool = False):
         """
-        Recursively print the agent tree.
+        Initialize a tree trace observer.
         
         Args:
-            context_id: The context ID to print
-            prefix: Prefix string for indentation
-            is_last: Whether this is the last child in its parent
+            console_output: Whether to also log events to the console
         """
-        agent_id = self.context_map.get(context_id)
-        if not agent_id:
-            return
-            
-        agent = self.agents.get(agent_id, {})
-        agent_name = agent.get("name", "Unknown")
-        
-        # Print the agent node
-        connector = "└── " if is_last else "├── "
-        print(f"{prefix}{connector}Agent: {agent_name} (context: {context_id[:8]}...)")
-        
-        # Print events for this agent
-        events_prefix = prefix + ("    " if is_last else "│   ")
-        self._print_agent_events(agent_id, events_prefix)
-        
-        # Print child agents
-        children = self.children_map.get(context_id, [])
-        for i, child_context in enumerate(children):
-            child_prefix = prefix + ("    " if is_last else "│   ")
-            is_last_child = (i == len(children) - 1)
-            self._print_agent_tree(child_context, child_prefix, is_last_child)
-    
-    def _print_agent_events(self, agent_id: str, prefix: str) -> None:
-        """
-        Print events for an agent.
-        
-        Args:
-            agent_id: The agent ID to print events for
-            prefix: Prefix string for indentation
-        """
-        events = sorted(self.agent_events.get(agent_id, []), key=lambda e: e.timestamp)
-        
-        for event in events:
-            event_type = event.event_type
-            
-            # Format the event line based on event type
-            if event_type == "AgentInitializedEvent":
-                print(f"{prefix}├── Initialized (model: {event.model_name})")
-            
-            elif event_type == "UserMessageEvent":
-                message = event.message[:40] + "..." if len(event.message) > 40 else event.message
-                print(f"{prefix}├── User message: {message}")
-            
-            elif event_type == "FunctionCallEvent":
-                args_str = self._format_args(event.function_args)
-                call_id = getattr(event, 'function_call_id', None)
-                if call_id:
-                    call_id_short = call_id[:8]
-                    print(f"{prefix}├── Function call: {event.function_name}({args_str}) [id:{call_id_short}]")
-                else:
-                    print(f"{prefix}├── Function call: {event.function_name}({args_str})")
-            
-            elif event_type == "FunctionResultEvent":
-                result_str = str(event.result)[:40] + "..." if len(str(event.result)) > 40 else str(event.result)
-                call_id = getattr(event, 'function_call_id', None)
-                if call_id:
-                    call_id_short = call_id[:8]
-                    if event.error:
-                        print(f"{prefix}├── Function error: {event.error[:40]}... [id:{call_id_short}]")
-                    else:
-                        print(f"{prefix}├── Function result: {result_str} [id:{call_id_short}]")
-                else:
-                    if event.error:
-                        print(f"{prefix}├── Function error: {event.error[:40]}...")
-                    else:
-                        print(f"{prefix}├── Function result: {result_str}")
-            
-            elif event_type == "AgentResponseEvent":
-                response = event.response[:40] + "..." if len(event.response) > 40 else event.response
-                print(f"{prefix}└── Response: {response}")
-    
-    def _format_args(self, args: Dict) -> str:
-        """Format function arguments for display."""
-        if not args:
-            return ""
-        
-        parts = []
-        for key, value in args.items():
-            parts.append(f"{key}={value}")
-        
-        return ", ".join(parts)
+        super().__init__(
+            console_output=console_output,
+            file_output=False,
+            build_trace=True
+        )
 
 
 def generate_context_id() -> str:

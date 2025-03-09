@@ -13,7 +13,7 @@ import time
 
 from liteagent.observer import AgentObserver, AgentEvent, FunctionCallEvent, FunctionResultEvent
 from liteagent.tool_calling_types import ToolCallingType
-from liteagent.validation_strategies import ToolValidationStrategy, get_validation_strategy
+from liteagent.handlers.auto_detect_handler import AutoDetectToolCallingHandler
 from typing_extensions import Protocol
 
 T = TypeVar('T')
@@ -47,20 +47,19 @@ class ValidationObserver(AgentObserver):
         self.user_messages: List[str] = []
         self.agent_responses: List[str] = []
         
-        # Set validation strategy based on tool calling type
-        self.strategy: Optional[ToolValidationStrategy] = None
-        self._tool_calling_type: Optional[ToolCallingType] = None
-        if tool_calling_type is not None:
-            self.set_validation_strategy(tool_calling_type)
+        # Use handlers instead of strategies
+        self._tool_calling_type: Optional[ToolCallingType] = tool_calling_type
+        self._handler = AutoDetectToolCallingHandler()
+        self._response_parsers = {}
         
     def set_validation_strategy(self, tool_calling_type: ToolCallingType):
         """
-        Set the validation strategy based on tool calling type.
+        Set the tool calling type for validation.
         
         Args:
             tool_calling_type: The tool calling type to use for validation
         """
-        self.strategy = get_validation_strategy(tool_calling_type)
+        # Keep for backward compatibility, but use handlers internally
         self._tool_calling_type = tool_calling_type
         
     @property
@@ -110,17 +109,15 @@ class ValidationObserver(AgentObserver):
         super().on_agent_response(event)
         self.agent_responses.append(event.response)
     
-    def register_response_parser(self, function_name: str, parser: ResponseParser):
+    def register_response_parser(self, pattern_or_name, parser):
         """
         Register a custom parser for a specific function's response.
         
         Args:
-            function_name: The name of the function to register the parser for
+            pattern_or_name: The name of the function or a regex pattern to match
             parser: A function that takes a response string and returns a structured dict
         """
-        if self.strategy is None:
-            raise ValueError("Cannot register response parser without a validation strategy")
-        self.strategy.register_response_parser(function_name, parser)
+        self._response_parsers[pattern_or_name] = parser
     
     def get_function_call_count(self, function_name: str) -> int:
         """
@@ -279,14 +276,46 @@ class ValidationObserver(AgentObserver):
         Returns:
             A dictionary with the parsed response data
         """
-        if self.strategy is None:
-            raise ValueError("Cannot parse response without a validation strategy")
-            
-        if expected_tool:
-            return self.strategy.parse_response(response, expected_tool)
+        result = {}
         
-        # Default parsing
-        return self.strategy.extract_structured_data(response)
+        # Try tool-specific parser first
+        if expected_tool and expected_tool in self._response_parsers:
+            parser = self._response_parsers[expected_tool]
+            if callable(parser):
+                return parser(response)
+                
+        # Try regex-based parsers
+        for pattern, parser in self._response_parsers.items():
+            if isinstance(pattern, str) and not pattern in self.called_functions:
+                # This is a regex pattern, not a function name
+                match = re.search(pattern, response)
+                if match and callable(parser):
+                    return parser(match)
+        
+        # Fall back to extracting structured data
+        return self._extract_structured_data(response)
+        
+    def _extract_structured_data(self, response: str) -> Dict[str, Any]:
+        """Extract structured data from a text response."""
+        result = {}
+        
+        # Try to extract JSON if present
+        json_match = re.search(r'```json\s*(.*?)\s*```', response, re.DOTALL)
+        if json_match:
+            try:
+                return json.loads(json_match.group(1))
+            except json.JSONDecodeError:
+                pass
+        
+        # Extract key-value pairs like "Key: value" or "Key = value"
+        for line in response.split('\n'):
+            kv_match = re.search(r'([^:=]+)[:=]\s*(.*)', line)
+            if kv_match:
+                key = kv_match.group(1).strip()
+                value = kv_match.group(2).strip()
+                result[key] = value
+                
+        return result
     
     def assert_response_contains_structure(self, response: str, 
                                          expected_structure: Dict[str, Any],
