@@ -55,10 +55,19 @@ packages = ["liteagent"]
 liteagent = ["model_capabilities.json"]
 
 [tool.pytest.ini_options]
-addopts = "-v -n auto -m 'not longrun'"
+addopts = "-v -m 'not longrun' --reruns=3 --reruns-delay=5 --cov=liteagent --cov-report=term --cov-report=html:tests/.coverage_files --cache-clear"
+testpaths = ["tests/unit", "tests/integration"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+
 markers = [
     "slow: marks tests as slow",
     "integration: marks tests as integration tests that might need external services",
     "optional: marks tests as optional",
     "longrun: marks tests as very long-running tests that should be run explicitly"
 ] 
+_log_cli = "true"
+_log_cli_level = "INFO"
+_log_cli_format = "%(asctime)s [%(levelname)8s] %(message)s (%(filename)s:%(lineno)s)"
+_log_cli_date_format = "%Y-%m-%d %H:%M:%S"
