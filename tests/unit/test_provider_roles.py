@@ -65,17 +65,19 @@ def test_mistral_system_after_assistant():
     print("\nProcessed messages for Mistral:")
     pprint(processed_messages)
     
+    # Verify that the first message is a system message
+    assert processed_messages[0]["role"] == "system", "First message should be a system message"
+    assert processed_messages[0]["content"] == "Initial system instruction.", "First system message content should be preserved"
+    
     # Verify that the second system message was converted to a user message
-    found_converted = False
+    converted_found = False
     for msg in processed_messages:
-        if msg["role"] == "user" and "System instruction:" in msg["content"]:
-            found_converted = True
+        if (msg["role"] == "user" and 
+            "System instruction: New system instruction" in msg["content"]):
+            converted_found = True
             break
     
-    assert found_converted, "System message after assistant should be converted to user message"
-    
-    # Check if the first system message is still present
-    assert processed_messages[0]["role"] == "system", "First system message should be preserved"
+    assert converted_found, "Second system message should be converted to a user message"
 
 def test_mistral_consecutive_roles():
     """Test Mistral's handling of consecutive identical roles."""

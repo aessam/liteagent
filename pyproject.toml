@@ -67,7 +67,7 @@ markers = [
     "optional: marks tests as optional",
     "longrun: marks tests as very long-running tests that should be run explicitly"
 ] 
-_log_cli = "true"
-_log_cli_level = "INFO"
-_log_cli_format = "%(asctime)s [%(levelname)8s] %(message)s (%(filename)s:%(lineno)s)"
-_log_cli_date_format = "%Y-%m-%d %H:%M:%S"
+log_cli = "true"
+log_cli_level = "INFO"
+log_cli_format = "%(asctime)s [%(levelname)8s] %(message)s (%(filename)s:%(lineno)s)"
+log_cli_date_format = "%Y-%m-%d %H:%M:%S"

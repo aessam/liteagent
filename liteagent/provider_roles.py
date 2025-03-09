@@ -6,6 +6,7 @@ helping ensure compatibility across different LLM APIs.
 """
 
 from typing import Dict, List, Set, Optional, Any
+import copy
 
 # Define supported roles for each provider
 PROVIDER_ROLES = {
@@ -48,6 +49,9 @@ def process_messages_for_provider(messages: List[Dict], provider: str) -> List[D
     Returns:
         Processed list of messages compatible with the provider
     """
+    # Make a deep copy of the messages to avoid modifying the original list
+    messages = copy.deepcopy(messages)
+    
     normalized_provider = provider.lower()
     
     # Extract the base provider (e.g., "openai" from "openai/gpt-4")
@@ -82,30 +86,42 @@ def process_messages_for_provider(messages: List[Dict], provider: str) -> List[D
                     )
                     msg["content"] = augmented_content
     
-    # Process messages
+    # Simple processing for all messages
     processed_messages = []
-    seen_assistant = False
-    system_messages = []
     
-    # First pass: Collect system messages and process other messages
+    # Track if we need special handling for system messages
+    has_system_position_constraint = constraints.get("system_position") == "first_only"
+    seen_assistant = False
+    first_system_message = None
+    
+    # First pass to identify assistant messages and first system message
+    for msg in messages:
+        if msg.get("role") == "assistant":
+            seen_assistant = True
+        
+        # Keep track of the first system message
+        if msg.get("role") == "system" and first_system_message is None:
+            first_system_message = msg
+    
+    # Second pass to process all messages
     for msg in messages:
         role = msg.get("role", "")
         
-        # Special handling for system messages based on constraints
+        # Special handling for system messages
         if role == "system":
-            if constraints.get("system_position") == "first_only" and seen_assistant:
-                # Convert system message after assistant to user message
+            if msg == first_system_message:
+                # Keep the first system message as is
+                processed_messages.append(msg)
+            elif has_system_position_constraint and seen_assistant:
+                # Convert system messages after assistant to user messages
                 processed_messages.append({
                     "role": "user",
                     "content": f"System instruction: {msg.get('content', '')}"
                 })
             else:
-                system_messages.append(msg)
+                # Other system messages are kept as is
+                processed_messages.append(msg)
             continue
-        
-        # Mark if we've seen an assistant message
-        if role == "assistant":
-            seen_assistant = True
         
         # Special handling for Ollama - embed tool calls and responses in user/assistant messages
         if constraints.get("embed_tool_calls") and (role == "function" or role == "tool"):
@@ -118,7 +134,7 @@ def process_messages_for_provider(messages: List[Dict], provider: str) -> List[D
                 "content": f"Tool result from {tool_name}: {tool_content}\nPlease process this result and continue."
             })
             continue
-            
+        
         # Handle unsupported roles
         if role not in supported_roles:
             if role == "function" or (role == "tool" and normalized_provider == "anthropic"):
@@ -137,57 +153,53 @@ def process_messages_for_provider(messages: List[Dict], provider: str) -> List[D
             # Role is supported, keep it as is
             processed_messages.append(msg)
     
-    # Reorganize messages with system messages at the beginning
-    if constraints.get("system_position") == "first_only" and system_messages:
-        final_messages = system_messages + processed_messages
-    else:
-        final_messages = processed_messages
-    
     # Apply strict sequence constraints if needed
-    if constraints.get("strict_sequence", False) and final_messages:
-        reorganized_messages = []
-        prev_role = None
-        
-        for i, msg in enumerate(final_messages):
-            role = msg.get("role", "")
+    if constraints.get("strict_sequence", False) and processed_messages:
+        # Only apply strict sequence for models that require it
+        if normalized_provider in ["mistral", "deepseek", "ollama"]:
+            reorganized_messages = []
+            prev_role = None
             
-            # Handle first message (usually system)
-            if prev_role is None:
-                reorganized_messages.append(msg)
-                prev_role = role
-                continue
+            for i, msg in enumerate(processed_messages):
+                role = msg.get("role", "")
                 
-            # For subsequent messages, ensure proper alternation
-            if role == prev_role and role != "system":
-                # If same role appears consecutively (except system), force alternation
-                if role == "user":
-                    # Add a placeholder assistant message
-                    reorganized_messages.append({"role": "assistant", "content": "I understand."})
+                # Handle first message (usually system)
+                if prev_role is None:
                     reorganized_messages.append(msg)
                     prev_role = role
-                elif role == "assistant":
-                    # Add a placeholder user message
-                    reorganized_messages.append({"role": "user", "content": "Please continue."})
-                    reorganized_messages.append(msg)
-                    prev_role = role
+                    continue
+                
+                # For subsequent messages, ensure proper alternation
+                if role == prev_role and role != "system":
+                    # If same role appears consecutively (except system), force alternation
+                    if role == "user":
+                        # Add a placeholder assistant message
+                        reorganized_messages.append({"role": "assistant", "content": "I understand."})
+                        reorganized_messages.append(msg)
+                        prev_role = role
+                    elif role == "assistant":
+                        # Add a placeholder user message
+                        reorganized_messages.append({"role": "user", "content": "Please continue."})
+                        reorganized_messages.append(msg)
+                        prev_role = role
+                    else:
+                        # For other consecutive roles, just append
+                        reorganized_messages.append(msg)
+                        prev_role = role
                 else:
-                    # For other consecutive roles, just append
+                    # Roles are different, no need for alternation
                     reorganized_messages.append(msg)
                     prev_role = role
-            else:
-                # Roles are different, no need for alternation
-                reorganized_messages.append(msg)
-                prev_role = role
-        
-        final_messages = reorganized_messages
+            
+            processed_messages = reorganized_messages
     
     # Check last message role constraint
-    if "last_message_role" in constraints and final_messages:
+    if "last_message_role" in constraints and processed_messages:
         allowed_last_roles = constraints["last_message_role"]
-        current_last_role = final_messages[-1].get("role")
+        current_last_role = processed_messages[-1].get("role")
         
         if current_last_role not in allowed_last_roles:
             # Add an empty user message to satisfy the constraint
-            final_messages.append({"role": "user", "content": "Continue."})
+            processed_messages.append({"role": "user", "content": "Continue."})
     
-    return final_messages 
+    return processed_messages 
