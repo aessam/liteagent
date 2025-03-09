@@ -19,6 +19,7 @@ from .observer import (AgentObserver, AgentEvent, AgentInitializedEvent, UserMes
                       ModelRequestEvent, ModelResponseEvent, FunctionCallEvent, 
                       FunctionResultEvent, AgentResponseEvent, generate_context_id)
 from .tool_calling import ToolCallTracker
+from .tool_calling_types import ToolCallingType, detect_model_capability
 
 class LiteAgent:
     """
@@ -76,6 +77,20 @@ to provide a final text response to the user."""
             # Get all registered tools
             from .tools import TOOLS
             self._register_tools(TOOLS)
+        
+        # Detect model capabilities and create appropriate handler
+        self.tool_calling_type = detect_model_capability(model, self.model_interface)
+        self._log(f"Detected model capabilities: {self.tool_calling_type}")
+        
+        # Create tool handler based on detected capabilities
+        from .handlers import create_tool_handler
+        self.tool_handler = create_tool_handler(self.tool_calling_type)
+        
+        # Enhance system prompt for structured output if needed
+        if tools and self.tool_calling_type == ToolCallingType.STRUCTURED_OUTPUT:
+            self._log("Using structured output prompt enhancement for tools")
+            self.system_prompt = self._enhance_prompt_with_tools(self.system_prompt, tools)
+            self.memory.system_prompt = self.system_prompt
             
         # Emit initialization event
         self._emit_event(AgentInitializedEvent(
@@ -500,27 +515,86 @@ to provide a final text response to the user."""
         self.memory = ConversationMemory(system_prompt=self.system_prompt)
         
     def _log(self, message, level="debug"):
-        """Log a message if debug is enabled."""
+        """Log a message if debug mode is enabled."""
         if self.debug:
-            if level == "debug":
-                logger.debug(message)
-            elif level == "info":
-                logger.info(message)
-            elif level == "warning":
-                logger.warning(message)
-            elif level == "error":
-                logger.error(message)
+            log_func = getattr(logger, level)
+            log_func(f"[{self.name}] {message}")
 
+    def _enhance_prompt_with_tools(self, system_prompt, tools):
+        """
+        Enhance the system prompt with tool descriptions for structured output models.
+        
+        Args:
+            system_prompt: The original system prompt
+            tools: List of tools to include in the prompt
+            
+        Returns:
+            Enhanced system prompt
+        """
+        tool_descriptions = []
+        
+        for tool in tools:
+            if isinstance(tool, dict) and "schema" in tool:
+                schema = tool["schema"]
+                name = schema.get("name", "")
+                description = schema.get("description", "")
+                params = schema.get("parameters", {}).get("properties", {})
+                param_desc = []
+                
+                for param_name, param_info in params.items():
+                    param_type = param_info.get("type", "any")
+                    param_desc.append(f"- {param_name} ({param_type}): {param_info.get('description', '')}")
+                
+                tool_desc = f"""
+Function: {name}
+Description: {description}
+Parameters:
+{"".join(param_desc)}
+"""
+                tool_descriptions.append(tool_desc)
+            elif hasattr(tool, "to_dict"):
+                tool_dict = tool.to_dict()
+                name = tool_dict.get("name", "")
+                description = tool_dict.get("description", "")
+                
+                tool_desc = f"""
+Function: {name}
+Description: {description}
+"""
+                tool_descriptions.append(tool_desc)
+        
+        tool_instruction = """
+You have access to the following tools:
+
+{}
+
+When you need to use a tool, respond using this format:
+```
+Thought: I need to use a tool to help answer the question.
+Action: tool_name
+Action Input: {{"param1": value1, "param2": value2}}
+```
+
+After receiving the tool output, continue with:
+```
+Observation: [Tool Output]
+Thought: I now know the answer.
+Answer: [Your response to the user]
+```
+""".format("\n".join(tool_descriptions))
+        
+        return f"{system_prompt}\n\n{tool_instruction}"
+            
     def _execute_tool_call(self, tool_call, function_map):
         """
-        Execute a tool call.
+        Execute a tool call and return the result.
         
         Args:
             tool_call: The tool call to execute
-            function_map: Map of function names to functions or FunctionTool objects
+            function_map: Map of function names to functions
             
         Returns:
-            The result of executing the tool
+            Result of the tool call
         """
         try:
             function_name = tool_call["name"]

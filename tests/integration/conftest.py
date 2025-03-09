@@ -58,9 +58,11 @@ def validation_observer():
 
 # Standard set of models to test across all providers
 STANDARD_TEST_MODELS = [
-    "gpt-4o-mini",
-    "anthropic/claude-3-5-sonnet-latest",
-    "groq/llama-3.1-8b-instant",
+    "openai/gpt-4o-mini",
+    "anthropic/claude-3-haiku-20240307",
+    "groq/gemma2-9b-it",
+    "mistral/mistral-tiny",
+    "deepseek/deepseek-chat",
     "ollama/llama3.3", 
     "ollama/phi4"
 ]
