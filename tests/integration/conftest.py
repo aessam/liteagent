@@ -41,6 +41,10 @@ def pytest_configure(config):
         print("Warning: ANTHROPIC_API_KEY not found in environment variables. Tests requiring Anthropic will be skipped.")
     if "GROQ_API_KEY" not in os.environ:
         print("Warning: GROQ_API_KEY not found in environment variables. Tests requiring Groq will be skipped.")
+    if "MISTRAL_API_KEY" not in os.environ:
+        print("Warning: MISTRAL_API_KEY not found in environment variables. Tests requiring Mistral will be skipped.")
+    if "DEEPSEEK_API_KEY" not in os.environ:
+        print("Warning: DEEPSEEK_API_KEY not found in environment variables. Tests requiring DeepSeek will be skipped.")
 
 
 @pytest.fixture
@@ -59,9 +63,9 @@ def validation_observer():
 # Standard set of models to test across all providers
 STANDARD_TEST_MODELS = [
     "openai/gpt-4o-mini",
-    "anthropic/claude-3-haiku-20240307",
-    "groq/gemma2-9b-it",
-    "mistral/mistral-tiny",
+    "anthropic/claude-3-5-sonnet-20241022",
+    "groq/qwen-2.5-32b",
+    "mistral/open-mixtral-8x22b",
     "deepseek/deepseek-chat",
     "ollama/llama3.3", 
     "ollama/phi4"
@@ -83,10 +87,12 @@ def model(request):
     
     # Skip if API key not available or required dependencies missing
     if not ValidationTestHelper.has_api_key_for_model(model_name):
+        print(f"DEBUG: Skipping test for {model_name} due to missing API key")
         pytest.skip(f"API key for {model_name} not available")
     
     # Skip Ollama tests if Ollama is not installed
     if model_name.startswith("ollama/") and os.system("which ollama > /dev/null 2>&1") != 0:
+        print(f"DEBUG: Skipping test for {model_name} due to missing Ollama installation")
         pytest.skip("Ollama is not installed or not in PATH")
     
     return model_name

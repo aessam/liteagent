@@ -10,6 +10,7 @@ from typing import Dict, Any, List
 
 from liteagent import LiteAgent
 from liteagent.tool_calling_types import ToolCallingType, get_tool_calling_type
+from tests.integration.conftest import STANDARD_TEST_MODELS
 from tests.utils.test_tools import get_weather, add_numbers
 
 from tests.utils.validation_helper import ValidationTestHelper
@@ -133,8 +134,7 @@ Always introduce yourself as the Calculator Agent.""",
         """
         # Get list of available models with API keys
         available_models = []
-        for model in ["openai/gpt-4o-mini", "anthropic/claude-3-5-sonnet-latest", 
-                     "groq/llama-3.1-8b-instant", "ollama/llama3.3", "ollama/phi4"]:
+        for model in STANDARD_TEST_MODELS:
             if ValidationTestHelper.has_api_key_for_model(model):
                 available_models.append(model)
         

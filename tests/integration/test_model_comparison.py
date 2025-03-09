@@ -77,11 +77,11 @@ class TestModelComparison:
     
     MODELS = {
         "gpt4o_mini": {
-            "name": "gpt-4o-mini",
+            "name": "openai/gpt-4o-mini",
             "marker": skip_if_no_api_key
         },
-        "ollama_phi": {
-            "name": "ollama/llama3.3",
+        "Haiku": {
+            "name": "anthropic/claude-3-haiku-20240307",
             "marker": skip_if_no_ollama
         }
     }

@@ -25,15 +25,51 @@ class ValidationTestHelper:
         Returns:
             True if an API key is available, False otherwise
         """
-        if model.startswith("gpt-") or model.startswith("openai/"):
-            return "OPENAI_API_KEY" in os.environ
-        elif model.startswith("anthropic/") or model.startswith("claude"):
-            return "ANTHROPIC_API_KEY" in os.environ
-        elif model.startswith("groq/") or model.startswith("llama"):
-            return "GROQ_API_KEY" in os.environ
-        elif model.startswith("ollama/"):
-            return True  # Ollama is local, no API key needed
+        # Normalize model name
+        model_lower = model.lower()
+        
+        # OpenAI models
+        if model_lower.startswith("gpt-") or model_lower.startswith("openai/"):
+            if "OPENAI_API_KEY" not in os.environ:
+                print(f"INFO: Skipping {model} - OPENAI_API_KEY not found")
+                return False
+            return True
+            
+        # Anthropic models
+        elif model_lower.startswith("anthropic/") or model_lower.startswith("claude"):
+            if "ANTHROPIC_API_KEY" not in os.environ:
+                print(f"INFO: Skipping {model} - ANTHROPIC_API_KEY not found")
+                return False
+            return True
+            
+        # Groq models
+        elif model_lower.startswith("groq/") or "llama" in model_lower:
+            if "GROQ_API_KEY" not in os.environ:
+                print(f"INFO: Skipping {model} - GROQ_API_KEY not found")
+                return False
+            return True
+            
+        # Mistral models
+        elif model_lower.startswith("mistral/"):
+            if "MISTRAL_API_KEY" not in os.environ:
+                print(f"INFO: Skipping {model} - MISTRAL_API_KEY not found")
+                return False
+            return True
+            
+        # DeepSeek models
+        elif model_lower.startswith("deepseek/"):
+            if "DEEPSEEK_API_KEY" not in os.environ:
+                print(f"INFO: Skipping {model} - DEEPSEEK_API_KEY not found")
+                return False
+            return True
+            
+        # Ollama models (local - no API key needed)
+        elif model_lower.startswith("ollama/"):
+            return True
+            
+        # Default case - unknown provider
         else:
+            print(f"INFO: Skipping {model} - Unknown provider")
             return False
     
     @staticmethod

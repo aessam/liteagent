@@ -16,6 +16,7 @@ from litellm.exceptions import RateLimitError, APIError, APIConnectionError, Tim
 from .tool_calling_types import ToolCallingType, get_tool_calling_type, get_provider_from_model
 from .tool_calling import get_tool_calling_handler, get_provider_specific_handler
 from .utils import logger, log_completion_request, log_completion_response
+from .provider_roles import process_messages_for_provider
 
 
 class ModelInterface(ABC):
@@ -232,6 +233,10 @@ class LiteLLMInterface(ModelInterface):
     
     def _call_api(self, kwargs: Dict) -> Any:
         """Make the API call using LiteLLM with retries for rate limits."""
+        # Process messages for provider compatibility
+        if "messages" in kwargs:
+            kwargs["messages"] = process_messages_for_provider(kwargs["messages"], self.provider)
+            
         retries = 0
         while True:
             try:
