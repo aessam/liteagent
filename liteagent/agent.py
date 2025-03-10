@@ -288,12 +288,25 @@ to provide a final text response to the user."""
                     # If the same function with same args has been called too many times, break the loop
                     if function_call_counts[call_key] >= 2:
                         logger.warning(f"Detected repeated function call: {function_name} with args {function_args}")
-                        # Force the agent to generate a text response instead
-                        self.memory.add_system_message(
-                            "IMPORTANT: You have called the same function multiple times with the same arguments. "
-                            "You MUST now provide a final text response based on the information you already have. "
-                            "DO NOT make any more function calls. Summarize what you know and respond directly to the user."
-                        )
+                        
+                        # Get the provider name
+                        provider = getattr(self.model_interface, 'provider', '')
+                        
+                        # For Mistral models, use user message instead of system message
+                        if provider and provider.lower() == 'mistral':
+                            # Force the agent to generate a text response instead using a user message for Mistral
+                            self.memory.add_user_message(
+                                "IMPORTANT: You have called the same function multiple times with the same arguments. "
+                                "You MUST now provide a final text response based on the information you already have. "
+                                "DO NOT make any more function calls. Summarize what you know and respond directly to the user."
+                            )
+                        else:
+                            # For other providers, use system message as before
+                            self.memory.add_system_message(
+                                "IMPORTANT: You have called the same function multiple times with the same arguments. "
+                                "You MUST now provide a final text response based on the information you already have. "
+                                "DO NOT make any more function calls. Summarize what you know and respond directly to the user."
+                            )
                         
                         # Get updated messages
                         messages = self.memory.get_messages()

@@ -89,37 +89,45 @@ def process_messages_for_provider(messages: List[Dict], provider: str) -> List[D
     # Simple processing for all messages
     processed_messages = []
     
-    # Track if we need special handling for system messages
+    # Flag to strictly enforce system message position constraints
     has_system_position_constraint = constraints.get("system_position") == "first_only"
+    
+    # Initialize tracking variables
     seen_assistant = False
     first_system_message = None
     
-    # First pass to identify assistant messages and first system message
+    # First pass: find the first system message and check if we've seen any assistant messages
     for msg in messages:
-        if msg.get("role") == "assistant":
+        role = msg.get("role", "")
+        
+        if role == "assistant":
             seen_assistant = True
         
-        # Keep track of the first system message
-        if msg.get("role") == "system" and first_system_message is None:
+        if role == "system" and first_system_message is None:
             first_system_message = msg
     
-    # Second pass to process all messages
+    # Second pass: Process messages with knowledge from first pass
     for msg in messages:
         role = msg.get("role", "")
         
         # Special handling for system messages
         if role == "system":
-            if msg == first_system_message:
-                # Keep the first system message as is
-                processed_messages.append(msg)
-            elif has_system_position_constraint and seen_assistant:
-                # Convert system messages after assistant to user messages
-                processed_messages.append({
-                    "role": "user",
-                    "content": f"System instruction: {msg.get('content', '')}"
-                })
+            # For providers with strict system position constraints (like Mistral)
+            if has_system_position_constraint:
+                if msg == first_system_message:
+                    # Always preserve the first system message
+                    processed_messages.append(msg)
+                elif seen_assistant:
+                    # Convert any system message after assistant to user message
+                    processed_messages.append({
+                        "role": "user",
+                        "content": f"System instruction: {msg.get('content', '')}"
+                    })
+                else:
+                    # System messages before any assistant can stay as system
+                    processed_messages.append(msg)
             else:
-                # Other system messages are kept as is
+                # For providers without strict system constraints
                 processed_messages.append(msg)
             continue
         
@@ -201,5 +209,28 @@ def process_messages_for_provider(messages: List[Dict], provider: str) -> List[D
         if current_last_role not in allowed_last_roles:
             # Add an empty user message to satisfy the constraint
             processed_messages.append({"role": "user", "content": "Continue."})
+    
+    # Final verification for system messages after assistant for strict providers
+    if has_system_position_constraint and seen_assistant:
+        # One more pass to ensure no system message sneaks through after an assistant
+        seen_assistant_in_processed = False
+        final_messages = []
+        
+        for msg in processed_messages:
+            role = msg.get("role", "")
+            
+            if role == "assistant":
+                seen_assistant_in_processed = True
+                final_messages.append(msg)
+            elif role == "system" and seen_assistant_in_processed:
+                # Convert to user message if it somehow got through earlier checks
+                final_messages.append({
+                    "role": "user",
+                    "content": f"System instruction: {msg.get('content', '')}"
+                })
+            else:
+                final_messages.append(msg)
+        
+        return final_messages
     
     return processed_messages 
