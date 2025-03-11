@@ -103,6 +103,39 @@ LiteAgent is organized with a clean separation of concerns:
 
 This organization makes it easy to focus on the core functionality in the liteagent package while keeping examples and CLI functionality separate.
 
+## Development Tools
+
+The `tools/` directory contains utility scripts that are primarily used during development and testing of the LiteAgent library. These tools help with analyzing model responses, validating tool calling implementations, and testing pattern extraction capabilities.
+
+### Tool Calling Format Detection
+
+- **detect_tool_calling_format.py**: A command-line tool that analyzes JSON response files from LLMs to determine what style of tool calling they use (OpenAI, Anthropic, Ollama, etc.). This is useful for understanding how different models structure their tool calling responses.
+
+  Usage: `python tools/detect_tool_calling_format.py response.json`
+
+### Pattern Testing Utilities
+
+- **test_pattern_handler.py**: Tests the pattern-based tool calling handler with sample responses to verify correct extraction of tool calls and formatting of results.
+- **test_pattern_backend.py**: Tests the backend implementation of pattern-based tool calling.
+- **batch_test_patterns.py**: Runs batch tests across multiple pattern files and response formats to verify consistency.
+
+### Analysis Tools
+
+- **find_similarities.py**: Analyzes tool call patterns to find similarities between different model outputs.
+- **find_node.py**: Helps locate specific nodes in complex nested JSON structures from model responses.
+- **call_collector.py**: Collects and analyzes tool calls across multiple model runs for pattern recognition.
+
+### Testing Scripts
+
+- **test_tool_call.sh**: A shell script for quickly testing tool calling functionality with different models and inputs.
+
+These tools are particularly helpful when:
+- Implementing support for new LLM providers
+- Debugging issues with tool call extraction
+- Comparing tool calling formats across different models
+- Validating pattern extraction algorithms
+- Analyzing model response structures
+
 ## Model Capabilities Registry
 
 The `MODEL_CAPABILITIES` dictionary in `liteagent/tool_calling_types.py` maps model names to their capabilities, including:

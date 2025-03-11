@@ -32,6 +32,18 @@ LiteAgent is designed with clean abstractions to make it easy to understand and 
 - **Memory**: Conversation history management with `ConversationMemory`
 - **Agent**: Core orchestration with `LiteAgent`
 - **Observer**: Event-based tracking and monitoring with `AgentObserver` implementations
+- **Handlers**: Specialized handlers for different tool calling formats in the `handlers/` module
+
+### Development Tools
+
+The project includes a set of development and testing tools in the `tools/` directory:
+
+- **Tool Format Detection**: Tools for analyzing and detecting function calling formats from different LLMs
+- **Pattern Testing**: Utilities for testing the pattern-based tool extraction functionality
+- **Batch Testing**: Scripts for running tests across multiple models and inputs
+- **Analysis Tools**: Utilities for analyzing tool call performance and behavior
+
+These tools are primarily for library developers and contributors to help with testing and improving the tool calling capabilities.
 
 ## Installation
 
