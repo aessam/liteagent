@@ -16,6 +16,39 @@ ALL_MODELS=false
 LIST=false
 RUN_ALL=false
 
+# Centralized function for making HTTP requests
+# Usage: request "URL" "HEADERS" "BODY" "OUTPUT_FILE"
+request() {
+    local URL=$1
+    local HEADERS=$2
+    local BODY=$3
+    local OUTPUT_FILE=$4
+    
+    # Create a temporary file for the request body if provided
+    if [ -n "$BODY" ]; then
+        local TEMP_FILE=$(mktemp)
+        echo "$BODY" > "$TEMP_FILE"
+        
+        # Execute curl with body
+        eval "curl -s -X POST \"$URL\" $HEADERS -d @\"$TEMP_FILE\"" > "$OUTPUT_FILE"
+        
+        # Clean up temp file
+        rm "$TEMP_FILE"
+    else
+        # Execute curl without body (GET request)
+        eval "curl -s \"$URL\" $HEADERS" > "$OUTPUT_FILE"
+    fi
+    
+    # Check if the output file exists and has content
+    if [ ! -s "$OUTPUT_FILE" ]; then
+        echo "Error: Request failed or returned empty response" >&2
+        return 1
+    fi
+    
+    return 0
+}
+
+
 # Function schema for tool calls
 FUNCTION_SCHEMA='{
     "name": "get_weather",
@@ -31,6 +64,77 @@ FUNCTION_SCHEMA='{
         "required": ["location"]
     }
 }'
+
+# Function to generate payload based on provider
+get_payload() {
+    local provider=$1
+    local model=$2
+    local is_simulated=${3:-false}
+    
+    if [ "$is_simulated" = "true" ]; then
+        # Simulated tools payload - works with any provider
+echo '{
+    "model": "'$model'",
+    "messages": [
+        {
+            "role": "system", 
+            "content": "You have access to these functions. When using any function, any thoughts or reasoning should be in the \"reason\" field, and the parameters should be in the \"parameters\" field. Respond exactly like this format: {\"name\": function_name, \"reason\":reason_for_calling_function, \"parameters\": {parameter_dictionary}}
+
+Available functions:
+1. get_weather - Takes a location parameter
+2. search_web - Takes a query parameter
+3. calculate - Takes num1, num2, and operation parameters
+
+Important: Don'\''t use variables, replace parameter values with actual requested info, no explanations before/after tool call, no markdown."
+        },
+        {
+            "role": "user", 
+            "content": "What'\''s the weather like in San Francisco?"
+        }
+    ],
+    "stream": false
+}'
+    elif [ "$provider" = "anthropic" ]; then
+        # Anthropic has a different format for tools
+        echo '{
+    "model": "'$model'",
+    "messages": [
+        {"role": "user", "content": "What'\''s the weather like in San Francisco? Please use the tool to get the weather."}
+    ],
+    "tools": [
+        {
+            "name": "get_weather",
+            "description": "Get the current weather for a location",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "location": {
+                        "type": "string",
+                        "description": "The city and state"
+                    }
+                },
+                "required": ["location"]
+            }
+        }
+    ],
+    "max_tokens": 1024
+}'
+    else
+        # Standard format for all other providers
+        echo '{
+    "model": "'$model'",
+    "messages": [
+        {"role": "user", "content": "What'\''s the weather like in San Francisco?"}
+    ],
+    "tools": [
+        {
+            "type": "function",
+            "function": '$FUNCTION_SCHEMA'
+        }
+    ]
+}'
+    fi
+}
 
 # Function to print usage
 usage() {
@@ -55,445 +159,104 @@ usage() {
 
 # Function to list available models
 list_models() {
-    case "$PROVIDER" in
-        "ollama")
-            echo "Available Ollama models:"
-            ollama list | tail -n +2
-            ;;
-        "openai")
-            if [ -z "$OPENAI_API_KEY" ]; then
-                echo "Error: OPENAI_API_KEY is not set"
-                exit 1
-            fi
-            echo "Available OpenAI models:"
-            curl -s "https://api.openai.com/v1/models" \
-                -H "Authorization: Bearer $OPENAI_API_KEY" | jq -r '.data[].id'
-            ;;
-        "anthropic")
-            if [ -z "$ANTHROPIC_API_KEY" ]; then
-                echo "Error: ANTHROPIC_API_KEY is not set"
-                exit 1
-            fi
-            echo "Available Anthropic models:"
-            curl -s "https://api.anthropic.com/v1/models" \
-                -H "x-api-key: $ANTHROPIC_API_KEY" \
-                -H "anthropic-version: 2023-06-01" | jq -r '.data[].id'
-            ;;
-        "groq")
-            if [ -z "$GROQ_API_KEY" ]; then
-                echo "Error: GROQ_API_KEY is not set"
-                exit 1
-            fi
-            echo "Available Groq models:"
-            curl -s "https://api.groq.com/openai/v1/models" \
-                -H "Authorization: Bearer $GROQ_API_KEY" \
-                -H "Content-Type: application/json" | jq -r '.data[].id'
-            ;;
-        "deepseek")
-            if [ -z "$DEEPSEEK_API_KEY" ]; then
-                echo "Error: DEEPSEEK_API_KEY is not set"
-                exit 1
-            fi
-            echo "Available Deepseek models:"
-            curl -s "https://api.deepseek.com/v1/models" \
-                -H "Authorization: Bearer $DEEPSEEK_API_KEY" \
-                -H "Content-Type: application/json" | jq -r '.data[].id'
-            ;;
-        "mistral")
-            if [ -z "$MISTRAL_API_KEY" ]; then
-                echo "Error: MISTRAL_API_KEY is not set"
-                exit 1
-            fi
-            echo "Available Mistral models:"
-            curl -s "https://api.mistral.ai/v1/models" \
-                -H "Authorization: Bearer $MISTRAL_API_KEY" \
-                -H "Content-Type: application/json" | jq -r '.data[].id'
-            ;;
-        *)
-            echo "Unknown provider: $PROVIDER"
-            exit 1
-            ;;
-    esac
+    # Use tr to capitalize the first letter of provider name
+    local DISPLAY_PROVIDER=$(echo "$PROVIDER" | tr '[:lower:]' '[:upper:]' | cut -c1)$(echo "$PROVIDER" | cut -c2-)
+    echo "Available $DISPLAY_PROVIDER models:"
+    
+    if [ "$PROVIDER" = "ollama" ]; then
+        # Special case for Ollama which uses a local command
+        ollama list | tail -n +2
+    else
+        # Create a temporary file for the response
+        local TEMP_RESPONSE=$(mktemp)
+        
+        # Make the request using the request function
+        if request "$LIST_MODEL_URL" "$HEADERS" "" "$TEMP_RESPONSE"; then
+            # Output the model IDs
+            jq -r '.data[].id' "$TEMP_RESPONSE"
+        else
+            echo "Failed to fetch models list"
+        fi
+        
+        # Clean up
+        rm "$TEMP_RESPONSE"
+    fi
 }
 
 # Function to get models list as array
 get_models_list() {
-    case "$PROVIDER" in
-        "ollama")
-            echo "$(ollama list | tail -n +2 | awk '{print $1}')"
-            ;;
-        "openai")
-            echo "$(curl -s "https://api.openai.com/v1/models" \
-                -H "Authorization: Bearer $OPENAI_API_KEY" | jq -r '.data[].id')"
-            ;;
-        "anthropic")
-            echo "$(curl -s "https://api.anthropic.com/v1/models" \
-                -H "x-api-key: $ANTHROPIC_API_KEY" \
-                -H "anthropic-version: 2023-06-01" | jq -r '.data[].id')"
-            ;;
-        "groq")
-            echo "$(curl -s "https://api.groq.com/openai/v1/models" \
-                -H "Authorization: Bearer $GROQ_API_KEY" \
-                -H "Content-Type: application/json" | jq -r '.data[].id')"
-            ;;
-        "deepseek")
-            echo "$(curl -s "https://api.deepseek.com/v1/models" \
-                -H "Authorization: Bearer $DEEPSEEK_API_KEY" \
-                -H "Content-Type: application/json" | jq -r '.data[].id')"
-            ;;
-        "mistral")
-            echo "$(curl -s "https://api.mistral.ai/v1/models" \
-                -H "Authorization: Bearer $MISTRAL_API_KEY" \
-                -H "Content-Type: application/json" | jq -r '.data[].id')"
-            ;;
-    esac
-}
-
-# Function to test a model on Ollama
-test_ollama_model() {
-    local MODEL=$1
-    local API_URL="http://localhost:11434/api/chat"
-    local RESPONSE_FILE=".tool_test/response_ollama_${MODEL}.json"
-    
-    read -r -d '' PAYLOAD << EOM
-{
-    "model": "$MODEL",
-    "messages": [
-        {"role": "user", "content": "What's the weather like in San Francisco?"}
-    ],
-    "tools": [
-        {
-            "type": "function",
-            "function": $FUNCTION_SCHEMA
-        }
-    ]
-}
-EOM
-
-    echo -e "\n\033[1;36mTesting Ollama model: $MODEL\033[0m"
-    curl -s -X POST "$API_URL" \
-        -H "Content-Type: application/json" \
-        -d "$PAYLOAD" > "$RESPONSE_FILE"
-
-    # Analyze response
-    if grep -q "does not support tools" "$RESPONSE_FILE"; then
-        echo -e "\033[1;31m❌ Model explicitly doesn't support tools\033[0m"
-        jq '.error' "$RESPONSE_FILE" 2>/dev/null
-    elif grep -q "\"type\":\"function_call\"" "$RESPONSE_FILE" || grep -q "tool_calls" "$RESPONSE_FILE"; then
-        echo -e "\033[1;32m✅ Success! Function call detected\033[0m"
-        jq '.message.content' "$RESPONSE_FILE" 2>/dev/null
-        echo -e "\nFunction call details:"
-        jq '.message.tool_calls' "$RESPONSE_FILE" 2>/dev/null
-    elif jq -e '.message.content' "$RESPONSE_FILE" >/dev/null 2>&1; then
-        echo -e "\033[1;33m⚠️ Model responded conversationally without using the tool\033[0m"
-        echo -e "Response content:"
-        jq '.message.content' "$RESPONSE_FILE"
+    if [ "$PROVIDER" = "ollama" ]; then
+        # Special case for Ollama which uses a local command
+        echo "$(ollama list | tail -n +2 | awk '{print $1}')"
     else
-        echo -e "\033[1;31m❌ Unknown response format\033[0m"
-        jq '.' "$RESPONSE_FILE" 2>/dev/null
+        # Create a temporary file for the response
+        local TEMP_RESPONSE=$(mktemp)
+        
+        # Make the request using the request function
+        if request "$LIST_MODEL_URL" "$HEADERS" "" "$TEMP_RESPONSE"; then
+            # Output the model IDs
+            local MODELS=$(jq -r '.data[].id' "$TEMP_RESPONSE")
+            rm "$TEMP_RESPONSE"
+            echo "$MODELS"
+        else
+            rm "$TEMP_RESPONSE"
+            echo ""
+        fi
     fi
-    
-    echo -e "Response saved to: $RESPONSE_FILE"
 }
 
-# Function to test a model on OpenAI
-test_openai_model() {
-    local MODEL=$1
-    local API_URL="https://api.openai.com/v1/chat/completions"
-    local RESPONSE_FILE=".tool_test/response_openai_${MODEL//\//_}.json"
+# Function to test simulated tools for any provider
+test_simulated_tools() {
+    local PROVIDER=$1
+    local MODEL=$2
+    local RESPONSE_FILE=".tool_test/response_${PROVIDER}_${MODEL//\//_}_simulated.json"
     
-    if [ -z "$OPENAI_API_KEY" ]; then
-        echo "Error: OPENAI_API_KEY is not set"
-        exit 1
-    fi
+    # Prepare JSON payload
+    local PAYLOAD=$(get_payload "$PROVIDER" "$MODEL" true)
+
+    echo -e "\n\033[1;36mTesting $PROVIDER model with simulated tools: $MODEL\033[0m"
     
-    read -r -d '' PAYLOAD << EOM
-{
-    "model": "$MODEL",
-    "messages": [
-        {"role": "user", "content": "What's the weather like in San Francisco?"}
-    ],
-    "tools": [
-        {
-            "type": "function",
-            "function": $FUNCTION_SCHEMA
-        }
-    ]
-}
-EOM
-
-    echo -e "\n\033[1;36mTesting OpenAI model: $MODEL\033[0m"
-    curl -s -X POST "$API_URL" \
-        -H "Content-Type: application/json" \
-        -H "Authorization: Bearer $OPENAI_API_KEY" \
-        -d "$PAYLOAD" > "$RESPONSE_FILE"
-
-    # Check for error
-    if jq -e '.error' "$RESPONSE_FILE" >/dev/null 2>&1; then
-        echo -e "\033[1;31m❌ Error:\033[0m"
-        jq '.error' "$RESPONSE_FILE"
-    # Check for tool calls
-    elif jq -e '.choices[0].message.tool_calls' "$RESPONSE_FILE" >/dev/null 2>&1; then
-        echo -e "\033[1;32m✅ Success! Function call detected\033[0m"
-        jq '.choices[0].message.content' "$RESPONSE_FILE"
-        echo -e "\nFunction call details:"
-        jq '.choices[0].message.tool_calls' "$RESPONSE_FILE"
+    # Use the centralized variables
+    request "$CHAT_URL" "$HEADERS" "$PAYLOAD" "$RESPONSE_FILE"
+    
+    # Simply output the content
+    echo "Response saved to: $RESPONSE_FILE"
+    CONTENT=$(jq -r '.message.content' "$RESPONSE_FILE")
+    if echo "$CONTENT" | jq &>/dev/null; then
+        echo "$CONTENT" | jq
     else
-        echo -e "\033[1;33m⚠️ Model responded without using the tool\033[0m"
-        jq '.choices[0].message.content' "$RESPONSE_FILE"
+        echo "❌ [Failed parsing] ->>> $CONTENT"
     fi
-    
-    echo -e "Response saved to: $RESPONSE_FILE"
 }
 
-# Function to test a model on Anthropic
-test_anthropic_model() {
-    local MODEL=$1
-    local API_URL="https://api.anthropic.com/v1/messages"
-    local RESPONSE_FILE=".tool_test/response_anthropic_${MODEL//\//_}.json"
+# Generic function to test a model for any provider
+test_model_for_provider() {
+    local PROVIDER=$1
+    local MODEL=$2
     
-    if [ -z "$ANTHROPIC_API_KEY" ]; then
-        echo "Error: ANTHROPIC_API_KEY is not set"
-        exit 1
-    fi
-    
-    # Using the correct format for Anthropic tools
-    read -r -d '' PAYLOAD << EOM
-{
-    "model": "$MODEL",
-    "messages": [
-        {"role": "user", "content": "What's the weather like in San Francisco? Please use the tool to get the weather."}
-    ],
-    "tools": [
-        {
-            "name": "get_weather",
-            "description": "Get the current weather for a location",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "location": {
-                        "type": "string",
-                        "description": "The city and state"
-                    }
-                },
-                "required": ["location"]
-            }
-        }
-    ],
-    "max_tokens": 1024
-}
-EOM
+    # Test official tool call API
+    local RESPONSE_FILE=".tool_test/response_${PROVIDER}_${MODEL//\//_}.json"
+    local PAYLOAD=$(get_payload "$PROVIDER" "$MODEL" false)
 
-    echo -e "\n\033[1;36mTesting Anthropic model: $MODEL\033[0m"
-    curl -s -X POST "$API_URL" \
-        -H "Content-Type: application/json" \
-        -H "x-api-key: $ANTHROPIC_API_KEY" \
-        -H "anthropic-version: 2023-06-01" \
-        -d "$PAYLOAD" > "$RESPONSE_FILE"
-
-    # Check for error
-    if jq -e '.error' "$RESPONSE_FILE" >/dev/null 2>&1; then
-        echo -e "\033[1;31m❌ Error:\033[0m"
-        jq '.error' "$RESPONSE_FILE"
-    # Check for tool calls based on the example response format
-    elif jq -e '.content[] | select(.type == "tool_use")' "$RESPONSE_FILE" >/dev/null 2>&1; then
-        echo -e "\033[1;32m✅ Success! Tool use detected\033[0m"
-        echo -e "Text content:"
-        jq '.content[] | select(.type == "text").text' "$RESPONSE_FILE"
-        echo -e "\nTool use details:"
-        jq '.content[] | select(.type == "tool_use")' "$RESPONSE_FILE"
-        echo -e "\nStop reason: $(jq -r '.stop_reason' "$RESPONSE_FILE")"
-    elif jq -e '.content[]' "$RESPONSE_FILE" >/dev/null 2>&1; then
-        echo -e "\033[1;33m⚠️ Model responded without using the tool\033[0m"
-        echo -e "Response content:"
-        jq '.content[]' "$RESPONSE_FILE" 
-        echo -e "\nStop reason: $(jq -r '.stop_reason' "$RESPONSE_FILE")"
-    else
-        echo -e "\033[1;31m❌ Unknown response format\033[0m"
-        jq '.' "$RESPONSE_FILE"
-    fi
+    echo -e "\n\033[1;36mTesting $PROVIDER model with official tools API: $MODEL\033[0m"
     
-    echo -e "Response saved to: $RESPONSE_FILE"
-}
+    # Use the centralized variables
+    request "$CHAT_URL" "$HEADERS" "$PAYLOAD" "$RESPONSE_FILE"
 
-# Function to test a model on Groq
-test_groq_model() {
-    local MODEL=$1
-    local API_URL="https://api.groq.com/openai/v1/chat/completions"
-    local RESPONSE_FILE=".tool_test/response_groq_${MODEL//\//_}.json"
+    # Simply output the response
+    echo "Response saved to: $RESPONSE_FILE"
+    jq '.' "$RESPONSE_FILE"
     
-    if [ -z "$GROQ_API_KEY" ]; then
-        echo "Error: GROQ_API_KEY is not set"
-        exit 1
-    fi
-    
-    read -r -d '' PAYLOAD << EOM
-{
-    "model": "$MODEL",
-    "messages": [
-        {"role": "user", "content": "What's the weather like in San Francisco?"}
-    ],
-    "tools": [
-        {
-            "type": "function",
-            "function": $FUNCTION_SCHEMA
-        }
-    ]
-}
-EOM
-
-    echo -e "\n\033[1;36mTesting Groq model: $MODEL\033[0m"
-    curl -s -X POST "$API_URL" \
-        -H "Content-Type: application/json" \
-        -H "Authorization: Bearer $GROQ_API_KEY" \
-        -d "$PAYLOAD" > "$RESPONSE_FILE"
-
-    # Check for error
-    if jq -e '.error' "$RESPONSE_FILE" >/dev/null 2>&1; then
-        echo -e "\033[1;31m❌ Error:\033[0m"
-        jq '.error' "$RESPONSE_FILE"
-    # Check for tool calls
-    elif jq -e '.choices[0].message.tool_calls' "$RESPONSE_FILE" >/dev/null 2>&1; then
-        echo -e "\033[1;32m✅ Success! Function call detected\033[0m"
-        jq '.choices[0].message.content' "$RESPONSE_FILE"
-        echo -e "\nFunction call details:"
-        jq '.choices[0].message.tool_calls' "$RESPONSE_FILE"
-    else
-        echo -e "\033[1;33m⚠️ Model responded without using the tool\033[0m"
-        jq '.choices[0].message.content' "$RESPONSE_FILE" 2>/dev/null
-    fi
-    
-    echo -e "Response saved to: $RESPONSE_FILE"
-}
-
-# Function to test a model on Deepseek
-test_deepseek_model() {
-    local MODEL=$1
-    local API_URL="https://api.deepseek.com/v1/chat/completions"
-    local RESPONSE_FILE=".tool_test/response_deepseek_${MODEL//\//_}.json"
-    
-    if [ -z "$DEEPSEEK_API_KEY" ]; then
-        echo "Error: DEEPSEEK_API_KEY is not set"
-        exit 1
-    fi
-    
-    read -r -d '' PAYLOAD << EOM
-{
-    "model": "$MODEL",
-    "messages": [
-        {"role": "user", "content": "What's the weather like in San Francisco?"}
-    ],
-    "tools": [
-        {
-            "type": "function",
-            "function": $FUNCTION_SCHEMA
-        }
-    ]
-}
-EOM
-
-    echo -e "\n\033[1;36mTesting Deepseek model: $MODEL\033[0m"
-    curl -s -X POST "$API_URL" \
-        -H "Content-Type: application/json" \
-        -H "Authorization: Bearer $DEEPSEEK_API_KEY" \
-        -d "$PAYLOAD" > "$RESPONSE_FILE"
-
-    # Check for error
-    if jq -e '.error' "$RESPONSE_FILE" >/dev/null 2>&1; then
-        echo -e "\033[1;31m❌ Error:\033[0m"
-        jq '.error' "$RESPONSE_FILE"
-    # Check for tool calls
-    elif jq -e '.choices[0].message.tool_calls' "$RESPONSE_FILE" >/dev/null 2>&1; then
-        echo -e "\033[1;32m✅ Success! Function call detected\033[0m"
-        jq '.choices[0].message.content' "$RESPONSE_FILE"
-        echo -e "\nFunction call details:"
-        jq '.choices[0].message.tool_calls' "$RESPONSE_FILE"
-    else
-        echo -e "\033[1;33m⚠️ Model responded without using the tool\033[0m"
-        jq '.choices[0].message.content' "$RESPONSE_FILE" 2>/dev/null
-    fi
-    
-    echo -e "Response saved to: $RESPONSE_FILE"
-}
-
-# Function to test a model on Mistral
-test_mistral_model() {
-    local MODEL=$1
-    local API_URL="https://api.mistral.ai/v1/chat/completions"
-    local RESPONSE_FILE=".tool_test/response_mistral_${MODEL//\//_}.json"
-    
-    if [ -z "$MISTRAL_API_KEY" ]; then
-        echo "Error: MISTRAL_API_KEY is not set"
-        exit 1
-    fi
-    
-    read -r -d '' PAYLOAD << EOM
-{
-    "model": "$MODEL",
-    "messages": [
-        {"role": "user", "content": "What's the weather like in San Francisco?"}
-    ],
-    "tools": [
-        {
-            "type": "function",
-            "function": $FUNCTION_SCHEMA
-        }
-    ]
-}
-EOM
-
-    echo -e "\n\033[1;36mTesting Mistral model: $MODEL\033[0m"
-    curl -s -X POST "$API_URL" \
-        -H "Content-Type: application/json" \
-        -H "Authorization: Bearer $MISTRAL_API_KEY" \
-        -d "$PAYLOAD" > "$RESPONSE_FILE"
-
-    # Check for error
-    if jq -e '.error' "$RESPONSE_FILE" >/dev/null 2>&1; then
-        echo -e "\033[1;31m❌ Error:\033[0m"
-        jq '.error' "$RESPONSE_FILE"
-    # Check for tool calls
-    elif jq -e '.choices[0].message.tool_calls' "$RESPONSE_FILE" >/dev/null 2>&1; then
-        echo -e "\033[1;32m✅ Success! Function call detected\033[0m"
-        jq '.choices[0].message.content' "$RESPONSE_FILE"
-        echo -e "\nFunction call details:"
-        jq '.choices[0].message.tool_calls' "$RESPONSE_FILE"
-    else
-        echo -e "\033[1;33m⚠️ Model responded without using the tool\033[0m"
-        jq '.choices[0].message.content' "$RESPONSE_FILE" 2>/dev/null
-    fi
-    
-    echo -e "Response saved to: $RESPONSE_FILE"
+    # Now also test with simulated tools for all providers
+    test_simulated_tools "$PROVIDER" "$MODEL"
 }
 
 # Function to test a model
 test_model() {
     local MODEL_TO_TEST=$1
     
-    case "$PROVIDER" in
-        "ollama")
-            test_ollama_model "$MODEL_TO_TEST"
-            ;;
-        "openai")
-            test_openai_model "$MODEL_TO_TEST"
-            ;;
-        "anthropic")
-            test_anthropic_model "$MODEL_TO_TEST"
-            ;;
-        "groq")
-            test_groq_model "$MODEL_TO_TEST"
-            ;;
-        "deepseek")
-            test_deepseek_model "$MODEL_TO_TEST"
-            ;;
-        "mistral")
-            test_mistral_model "$MODEL_TO_TEST"
-            ;;
-        *)
-            echo "Unknown provider: $PROVIDER"
-            exit 1
-            ;;
-    esac
+    # Just use the generic test function with the current provider
+    test_model_for_provider "$PROVIDER" "$MODEL_TO_TEST"
     
     echo -e "\033[1;33m--------------------------------------\033[0m"
 }
@@ -541,6 +304,61 @@ done
 
 # Convert provider to lowercase
 PROVIDER=$(echo "$PROVIDER" | tr '[:upper:]' '[:lower:]')
+
+# Set provider-specific variables
+LIST_MODEL_URL=""
+CHAT_URL=""
+HEADERS=""
+API_KEY=""
+
+case "$PROVIDER" in
+    "ollama")
+        LIST_MODEL_URL=""  # No URL for Ollama, using local command
+        CHAT_URL="http://localhost:11434/api/chat"
+        HEADERS="-H \"Content-Type: application/json\""
+        ;;
+    "openai")
+        API_KEY="$OPENAI_API_KEY"
+        LIST_MODEL_URL="https://api.openai.com/v1/models"
+        CHAT_URL="https://api.openai.com/v1/chat/completions"
+        HEADERS="-H \"Content-Type: application/json\" -H \"Authorization: Bearer $OPENAI_API_KEY\""
+        ;;
+    "anthropic")
+        API_KEY="$ANTHROPIC_API_KEY"
+        LIST_MODEL_URL="https://api.anthropic.com/v1/models"
+        CHAT_URL="https://api.anthropic.com/v1/messages"
+        HEADERS="-H \"Content-Type: application/json\" -H \"x-api-key: $ANTHROPIC_API_KEY\" -H \"anthropic-version: 2023-06-01\""
+        TOOL_FORMAT="anthropic"  # Anthropic has different tool format
+        ;;
+    "groq")
+        API_KEY="$GROQ_API_KEY"
+        LIST_MODEL_URL="https://api.groq.com/openai/v1/models"
+        CHAT_URL="https://api.groq.com/openai/v1/chat/completions"
+        HEADERS="-H \"Content-Type: application/json\" -H \"Authorization: Bearer $GROQ_API_KEY\""
+        ;;
+    "deepseek")
+        API_KEY="$DEEPSEEK_API_KEY"
+        LIST_MODEL_URL="https://api.deepseek.com/v1/models"
+        CHAT_URL="https://api.deepseek.com/v1/chat/completions"
+        HEADERS="-H \"Content-Type: application/json\" -H \"Authorization: Bearer $DEEPSEEK_API_KEY\""
+        ;;
+    "mistral")
+        API_KEY="$MISTRAL_API_KEY"
+        LIST_MODEL_URL="https://api.mistral.ai/v1/models"
+        CHAT_URL="https://api.mistral.ai/v1/chat/completions"
+        HEADERS="-H \"Content-Type: application/json\" -H \"Authorization: Bearer $MISTRAL_API_KEY\""
+        ;;
+    *)
+        echo "Unknown provider: $PROVIDER"
+        exit 1
+        ;;
+esac
+
+# Check API key for providers that need it
+if [ "$PROVIDER" != "ollama" ] && [ -z "$API_KEY" ]; then
+    echo "Error: API key for $PROVIDER is not set"
+    exit 1
+fi
 
 # Set default model based on provider if not specified
 if [ -z "$MODEL" ] && [ "$ALL_MODELS" != true ] && [ "$RUN_ALL" != true ]; then
