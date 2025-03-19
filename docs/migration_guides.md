@@ -7,6 +7,8 @@ This document provides guidance on how to migrate from deprecated features to th
 - [Migrating from `ToolsForAgents` to Alternative Implementations](#migrating-from-toolsforagents)
 - [Migrating to Refactored Tool Calling Handlers](#migrating-to-refactored-tool-calling-handlers)
 - [Understanding Tool Calling Type Enum Changes](#understanding-tool-calling-type-enum-changes)
+- [Using the New Observer System](#using-the-new-observer-system)
+- [Converting to Multi-Agent Architecture](#converting-to-multi-agent-architecture)
 
 ## Migrating from `ToolsForAgents`
 
@@ -49,129 +51,229 @@ agent = LiteAgent(
 )
 ```
 
-#### Option 2: Use `BaseTool` for more control
+#### Option 2: Use the `liteagent_tool` decorator (Recommended)
 
 ```python
-from liteagent.tools import BaseTool
+from liteagent import LiteAgent
+from liteagent.tools import liteagent_tool
 
-class WeatherTool(BaseTool):
+class WeatherTools:
     def __init__(self, api_key):
         self.api_key = api_key
         
-    @property
-    def name(self):
-        return "get_weather"
-        
-    @property
-    def description(self):
-        return "Get weather information for a city"
-        
-    @property
-    def parameters(self):
-        return {
-            "type": "object",
-            "properties": {
-                "city": {
-                    "type": "string",
-                    "description": "The city to get weather for"
-                }
-            },
-            "required": ["city"]
-        }
-        
-    def __call__(self, city):
-        # Implement weather lookup
+    @liteagent_tool
+    def get_weather(self, city: str) -> dict:
+        """Get weather information for a city."""
+        # Implementation using self.api_key
         return {"temperature": 72, "condition": "sunny"}
         
-# Create and use the tool
-weather_tool = WeatherTool(api_key="your-api-key")
+    @liteagent_tool
+    def get_forecast(self, city: str, days: int = 3) -> list:
+        """Get forecast for multiple days."""
+        # Implementation
+        return [{"day": 1, "temperature": 72}, {"day": 2, "temperature": 74}]
 
-# Use in an agent
+# Create an instance
+tools = WeatherTools(api_key="your-api-key")
+
+# Create an agent with the decorated methods
 agent = LiteAgent(
     model="gpt-4",
-    tools=[weather_tool],
+    tools=[tools.get_weather, tools.get_forecast],
     # ... other parameters
 )
 ```
 
 ## Migrating to Refactored Tool Calling Handlers
 
-The tool calling handling has been refactored to use separate handler classes for different model providers in the `liteagent.handlers` module.
+The tool calling handler system has been restructured to better support different types of tool calling formats.
 
 ### Original Usage
 
 ```python
-from liteagent.tool_calling import get_tool_calling_handler, ToolCallingType
+from liteagent import LiteAgent
+from liteagent.tool_calling_types import ToolCallingType
 
-handler = get_tool_calling_handler("gpt-4", ToolCallingType.OPENAI_FUNCTION_CALLING)
+# Manually specifying the tool calling type
+agent = LiteAgent(
+    model="my-model",
+    tool_calling_type=ToolCallingType.OPENAI
+)
 ```
 
 ### New Usage
 
 ```python
-from liteagent.tool_calling import get_tool_calling_handler
-from liteagent.tool_calling_types import ToolCallingType
+from liteagent import LiteAgent
 
-# The function signature remains the same for backward compatibility
-handler = get_tool_calling_handler("gpt-4", ToolCallingType.OPENAI)
-```
-
-### Direct Handler Usage
-
-If you need more control, you can use the handlers directly:
-
-```python
-from liteagent.handlers import OpenAIToolCallingHandler, AnthropicToolCallingHandler
-
-# For OpenAI models
-openai_handler = OpenAIToolCallingHandler()
+# The tool calling type is automatically detected based on the model
+agent = LiteAgent(
+    model="gpt-4o-mini"  # Will automatically use OpenAI-style
+)
 
 # For Anthropic models
-anthropic_handler = AnthropicToolCallingHandler()
+agent = LiteAgent(
+    model="claude-3-haiku"  # Will automatically use Anthropic-style
+)
+
+# For Ollama models
+agent = LiteAgent(
+    model="ollama/phi3"  # Will automatically use Ollama-style
+)
 ```
 
 ## Understanding Tool Calling Type Enum Changes
 
-The `ToolCallingType` enum has been updated with more specific types and aliases for backward compatibility.
+The `ToolCallingType` enum has been expanded to support more models and calling styles.
 
-### Original Enum Values
-
-- `ToolCallingType.NONE`
-- `ToolCallingType.OPENAI_FUNCTION_CALLING`
-- `ToolCallingType.ANTHROPIC_TOOL_CALLING`
-- `ToolCallingType.OLLAMA_TOOL_CALLING`
-- `ToolCallingType.PROMPT_BASED`
-
-### New Enum Values
-
-- `ToolCallingType.NONE`
-- `ToolCallingType.OPENAI` (alias: `ToolCallingType.OPENAI_FUNCTION_CALLING`)
-- `ToolCallingType.ANTHROPIC` (alias: `ToolCallingType.ANTHROPIC_TOOL_CALLING`)
-- `ToolCallingType.GROQ` (new)
-- `ToolCallingType.OLLAMA` (alias: `ToolCallingType.OLLAMA_TOOL_CALLING`)
-- `ToolCallingType.TEXT_BASED` (new)
-- `ToolCallingType.STRUCTURED_OUTPUT` (alias: `ToolCallingType.PROMPT_BASED`)
-
-The aliases ensure backward compatibility, so existing code using the old enum values will continue to work.
-
-### Migration Example
+### Original Enum
 
 ```python
-from liteagent.tool_calling_types import ToolCallingType
-
-# Old code
-handler_type = ToolCallingType.OPENAI_FUNCTION_CALLING
-
-# New code (recommended)
-handler_type = ToolCallingType.OPENAI
+class ToolCallingType(Enum):
+    NONE = "none"
+    OPENAI = "openai"
+    ANTHROPIC = "anthropic"
+    STRUCTURED_OUTPUT = "structured_output"
 ```
 
-## Deprecation Timeline
+### New Enum
 
-| Feature | Deprecated In | Will Be Removed In | Notes |
-|---------|---------------|-------------------|-------|
-| `ToolsForAgents` class | 0.4.0 | 0.6.0 | Use `FunctionTool` or `BaseTool` instead |
-| `ToolCallingType.OPENAI_FUNCTION_CALLING` | 0.5.0 | 0.7.0 | Use `ToolCallingType.OPENAI` instead |
-| `ToolCallingType.ANTHROPIC_TOOL_CALLING` | 0.5.0 | 0.7.0 | Use `ToolCallingType.ANTHROPIC` instead |
-| `ToolCallingType.OLLAMA_TOOL_CALLING` | 0.5.0 | 0.7.0 | Use `ToolCallingType.OLLAMA` instead |
-| `ToolCallingType.PROMPT_BASED` | 0.5.0 | 0.7.0 | Use `ToolCallingType.STRUCTURED_OUTPUT` instead | 
+```python
+class ToolCallingType(Enum):
+    NONE = "none"
+    OPENAI = "openai"  # OpenAI-compatible models
+    ANTHROPIC = "anthropic"  # Anthropic models
+    GROQ = "groq"  # Groq-specific function calling
+    OLLAMA = "ollama"  # Ollama JSON output parsing
+    TEXT_BASED = "text_based"  # Simple text-based extraction
+    STRUCTURED_OUTPUT = "structured_output"  # Prompt-based structured outputs
+```
+
+## Using the New Observer System
+
+The observer system has been enhanced with more features and easier usage.
+
+### Original Usage
+
+```python
+from liteagent import LiteAgent
+from liteagent.observer import AgentObserver
+
+class CustomObserver(AgentObserver):
+    def on_event(self, event):
+        # Process the event
+        print(f"Event: {event.event_type}")
+
+# Create and use the observer
+observer = CustomObserver()
+agent = LiteAgent(model="gpt-4", observers=[observer])
+```
+
+### New Usage with Built-in Observers
+
+```python
+from liteagent import LiteAgent
+from liteagent.observer import ConsoleObserver, FileObserver, TreeTraceObserver
+
+# Create observers
+console_observer = ConsoleObserver(verbose=True)  # Detailed console logging
+file_observer = FileObserver(filename="agent_logs.jsonl")  # File logging
+trace_observer = TreeTraceObserver()  # Visual trace builder
+
+# Use multiple observers
+agent = LiteAgent(
+    model="gpt-4o-mini",
+    observers=[console_observer, file_observer, trace_observer]
+)
+
+# Chat with the agent
+response = agent.chat("Hello")
+
+# Print the trace visualization
+trace_observer.print_trace()
+```
+
+## Converting to Multi-Agent Architecture
+
+If you have a single agent handling multiple types of tasks, you can migrate to a multi-agent architecture for better performance and specialization.
+
+### Original Single-Agent Approach
+
+```python
+from liteagent import LiteAgent
+from liteagent.tools import liteagent_tool
+
+@liteagent_tool
+def get_weather(city: str) -> str:
+    """Get weather for a city."""
+    return f"Weather in {city}: Sunny, 75°F"
+
+@liteagent_tool
+def search_database(query: str) -> list:
+    """Search database for information."""
+    return [{"title": "Result", "text": f"Info about {query}"}]
+
+# Single agent handling everything
+agent = LiteAgent(
+    model="gpt-4",
+    tools=[get_weather, search_database]
+)
+
+response = agent.chat("What's the weather in Tokyo and find info about climate change")
+```
+
+### New Multi-Agent Architecture
+
+```python
+from liteagent import LiteAgent
+from liteagent.tools import liteagent_tool
+from liteagent.observer import TreeTraceObserver
+
+# Create a trace observer
+trace_observer = TreeTraceObserver()
+
+@liteagent_tool
+def get_weather(city: str) -> str:
+    """Get weather for a city."""
+    return f"Weather in {city}: Sunny, 75°F"
+
+@liteagent_tool
+def search_database(query: str) -> list:
+    """Search database for information."""
+    return [{"title": "Result", "text": f"Info about {query}"}]
+
+# Create specialized agents
+weather_agent = LiteAgent(
+    model="gpt-3.5-turbo",  # Simpler model for simpler task
+    name="WeatherAgent",
+    system_prompt="You are a weather specialist.",
+    tools=[get_weather],
+    observers=[trace_observer]
+)
+
+search_agent = LiteAgent(
+    model="claude-3-sonnet",  # More powerful model for complex task
+    name="SearchAgent",
+    system_prompt="You are a research specialist.",
+    tools=[search_database],
+    observers=[trace_observer]
+)
+
+# Create a coordinator agent
+coordinator = LiteAgent(
+    model="gpt-4o-mini",
+    name="Coordinator",
+    system_prompt="You are a coordinator that delegates tasks to specialized agents.",
+    tools=[
+        weather_agent.as_tool(name="weather_expert"),
+        search_agent.as_tool(name="search_expert")
+    ],
+    observers=[trace_observer]
+)
+
+# Use the coordinator for complex queries
+response = coordinator.chat("What's the weather in Tokyo and find info about climate change")
+
+# Visualize the interactions
+trace_observer.print_trace()
+``` 

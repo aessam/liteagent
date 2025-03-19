@@ -6,8 +6,13 @@ A lightweight agent framework using LiteLLM for LLM interactions.
 
 - Simple, lightweight agent implementation with clean abstractions
 - Uses LiteLLM for model-agnostic LLM interactions
-- Support for function/tool calling with compatible models
-- Fallback text-based function calling for models without native function calling
+- Support for multiple function/tool calling formats:
+  - OpenAI-style function calling (OpenAI, Groq, and compatible models)
+  - Anthropic-style tool calling
+  - Ollama JSON output parsing
+  - Text-based function calling for models without native support
+  - Structured output for models that need specific prompting
+- Auto-detection of model capabilities and appropriate tool calling format
 - Customizable system prompts
 - Ability to create agents with specific tool sets
 - Smart detection and prevention of repeated function calls
@@ -17,10 +22,12 @@ A lightweight agent framework using LiteLLM for LLM interactions.
   - Instance methods
   - Static methods
   - Decorated functions and methods with `@liteagent_tool`
-- **New**: Comprehensive observability layer with:
+- Hierarchical multi-agent systems with parent-child relationships
+- Comprehensive observability layer with:
   - Context ID tracking for multi-agent systems
   - Parent-child relationship tracking between agents
   - Event-based logging of all agent operations
+  - Multiple observer types (console, file, trace visualization)
   - Customizable observers for different monitoring needs
 
 ## Architecture
@@ -252,146 +259,135 @@ response = agent.chat("What's the weather in Paris and what is 15 + 27?")
 print(response)
 ```
 
-## Advanced Usage
+## Using the Observer System
 
-### Custom Tool Registration
-
-You can use the `liteagent_tool` decorator to customize tool names and descriptions:
+LiteAgent provides a comprehensive observer system for monitoring agent behavior:
 
 ```python
+from liteagent import LiteAgent
+from liteagent.observer import ConsoleObserver, FileObserver, TreeTraceObserver
 from liteagent.tools import liteagent_tool
 
-@liteagent_tool(name="calculate_sum", description="Calculate the sum of two numbers")
+# Define a tool
+@liteagent_tool
 def add_numbers(a: int, b: int) -> int:
+    """Adds two numbers together."""
     return a + b
-```
 
-### Direct Tool Creation
-
-You can create tools directly using the tool classes:
-
-```python
-from liteagent.tools import FunctionTool, InstanceMethodTool
-
-# Create a function tool
-def multiply(a: int, b: int) -> int:
-    return a * b
-    
-multiply_tool = FunctionTool(multiply, name="multiply_numbers")
-
-# Create an instance method tool
-class Calculator:
-    def add(self, a: int, b: int) -> int:
-        return a + b
-        
-calc = Calculator()
-add_tool = InstanceMethodTool(calc.add, calc, name="addition")
-```
-
-## Advanced Features
-
-### Loop Detection and Prevention
-
-LiteAgent automatically detects and prevents repeated function calls and function call loops, which can be common issues with LLM-based agents. This helps to:
-
-- Reduce token usage and API costs
-- Prevent infinite loops
-- Improve response times
-- Ensure the agent provides a final answer to the user
-
-The agent uses several strategies to detect and handle loops:
-
-1. Normalizing function arguments to detect similar calls
-2. Tracking function call history
-3. Counting repeated calls to the same function
-4. Adding explicit instructions to guide the model toward a final response
-
-### Models Without Native Function Calling
-
-For models that don't support native function calling (like some local models), LiteAgent provides a text-based function calling mechanism. The agent:
-
-1. Includes function descriptions in the system prompt
-2. Parses function calls from the model's text output
-3. Executes the functions and returns results
-4. Handles repeated function calls efficiently
-
-## Observability
-
-LiteAgent includes a comprehensive observability layer that allows you to track and monitor all agent operations, including tracing inter-agent relationships and function calls.
-
-### Context IDs
-
-Each agent has a unique context ID, and can optionally have a parent context ID. This allows you to trace the flow of execution in multi-agent systems.
-
-```python
-# Create a parent context ID
-parent_context_id = generate_context_id()
-
-# Create a main agent with this context
-main_agent = LiteAgent(
-    model="gpt-3.5-turbo",
-    name="MainAgent",
-    context_id=parent_context_id
-)
-
-# Create a child agent that references the parent
-child_agent = LiteAgent(
-    model="gpt-3.5-turbo",
-    name="ChildAgent",
-    parent_context_id=parent_context_id
-)
-```
-
-### Observer Pattern
-
-LiteAgent uses the observer pattern to notify interested parties about agent events:
-
-```python
 # Create observers
-console_observer = ConsoleObserver()
-file_observer = FileObserver("agent_events.jsonl")
+console_observer = ConsoleObserver(verbose=True)  # Logs detailed events to console
+file_observer = FileObserver(filename="agent_logs.jsonl")  # Logs events to a file
+trace_observer = TreeTraceObserver()  # Builds a trace tree for visualization
 
 # Create an agent with observers
 agent = LiteAgent(
     model="gpt-3.5-turbo",
-    name="MyAgent",
-    observers=[console_observer, file_observer]
+    name="ObservableAgent",
+    tools=[add_numbers],
+    observers=[console_observer, file_observer, trace_observer]
 )
 
-# Add more observers later
-agent.add_observer(my_custom_observer)
+# Chat with the agent
+agent.chat("What is 5 + 7?")
+
+# Print a visualization of the agent's actions
+trace_observer.print_trace()
 ```
 
-### Events
+## Creating Multi-Agent Systems
 
-The following events are tracked:
-
-- `AgentInitializedEvent`: When an agent is created
-- `UserMessageEvent`: When a user message is received
-- `ModelRequestEvent`: Before a request is sent to the model
-- `ModelResponseEvent`: After a response is received from the model
-- `FunctionCallEvent`: Before a function/tool is called
-- `FunctionResultEvent`: After a function/tool returns a result
-- `AgentResponseEvent`: When an agent generates a final response
-
-### Custom Observers
-
-You can create custom observers by implementing the `AgentObserver` interface:
+LiteAgent supports creating hierarchical multi-agent systems where agents can call other agents:
 
 ```python
-class MyCustomObserver(AgentObserver):
-    def on_event(self, event: AgentEvent) -> None:
-        # Handle the event
-        print(f"Received event: {event.event_type}")
-        
-    # Optionally override specific event handlers
-    def on_function_call(self, event: FunctionCallEvent) -> None:
-        print(f"Function call: {event.function_name}")
+from liteagent import LiteAgent
+from liteagent.tools import liteagent_tool
+
+# Define some tools
+@liteagent_tool
+def add_numbers(a: int, b: int) -> int:
+    """Adds two numbers together."""
+    return a + b
+
+@liteagent_tool
+def get_weather(city: str) -> str:
+    """Gets weather for a city."""
+    return f"The weather in {city} is 22°C and sunny."
+
+# Create a manager agent
+manager = LiteAgent(
+    model="gpt-4o-mini",
+    name="Manager",
+    system_prompt="You are a helpful assistant that coordinates tasks between specialized agents."
+)
+
+# Create specialized agents as child agents of the manager
+math_agent = LiteAgent(
+    model="gpt-3.5-turbo",
+    name="MathAgent",
+    system_prompt="You are a math specialist.",
+    tools=[add_numbers],
+    parent_context_id=manager.context_id  # Link to parent agent
+)
+
+weather_agent = LiteAgent(
+    model="claude-3-haiku",
+    name="WeatherAgent",
+    system_prompt="You are a weather specialist.",
+    tools=[get_weather],
+    parent_context_id=manager.context_id  # Link to parent agent
+)
+
+# Convert child agents to tools for the manager
+manager.tools = [
+    math_agent.as_tool(name="math_agent", description="Use this for mathematical calculations."),
+    weather_agent.as_tool(name="weather_agent", description="Use this for weather information.")
+]
+
+# Now the manager can delegate to specialized agents
+response = manager.chat("I need to know the sum of 42 and 17, and also the weather in Tokyo.")
+print(response)
 ```
 
-### Example
+## Auto-Detection of Model Capabilities
 
-See `example_observability.py` for a complete example of using the observability features.
+LiteAgent automatically detects the capabilities of different models and adapts accordingly:
+
+```python
+from liteagent import LiteAgent
+from liteagent.tools import liteagent_tool
+
+@liteagent_tool
+def calculate(expression: str) -> str:
+    """Evaluates a mathematical expression."""
+    try:
+        result = eval(expression)
+        return f"The result of {expression} is {result}"
+    except Exception as e:
+        return f"Error calculating {expression}: {str(e)}"
+
+# Works with OpenAI models
+openai_agent = LiteAgent(
+    model="gpt-3.5-turbo",
+    name="OpenAIAgent",
+    tools=[calculate]
+)
+
+# Works with Anthropic models
+anthropic_agent = LiteAgent(
+    model="claude-3-haiku",
+    name="AnthropicAgent",
+    tools=[calculate]
+)
+
+# Works with Ollama models
+ollama_agent = LiteAgent(
+    model="ollama/phi3",
+    name="OllamaAgent",
+    tools=[calculate]
+)
+
+# Each agent automatically uses the appropriate tool calling format
+```
 
 ## License
 

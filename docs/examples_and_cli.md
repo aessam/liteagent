@@ -120,6 +120,67 @@ calc = Calculator()
 add_tool = InstanceMethodTool(calc.add, calc)
 ```
 
+### Multi-Agent Examples
+
+The examples include demonstrations of multi-agent systems:
+
+```python
+from liteagent import LiteAgent
+from liteagent.tools import liteagent_tool
+from liteagent.observer import TreeTraceObserver
+
+# Create some tools
+@liteagent_tool
+def get_weather(city: str) -> str:
+    """Gets the weather for a city."""
+    return f"The weather in {city} is sunny with a high of 75°F"
+
+@liteagent_tool
+def add_numbers(a: int, b: int) -> int:
+    """Adds two numbers."""
+    return a + b
+
+# Create a trace observer to visualize the agent interactions
+trace_observer = TreeTraceObserver()
+
+# Create specialized agents
+weather_agent = LiteAgent(
+    model="gpt-3.5-turbo",
+    name="WeatherExpert",
+    system_prompt="You are a weather expert. Provide detailed weather information.",
+    tools=[get_weather],
+    observers=[trace_observer]
+)
+
+math_agent = LiteAgent(
+    model="gpt-3.5-turbo",
+    name="MathExpert",
+    system_prompt="You are a math expert. Solve math problems accurately.",
+    tools=[add_numbers],
+    observers=[trace_observer]
+)
+
+# Create a coordinator agent that uses the experts
+coordinator = LiteAgent(
+    model="gpt-4o-mini",
+    name="Coordinator",
+    system_prompt="You are a helpful assistant that delegates tasks to appropriate experts.",
+    tools=[
+        weather_agent.as_tool(name="weather_expert", 
+                              description="Ask the weather expert about weather-related questions"),
+        math_agent.as_tool(name="math_expert", 
+                           description="Ask the math expert about math problems")
+    ],
+    observers=[trace_observer]
+)
+
+# Ask the coordinator a complex question
+response = coordinator.chat("What's the weather in New York and what is 123 + 456?")
+
+# Print the trace to visualize the agent interactions
+trace_observer.print_trace()
+```
+
 ### Example Runners
 
 The `examples/basic_examples.py` file contains functions to run demonstration examples:
@@ -149,103 +210,141 @@ You can run the CLI in several ways:
 
 ```bash
 # Using the Python module syntax
-python -m liteagent --help
+python -m liteagent [command] [options]
 
-# Using the run command with a specific model
-python -m liteagent run --model gpt-4o-mini
-
-# Using the tools command to view sample tool definitions
-python -m liteagent tools --sample-output
+# Using the installed liteagent command
+liteagent [command] [options]
 ```
 
-### Command Structure
+### Available Commands
 
-The CLI now follows a command-based structure with these main commands:
-
-```
-liteagent                         # Base command
-  |-- run                         # Run examples
-  |     |-- --model MODEL         # Specify model to use
-  |     |-- --class-methods       # Run only class methods example
-  |     |-- --custom-agents       # Run only custom agents example
-  |     |-- --all                 # Run all examples (default)
-  |     |-- --ollama              # Use Ollama for local inference
-  |     |-- --enable-observability # Enable observability features
-  |
-  |-- tools                       # Tool operations
-  |     |-- --sample-output, -so  # Display sample tool definitions
-  |
-  |-- --version                   # Show version information
-  |-- --debug                     # Enable debug mode
-  |-- --debug-litellm            # Debug mode for LiteLLM
-  |-- --log-file                  # Log to file
-  |-- --no-color                  # Disable colored output
-  |-- --help                      # Show help message
-```
-
-### Available CLI Commands
+The CLI uses a command-based structure:
 
 ```bash
-# Show help and available options
-python -m liteagent --help
+# Run examples
+liteagent run [options]
 
-# Run examples with a specific model
-python -m liteagent run --model gpt-4o-mini
+# Tool operations
+liteagent tools [options]
 
-# Run only the class methods example
-python -m liteagent run --class-methods --model ollama/phi4
+# Show version
+liteagent --version
+```
 
-# Run only the custom agents example
-python -m liteagent run --custom-agents --model ollama/llama3.3
+### Global Options
 
-# Run all examples (default behavior)
-python -m liteagent run --all --model gpt-4o-mini
+The following global options work with any command:
 
-# Use local Ollama models
-python -m liteagent run --ollama --model llama3.3
+```bash
+# Show help
+liteagent --help
+
+# Show version info
+liteagent --version
 
 # Enable debug mode
-python -m liteagent run --debug --model gpt-3.5-turbo
+liteagent [command] --debug
 
-# Enable observability features
-python -m liteagent run --enable-observability --model gpt-4o-mini
+# Enable LiteLLM debug
+liteagent [command] --debug-litellm
 
-# View sample tool definitions
-python -m liteagent tools --sample-output
+# Log to file
+liteagent [command] --log-file=agent.log
+
+# Disable colored output
+liteagent [command] --no-color
 ```
 
-### CLI Architecture
+### Run Command
 
-The CLI is organized into components:
-
-1. **Command Module**: The `cli/commands.py` file contains the core CLI functionality:
-   - Argument parsing with subcommands
-   - Command execution
-   - Model handling
-
-2. **Entry Points**:
-   - `liteagent/__main__.py`: Module-level entry point for `python -m liteagent`
-
-### Sample Tool Output
-
-The `tools --sample-output` command displays examples of tool definitions that would be sent to the LLM. This is useful for understanding how tools are formatted when sent to language models.
-
-The output includes:
-- Regular functions wrapped with `FunctionTool`
-- Functions decorated with `@liteagent_tool`
-- Class methods wrapped with `InstanceMethodTool`
-- Class methods decorated with `@liteagent_tool`
-
-Each tool definition shows:
-- Name
-- Description
-- Parameters (with types and descriptions)
-- Required fields
-
-Example usage:
+The `run` command executes examples:
 
 ```bash
-python -m liteagent tools --sample-output
-# or
-python -m liteagent tools -so
+# Run all examples with a specific model
+liteagent run --model gpt-4o-mini
+
+# Run only the class methods example
+liteagent run --class-methods --model ollama/phi4
+
+# Run only the custom agents example
+liteagent run --custom-agents --model claude-3-haiku
+
+# Use Ollama for local inference
+liteagent run --ollama --model phi3
+# This is equivalent to: liteagent run --model ollama/phi3
+
+# Enable observability features
+liteagent run --enable-observability --model gpt-4o-mini
+```
+
+### Tools Command
+
+The `tools` command provides information about tool definitions:
+
+```bash
+# Display sample tool definitions as they would be sent to the LLM
+liteagent tools --sample-output
+```
+
+### Examples with Specific Features
+
+```bash
+# Run examples with observability enabled
+liteagent run --enable-observability --model gpt-4o-mini
+
+# Run examples with a local model
+liteagent run --ollama --model phi3
+
+# Run examples with a specific model and debug logging
+liteagent run --model claude-3-haiku --debug
+
+# Run examples with output saved to a log file
+liteagent run --model gpt-4o-mini --log-file=agent_runs.log
+```
+
+## Adding Your Own Examples
+
+You can add your own examples by:
+
+1. Creating tool functions in your code
+2. Registering them with the `liteagent_tool` decorator
+3. Creating an agent with your tools
+4. Chatting with the agent
+
+Example:
+
+```python
+from liteagent import LiteAgent
+from liteagent.tools import liteagent_tool
+from liteagent.observer import ConsoleObserver
+
+# Define your own tools
+@liteagent_tool
+def search_database(query: str) -> list:
+    """Search the database for information."""
+    # This is a mock implementation
+    return [{"id": 1, "name": "Example Result", "data": f"Data for: {query}"}]
+
+@liteagent_tool
+def send_notification(user_id: str, message: str) -> bool:
+    """Send a notification to a user."""
+    # This is a mock implementation
+    print(f"Sending notification to user {user_id}: {message}")
+    return True
+
+# Create an observer
+observer = ConsoleObserver(verbose=True)
+
+# Create an agent with your tools
+agent = LiteAgent(
+    model="gpt-4o-mini",
+    name="DatabaseAgent",
+    system_prompt="You are an assistant that can search databases and send notifications.",
+    tools=[search_database, send_notification],
+    observers=[observer]
+)
+
+# Chat with your agent
+response = agent.chat("Search the database for information about AI and notify user 123 about the results.")
+print(f"Final response: {response}")
 ``` 

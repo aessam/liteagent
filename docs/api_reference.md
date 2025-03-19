@@ -22,7 +22,10 @@ LiteAgent(
     system_prompt: str = None, 
     tools: List = None,
     observers: List[AgentObserver] = None,
-    parent_context_id: str = None
+    parent_context_id: str = None,
+    context_id: str = None,
+    debug: bool = False,
+    drop_params: bool = True
 )
 ```
 
@@ -35,11 +38,16 @@ The main agent class that orchestrates interactions between the user, model, and
 - `tools`: List of tools the agent can use
 - `observers`: List of observers to attach to the agent
 - `parent_context_id`: Context ID of the parent agent, if this is a child agent
+- `context_id`: Explicit context ID for the agent (generated automatically if not provided)
+- `debug`: Whether to enable debug logging
+- `drop_params`: Whether to drop parameters not supported by the model
 
 **Methods:**
 - `chat(message: str) -> str`: Send a message to the agent and get a response
 - `as_tool(name: str = None, description: str = None) -> AgentTool`: Convert the agent into a tool that can be used by another agent
 - `reset_memory()`: Clear the agent's memory
+- `add_observer(observer: AgentObserver)`: Add an observer to the agent
+- `remove_observer(observer: AgentObserver)`: Remove an observer from the agent
 
 ### Tools
 
@@ -48,35 +56,37 @@ The main agent class that orchestrates interactions between the user, model, and
 ```python
 from liteagent.tools import liteagent_tool
 
-@liteagent_tool
+@liteagent_tool(name=None, description=None)
 def my_tool(param1: str, param2: int) -> str:
     """Tool docstring"""
     # implementation
 ```
 
-Decorator to register a function as a tool.
+Decorator to register a function as a tool. Optional parameters:
+- `name`: Custom name for the tool (defaults to function name)
+- `description`: Custom description (defaults to function docstring)
 
 #### BaseTool
 
 ```python
 BaseTool(
-    name: str,
-    description: str = None,
-    parameters: Dict = None,
-    function: Callable = None
+    func: Callable,
+    name: str = None,
+    description: str = None
 )
 ```
 
 Base class for all tools.
 
 **Parameters:**
-- `name`: The name of the tool
-- `description`: Description of what the tool does
-- `parameters`: Dictionary describing the parameters the tool accepts
-- `function`: The function to call when the tool is used
+- `func`: The function to call when the tool is used
+- `name`: The name of the tool (defaults to function name)
+- `description`: Description of what the tool does (defaults to function docstring)
 
 **Methods:**
 - `execute(**kwargs)`: Execute the tool with the given parameters
+- `to_function_definition()`: Convert the tool to an OpenAI-compatible function definition
+- `to_dict()`: Convert the tool to a dictionary representation
 
 #### Tool Types
 
@@ -87,6 +97,26 @@ Base class for all tools.
 
 ### Observer System
 
+The Observer system provides comprehensive tracking and monitoring of agent operations through events.
+
+#### AgentEvent Types
+
+All events inherit from the base `AgentEvent` class and include common fields:
+- `agent_id`: Unique ID of the agent
+- `agent_name`: Name of the agent
+- `context_id`: Context ID for tracking agent interactions
+- `parent_context_id`: Optional parent context ID
+- `timestamp`: When the event occurred
+
+Available event types:
+- `AgentInitializedEvent`: When an agent is initialized, includes model and tools info
+- `UserMessageEvent`: When a user message is received
+- `ModelRequestEvent`: When a request is sent to the model
+- `ModelResponseEvent`: When a response is received from the model
+- `FunctionCallEvent`: When a function is called, includes arguments
+- `FunctionResultEvent`: When a function returns a result
+- `AgentResponseEvent`: When the agent generates a response to the user
+
 #### AgentObserver
 
 ```python
@@ -96,23 +126,44 @@ AgentObserver()
 Base class for all observers.
 
 **Methods:**
-- `on_event(event: AgentEvent)`: Called when an event occurs
+- `on_event(event: AgentEvent)`: Called when any event occurs
+- `on_agent_initialized(event: AgentInitializedEvent)`: Called when an agent is initialized
+- `on_user_message(event: UserMessageEvent)`: Called when a user message is received
+- `on_model_request(event: ModelRequestEvent)`: Called when a request is sent to the model
+- `on_model_response(event: ModelResponseEvent)`: Called when a response is received from the model
+- `on_function_call(event: FunctionCallEvent)`: Called when a function is called
+- `on_function_result(event: FunctionResultEvent)`: Called when a function returns a result
+- `on_agent_response(event: AgentResponseEvent)`: Called when the agent generates a response
 
-#### Observer Types
+#### Built-in Observer Types
 
-- `ConsoleObserver`: Prints events to the console
-- `FileObserver`: Logs events to a file
+- `ConsoleObserver`: Logs events to the console with configurable verbosity
+- `FileObserver`: Logs events to a file in JSONL format
 - `TreeTraceObserver`: Builds a tree visualization of agent interactions
 
-#### Event Types
+#### UnifiedObserver
 
-- `AgentInitializedEvent`: When an agent is initialized
-- `UserMessageEvent`: When a user message is received
-- `ModelRequestEvent`: When a request is sent to the model
-- `ModelResponseEvent`: When a response is received from the model
-- `FunctionCallEvent`: When a function is called
-- `FunctionResultEvent`: When a function returns a result
-- `AgentResponseEvent`: When the agent generates a response
+```python
+UnifiedObserver(
+    console_output: bool = True,
+    file_output: bool = False,
+    file_path: str = "agent_events.jsonl",
+    build_trace: bool = False,
+    verbose: bool = False
+)
+```
+
+Combines multiple observer capabilities (console, file, tracing) in one observer.
+
+**Parameters:**
+- `console_output`: Whether to log events to the console
+- `file_output`: Whether to log events to a file
+- `file_path`: Path to the file for event logging
+- `build_trace`: Whether to build a tree trace of events
+- `verbose`: Whether to include full event details in logs
+
+**Methods:**
+- `print_trace(output=sys.stdout)`: Print the event trace tree
 
 ### Model Interface
 
@@ -132,6 +183,18 @@ Base class for model interfaces.
 
 - `FunctionCallingModel`: For models that support native function calling
 - `TextBasedFunctionCallingModel`: For models that use text-based function calling
+
+### Tool Calling Types
+
+The `ToolCallingType` enum defines the different types of tool calling supported:
+
+- `NONE`: No tool calling support
+- `OPENAI`: OpenAI-style function calling (compatible with Groq and similar models)
+- `ANTHROPIC`: Anthropic-style tool calling
+- `GROQ`: Groq-specific tool calling
+- `OLLAMA`: Ollama-style tool calling through structured JSON output
+- `TEXT_BASED`: Simple text-based function call patterns
+- `STRUCTURED_OUTPUT`: Models that need specific prompting to return structured outputs
 
 ### Memory
 
@@ -169,14 +232,8 @@ generate_context_id() -> str
 
 Generate a unique context ID for tracking agent interactions.
 
-## Constants
+```python
+detect_model_capability(model_name: str, model_interface: ModelInterface = None) -> ToolCallingType
+```
 
-### ToolCallingType
-
-Enum defining the types of tool calling supported:
-
-- `NONE`: No tool calling support
-- `OPENAI`: OpenAI-style function calling
-- `ANTHROPIC`: Anthropic-style tool calling
-- `OLLAMA`: Ollama-style tool calling
-- `STRUCTURED_OUTPUT`: Structured output tool calling 
+Detect the tool calling capabilities of a model. 
