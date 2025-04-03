@@ -25,7 +25,7 @@ class TestModelInterfaces:
         """Test the detection of function calling support."""
         # Models that should support function calling
         supported_models = [
-            "gpt-4",
+            "gpt-4o-mini",
             "gpt-3.5-turbo",
             "claude-3-opus",
             "claude-3-sonnet",
@@ -65,7 +65,7 @@ class TestModelInterfaces:
             with patch('liteagent.tool_calling_types.get_tool_calling_type') as mock_get_type:
                 mock_get_type.return_value = ToolCallingType.OPENAI
                 
-                interface = create_model_interface("gpt-4")
+                interface = create_model_interface("gpt-4o-mini")
                 assert interface.tool_calling_type == ToolCallingType.OPENAI
         
         # Test that Anthropic-style models get the right tool calling type
@@ -110,7 +110,7 @@ class TestModelInterfaces:
                 ]
                 mock_get_handler.return_value = mock_handler
                 
-                interface = create_model_interface("gpt-4")
+                interface = create_model_interface("gpt-4o-mini")
                 
                 # Create a proper mock response object instead of a dictionary
                 response = MagicMock()
@@ -138,7 +138,7 @@ class TestModelInterfaces:
                 mock_handler = MagicMock()
                 mock_get_handler.return_value = mock_handler
                 
-                interface = create_model_interface("gpt-4")
+                interface = create_model_interface("gpt-4o-mini")
                 
                 # Create a proper mock response object instead of a dictionary
                 response = MagicMock()

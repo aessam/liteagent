@@ -132,7 +132,7 @@ class TestObserverEvents:
             agent_name="test-agent",
             context_id="test-context-id",
             parent_context_id="parent-context-id",
-            model_name="gpt-4",
+            model_name="gpt-4o-mini",
             system_prompt="You are a test agent."
         )
         
@@ -141,14 +141,14 @@ class TestObserverEvents:
         assert event.agent_name == "test-agent"
         assert event.context_id == "test-context-id"
         assert event.parent_context_id == "parent-context-id"
-        assert event.model_name == "gpt-4"
+        assert event.model_name == "gpt-4o-mini"
         assert event.system_prompt == "You are a test agent."
         assert event.event_type == "AgentInitializedEvent"
         
         # Test to_dict method
         event_dict = event.to_dict()
         assert event_dict["event_type"] == "AgentInitializedEvent"
-        assert event_dict["model_name"] == "gpt-4"
+        assert event_dict["model_name"] == "gpt-4o-mini"
         assert event_dict["system_prompt"] == "You are a test agent."
     
     def test_user_message_event(self):

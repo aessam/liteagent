@@ -45,7 +45,7 @@ get_weather_tool = FunctionTool(weather_tools.get_weather)
 
 # Use in an agent
 agent = LiteAgent(
-    model="gpt-4",
+    model="gpt-4o-mini",
     tools=[get_weather_tool],
     # ... other parameters
 )
@@ -78,7 +78,7 @@ tools = WeatherTools(api_key="your-api-key")
 
 # Create an agent with the decorated methods
 agent = LiteAgent(
-    model="gpt-4",
+    model="gpt-4o-mini",
     tools=[tools.get_weather, tools.get_forecast],
     # ... other parameters
 )
@@ -166,7 +166,7 @@ class CustomObserver(AgentObserver):
 
 # Create and use the observer
 observer = CustomObserver()
-agent = LiteAgent(model="gpt-4", observers=[observer])
+agent = LiteAgent(model="gpt-4o-mini", observers=[observer])
 ```
 
 ### New Usage with Built-in Observers
@@ -215,7 +215,7 @@ def search_database(query: str) -> list:
 
 # Single agent handling everything
 agent = LiteAgent(
-    model="gpt-4",
+    model="gpt-4o-mini",
     tools=[get_weather, search_database]
 )
 

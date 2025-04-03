@@ -35,7 +35,7 @@ If you've already received the information you need from a function call, use th
 to provide a final text response to the user."""
 
     def __init__(self, model, name, system_prompt=None, tools=None, debug=False, drop_params=True, 
-                 parent_context_id=None, context_id=None, observers=None):
+                 parent_context_id=None, context_id=None, observers=None, description=None):
         """
         Initialize the LiteAgent.
         
@@ -49,6 +49,8 @@ to provide a final text response to the user."""
             parent_context_id (str, optional): Parent context ID if this agent was created by another agent.
             context_id (str, optional): Context ID for this agent. If None, a new ID will be generated.
             observers (list, optional): List of observers to notify of agent events.
+            description (str, optional): A clear description of what this agent does and its capabilities.
+                                       If None, will be generated from system prompt and tools.
         """
         self.model = model
         self.name = name
@@ -91,7 +93,17 @@ to provide a final text response to the user."""
             self._log("Using structured output prompt enhancement for tools")
             self.system_prompt = self._enhance_prompt_with_tools(self.system_prompt, tools)
             self.memory.system_prompt = self.system_prompt
-            
+        
+        # Set or generate the agent's description
+        if description:
+            self.description = description
+        else:
+            # Generate a description from system prompt and tools
+            tool_names = [tool.name if hasattr(tool, 'name') else str(tool) for tool in tools or []]
+            self.description = f"{self.name} is an AI agent that {self.system_prompt.split('.')[0].lower().replace('you are ', '')}. "
+            if tool_names:
+                self.description += f"It has access to the following tools: {', '.join(tool_names)}."
+        
         # Emit initialization event
         self._emit_event(AgentInitializedEvent(
             agent_id=self.agent_id,

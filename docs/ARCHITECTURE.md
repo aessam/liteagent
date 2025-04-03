@@ -57,7 +57,7 @@ Tool calls are handled by specialized handler classes in the `handlers` module:
 LiteAgent supports creating multiple agents that can interact with each other:
 
 ```python
-manager = LiteAgent(model="gpt-4", name="manager")
+manager = LiteAgent(model="gpt-4o-mini", name="manager")
 coder = LiteAgent(model="claude-3-opus", name="coder", parent_context_id=manager.context_id)
 tester = LiteAgent(model="gpt-3.5-turbo", name="tester", parent_context_id=manager.context_id)
 
@@ -84,7 +84,7 @@ weather_tool = weather_agent.as_tool(
 )
 
 # Use the agent-as-tool in another agent
-main_agent = LiteAgent(model="gpt-4", tools=[weather_tool])
+main_agent = LiteAgent(model="gpt-4o-mini", tools=[weather_tool])
 main_agent.chat("What's the weather like in Tokyo?")
 ```
 
@@ -104,7 +104,7 @@ The observer pattern allows tracking agent behavior and integrating with externa
 
 ```python
 observer = ConsoleObserver(verbose=True)
-agent = LiteAgent(model="gpt-4", observers=[observer])
+agent = LiteAgent(model="gpt-4o-mini", observers=[observer])
 ```
 
 ### Event Types
@@ -124,7 +124,7 @@ The `TreeTraceObserver` can visualize the tree of agent interactions:
 
 ```python
 trace_observer = TreeTraceObserver()
-agent = LiteAgent(model="gpt-4", observers=[trace_observer])
+agent = LiteAgent(model="gpt-4o-mini", observers=[trace_observer])
 agent.chat("Hello")
 trace_observer.print_trace()
 ```

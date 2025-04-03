@@ -259,6 +259,123 @@ response = agent.chat("What's the weather in Paris and what is 15 + 27?")
 print(response)
 ```
 
+## Model Context Protocol (MCP) Integration
+
+LiteAgent now includes built-in support for the Model Context Protocol (MCP), allowing your agents to work with any MCP-compatible clients like Claude Desktop.
+
+### What is MCP?
+
+The Model Context Protocol (MCP) is a standardized protocol for connecting AI systems with data sources and tools. It provides a common interface for sharing contextual information, exposing tools, and building composable integrations between language models and applications.
+
+### Using LiteAgent with MCP
+
+You can easily expose one or more LiteAgent instances as MCP servers using the `run_as_mcp` function:
+
+```python
+from liteagent import LiteAgent, run_as_mcp, liteagent_tool
+
+# Define tools
+@liteagent_tool
+def add_numbers(a: int, b: int) -> int:
+    """Add two numbers together."""
+    return a + b
+
+@liteagent_tool
+def get_weather(location: str) -> str:
+    """Get the weather for a location."""
+    return f"The weather in {location} is sunny and 72 degrees."
+
+# Create agents with different capabilities
+math_agent = LiteAgent(
+    model="gpt-3.5-turbo",
+    name="Math",
+    system_prompt="You are a Math Agent that can perform calculations.",
+    tools=[add_numbers]
+)
+
+weather_agent = LiteAgent(
+    model="gpt-3.5-turbo",
+    name="Weather",
+    system_prompt="You are a Weather Agent that can provide weather information.",
+    tools=[get_weather]
+)
+
+# Run both agents as MCP servers
+run_as_mcp(math_agent, weather_agent, server_name="Multi-Agent Demo")
+```
+
+This will start an MCP server that exposes both agents and their tools to any MCP-compatible client.
+
+### MCP Server Configuration
+
+The `run_as_mcp` function accepts several configuration options:
+
+```python
+run_as_mcp(
+    agent1, 
+    agent2, 
+    server_name="My MCP Server",
+    transport="sse",  # Transport protocol: "stdio" or "sse"
+    host="127.0.0.1", # Host to bind the server to (for SSE transport)
+    port=8000         # Port to bind the server to (for SSE transport)
+)
+```
+
+You can also set these options using environment variables:
+- `MCP_TRANSPORT`: Transport protocol to use ("stdio" or "sse")
+- `MCP_HOST`: Host to bind the server to (default: "127.0.0.1")
+- `MCP_PORT`: Port to bind the server to (default: 8000)
+
+### Command-Line Interface
+
+The MCP example provides a user-friendly command-line interface:
+
+```bash
+# Show help
+python examples/mcp_example.py --help
+
+# Run with default settings (SSE transport on 127.0.0.1:8000)
+python examples/mcp_example.py
+
+# Use stdio transport
+python examples/mcp_example.py --transport stdio
+
+# Specify host and port
+python examples/mcp_example.py --host 0.0.0.0 --port 8080
+
+# Specify model
+python examples/mcp_example.py --model gpt-4o-mini
+
+# Skip agent testing
+python examples/mcp_example.py --skip-tests
+
+# Enable debug mode
+python examples/mcp_example.py --debug
+```
+
+The command-line interface is organized into logical groups:
+- **MCP Server Configuration**: Options for configuring the MCP server
+- **Model Configuration**: Options for specifying the model to use
+- **Testing Options**: Options for controlling the testing phase
+- **Debug Options**: Options for enabling debug mode
+
+### Benefits of MCP Integration
+
+- **Interoperability**: Your agents can work with any MCP-compatible client like Claude Desktop
+- **Tool Sharing**: Expose agent-specific tools that can be discovered by clients
+- **Resource Access**: Share system prompts and other agent information as MCP resources
+- **Prompt Templates**: Expose agent functionality as interactive prompt templates
+
+### Available MCP Features
+
+When you run your agents with `run_as_mcp`, the following MCP features are exposed:
+
+- **Tools**: All tools registered with your agents are exposed as MCP tools
+- **Resources**: Agent system prompts and tool descriptions are exposed as MCP resources
+- **Prompts**: Each agent can be interacted with through MCP prompts
+
+For a complete example of using LiteAgent with MCP, see the [MCP example](examples/mcp_example.py).
+
 ## Using the Observer System
 
 LiteAgent provides a comprehensive observer system for monitoring agent behavior:

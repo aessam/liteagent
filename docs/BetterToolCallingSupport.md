@@ -130,7 +130,7 @@ Use a JSON configuration file to map models and providers to their tool calling 
       "models": {
         "default": "OPENAI",
         "gpt-3.5-turbo": "OPENAI",
-        "gpt-4": "OPENAI"
+        "gpt-4o-mini": "OPENAI"
       }
     },
     "anthropic": {

@@ -61,7 +61,7 @@ class TestMemoryModelTypes:
             
             # Create the agent
             agent = LiteAgent(
-                model="gpt-4",
+                model="gpt-4o-mini",
                 name="weather-agent",
                 system_prompt=system_prompt,
                 tools=[FunctionTool(get_weather)],
@@ -232,7 +232,7 @@ class TestMemoryModelTypes:
             
             # Create OpenAI-style agent
             openai_agent = LiteAgent(
-                model="gpt-4",
+                model="gpt-4o-mini",
                 name="math-agent1",
                 system_prompt=system_prompt,
                 tools=[FunctionTool(add_numbers)],

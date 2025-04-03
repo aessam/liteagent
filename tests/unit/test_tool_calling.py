@@ -35,7 +35,7 @@ class TestToolCallingTypes:
     def test_get_provider_from_model(self):
         """Test extracting provider from model name."""
         # OpenAI models
-        assert get_provider_from_model("gpt-4") == "openai"
+        assert get_provider_from_model("gpt-4o-mini") == "openai"
         assert get_provider_from_model("gpt-3.5-turbo") == "openai"
         assert get_provider_from_model("text-davinci-003") == "openai"
         
@@ -55,7 +55,7 @@ class TestToolCallingTypes:
     def test_get_tool_calling_type(self):
         """Test getting tool calling type for models."""
         # OpenAI models
-        assert get_tool_calling_type("gpt-4") == ToolCallingType.OPENAI
+        assert get_tool_calling_type("gpt-4o-mini") == ToolCallingType.OPENAI
         assert get_tool_calling_type("gpt-3.5-turbo") == ToolCallingType.OPENAI
         
         # Anthropic models
@@ -70,7 +70,7 @@ class TestToolCallingTypes:
     
     def test_get_tool_calling_handler_type(self):
         """Test getting tool calling handler type as string for models."""
-        assert get_tool_calling_handler_type("gpt-4") == "OPENAI"
+        assert get_tool_calling_handler_type("gpt-4o-mini") == "OPENAI"
         assert get_tool_calling_handler_type("claude-3-opus") == "ANTHROPIC"
         assert get_tool_calling_handler_type("ollama/llama2") == "OLLAMA"
     

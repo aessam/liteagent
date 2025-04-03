@@ -42,7 +42,7 @@ def main():
     # Test with various model types
     models_to_test = [
         # OpenAI models
-        ("gpt-4", ".tool_test/response_openai_gpt-4.json"),
+        ("gpt-4o-mini", ".tool_test/response_openai_gpt-4.json"),
         # Anthropic models
         ("claude-3-opus-20240229", ".tool_test/response_anthropic_claude-3-opus-20240229.json"),
         # Ollama models
