@@ -25,6 +25,9 @@ class TestModelInterfaces:
         """Test the detection of function calling support."""
         # Models that should support function calling
         supported_models = [
+            "gpt-4.1",
+            "gpt-4.1-mini",
+            "gpt-4.1-nano",
             "gpt-4o-mini",
             "gpt-3.5-turbo",
             "claude-3-opus",
