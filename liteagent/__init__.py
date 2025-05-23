@@ -10,5 +10,6 @@ from .memory import ConversationMemory
 from .utils import setup_logging, check_api_keys
 from .tool_calling_types import ToolCallingType
 from .mcp_adapter import run_as_mcp, LiteAgentMCPServer, MCPAgentObserver
+from .container import ContainerExecutor, DockerExecutor, PodmanExecutor, ContainerFactory
 
 __version__ = "0.1.0"
