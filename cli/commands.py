@@ -33,6 +33,8 @@ def parse_arguments():
                       help="Run only the class methods example")
     run_group.add_argument("--custom-agents", action="store_true",
                       help="Run only the custom agents example")
+    run_group.add_argument("--code-agent", action="store_true",
+                      help="Run the code agent example (secure code execution)")
     run_group.add_argument("--all", action="store_true",
                       help="Run all examples (this is the default behavior)")
     
@@ -112,6 +114,10 @@ def run_examples(args):
         logger.info("Running custom agents example")
         from examples.basic_examples import run_custom_agents_example
         run_custom_agents_example(model=args.model, observers=observers)
+    elif args.code_agent:
+        logger.info("Running code agent example")
+        from examples.code_agent_example import main as run_code_agent_example
+        run_code_agent_example()
     else:  # Default or --all
         logger.info("Running all examples")
         from examples.basic_examples import run_examples
