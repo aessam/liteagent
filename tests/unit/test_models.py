@@ -19,7 +19,8 @@ def test_model_capabilities_real_api():
     
     assert caps is not None
     assert caps.tool_calling is True
-    assert caps.model_id == 'gpt-4o'
+    # Handle both formats: "gpt-4o" and "openai/gpt-4o"
+    assert caps.model_id in ['gpt-4o', 'openai/gpt-4o']
     # Note: Real API may return different provider names
 
 
@@ -40,7 +41,7 @@ def test_anthropic_model_creation(anthropic_model):
 def test_groq_model_creation(groq_model):
     """Test creating a real Groq model interface."""
     assert isinstance(groq_model, UnifiedModelInterface)
-    assert groq_model.model_name == "qwen3-32b"
+    assert groq_model.model_name == "qwen/qwen3-32b"
     assert groq_model.supports_tool_calling() is True
 
 

@@ -22,6 +22,7 @@ class ProviderFactory:
         'mistral': 'mistral_provider.MistralProvider',
         'deepseek': 'openai_provider.DeepSeekProvider',
         'ollama': 'ollama_provider.OllamaProvider',
+        'qwen': 'groq_provider.GroqProvider',  # Qwen models are served by Groq
     }
     
     # Model name patterns for automatic provider detection
@@ -44,6 +45,8 @@ class ProviderFactory:
         'llama': 'groq',  # Default for Llama models without prefix
         'mixtral': 'groq',  # Default for Mixtral models without prefix
         'gemma': 'groq',
+        'qwen/': 'groq',  # Qwen models on Groq with prefix
+        'qwen': 'groq',  # Qwen models on Groq
         
         # Mistral models
         'mistral': 'mistral',
@@ -108,6 +111,9 @@ class ProviderFactory:
             provider = provider.lower()
             
             if provider in cls.PROVIDER_MAP:
+                # Special case: for Groq models like qwen/qwen3-32b, keep the full name
+                if provider == 'qwen':
+                    return 'groq', model_name  # Use 'groq' provider but keep full model name
                 return provider, clean_name
             else:
                 logger.warning(f"Unknown provider prefix: {provider}")
@@ -221,6 +227,19 @@ class ProviderFactory:
         """Get the provider name for a given model."""
         provider_name, _ = cls._parse_model_name(model_name)
         return provider_name
+        
+    @classmethod
+    def determine_provider(cls, model_name: str) -> str:
+        """
+        Determine the provider for a given model name.
+        
+        Args:
+            model_name: Model name to analyze
+            
+        Returns:
+            str: Provider name
+        """
+        return cls.get_provider_for_model(model_name)
 
 
 # Convenience function for creating providers

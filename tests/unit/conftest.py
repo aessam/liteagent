@@ -54,7 +54,7 @@ def groq_model(api_keys):
     """Create a real Groq model interface."""
     if not api_keys['groq']:
         pytest.skip("GROQ_API_KEY not available")
-    return create_model_interface("qwen3-32b", api_key=api_keys['groq'])
+    return create_model_interface("qwen/qwen3-32b", api_key=api_keys['groq'])
 
 
 @pytest.fixture
@@ -138,7 +138,7 @@ def groq_agent(api_keys, test_tool):
         pytest.skip("GROQ_API_KEY not available")
         
     return LiteAgent(
-        model="qwen3-32b", 
+        model="qwen/qwen3-32b", 
         name="test-groq-agent",
         api_key=api_keys['groq'],
         tools=[test_tool],
