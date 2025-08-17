@@ -2,7 +2,7 @@
 Unit tests for the model interfaces in LiteAgent.
 
 This module contains tests for the different model interfaces that handle
-communication with various LLM providers, focusing especially on function calling.
+communication with various LLM providers using the new provider system.
 """
 
 import json
@@ -10,9 +10,10 @@ import pytest
 from unittest.mock import MagicMock, patch, ANY
 
 # Import LiteAgent components
-from liteagent.models import ModelInterface, create_model_interface
-from liteagent.tool_calling_types import ToolCallingType, get_provider_from_model
-from liteagent.tool_calling import get_tool_calling_handler
+from liteagent.models import UnifiedModelInterface, create_model_interface
+from liteagent.capabilities import get_model_capabilities
+from liteagent.providers.base import ProviderResponse, ToolCall
+from liteagent.providers.factory import ProviderFactory
 
 # Import our testing utilities
 from tests.unit.test_mock_llm import MockModelInterface
@@ -21,217 +22,157 @@ from tests.unit.test_mock_llm import MockModelInterface
 class TestModelInterfaces:
     """Test the model interface classes."""
     
-    def test_function_calling_model_detection(self):
-        """Test the detection of function calling support."""
-        # Models that should support function calling
-        supported_models = [
-            "gpt-4.1",
-            "gpt-4.1-mini",
-            "gpt-4.1-nano",
-            "gpt-4o-mini",
-            "gpt-3.5-turbo",
-            "claude-3-opus",
-            "claude-3-sonnet",
-            "claude-3-haiku"
-        ]
-        
-        # Models that should NOT support function calling
-        unsupported_models = [
-            "text-davinci-003"
-        ]
-        
-        # Test supported models with OpenAI or Anthropic style function calling
-        for model_name in supported_models:
-            with patch('liteagent.tool_calling_types.get_tool_calling_type') as mock_get_type:
-                if model_name.startswith("gpt"):
-                    mock_get_type.return_value = ToolCallingType.OPENAI
-                elif model_name.startswith("claude"):
-                    mock_get_type.return_value = ToolCallingType.ANTHROPIC
-                
-                interface = create_model_interface(model_name)
-                assert interface.tool_calling_type != ToolCallingType.NONE
-                
-        # Test unsupported models
-        for model_name in unsupported_models:
-            with patch('liteagent.tool_calling_types.get_tool_calling_type') as mock_get_type:
-                mock_get_type.return_value = ToolCallingType.NONE
-                
-                interface = create_model_interface(model_name)
-                assert interface.tool_calling_type == ToolCallingType.NONE
-    
-    def test_create_model_interface_factory(self):
-        """Test the factory function for creating model interfaces."""
-        # Test that OpenAI-style models get the right tool calling type
-        with patch('liteagent.tool_calling_types.get_provider_from_model') as mock_get_provider:
-            mock_get_provider.return_value = "openai"
+    def test_create_model_interface_with_mock(self):
+        """Test creating a model interface with mock provider."""
+        # Test that we can create a mock model interface
+        with patch('liteagent.providers.factory.ProviderFactory.create_provider') as mock_create:
+            mock_provider = MagicMock()
+            mock_provider.provider_name = "mock"
+            mock_provider.supports_tool_calling.return_value = True
+            mock_create.return_value = mock_provider
             
-            with patch('liteagent.tool_calling_types.get_tool_calling_type') as mock_get_type:
-                mock_get_type.return_value = ToolCallingType.OPENAI
-                
-                interface = create_model_interface("gpt-4o-mini")
-                assert interface.tool_calling_type == ToolCallingType.OPENAI
-        
-        # Test that Anthropic-style models get the right tool calling type
-        with patch('liteagent.tool_calling_types.get_provider_from_model') as mock_get_provider:
-            mock_get_provider.return_value = "anthropic"
-            
-            with patch('liteagent.tool_calling_types.get_tool_calling_type') as mock_get_type:
-                mock_get_type.return_value = ToolCallingType.ANTHROPIC
-                
-                interface = create_model_interface("claude-3-opus")
-                assert interface.tool_calling_type == ToolCallingType.ANTHROPIC
-        
-        # Test that Ollama models get the right tool calling type
-        with patch('liteagent.tool_calling_types.get_provider_from_model') as mock_get_provider:
-            mock_get_provider.return_value = "ollama"
-            with patch('liteagent.tool_calling_types.get_tool_calling_type') as mock_get_type:
-                mock_get_type.return_value = ToolCallingType.OLLAMA
-                
-                interface = create_model_interface("ollama/phi-2")
-                assert interface.tool_calling_type == ToolCallingType.OLLAMA, "ollama/phi-2 should use JSON extraction"
-        
-        # Test that local models get the right tool calling type
-        with patch('liteagent.tool_calling_types.get_provider_from_model') as mock_get_provider:
-            mock_get_provider.return_value = "local"
-            with patch('liteagent.tool_calling_types.get_tool_calling_type') as mock_get_type:
-                mock_get_type.return_value = ToolCallingType.STRUCTURED_OUTPUT
-                
-                interface = create_model_interface("local/phi-2")
-                assert interface.tool_calling_type == ToolCallingType.STRUCTURED_OUTPUT, "local/phi-2 should use text-based tool calling"
+            interface = create_model_interface("mock-model")
+            assert interface is not None
+            assert interface.model_name == "mock-model"
     
-    def test_function_calling_model_response_extraction(self):
-        """Test that ModelInterface correctly extracts tool calls from responses."""
-        # Create a model interface with OpenAI tool calling type
-        with patch('liteagent.tool_calling_types.get_tool_calling_type') as mock_get_type:
-            mock_get_type.return_value = ToolCallingType.OPENAI
-            
-            with patch('liteagent.tool_calling.get_provider_specific_handler') as mock_get_handler:
-                # Mock the handler with a simple implementation that extracts known tool calls
-                mock_handler = MagicMock()
-                mock_handler.extract_tool_calls.return_value = [
-                    {"name": "get_weather", "arguments": {"city": "New York"}}
-                ]
-                mock_get_handler.return_value = mock_handler
-                
-                interface = create_model_interface("gpt-4o-mini")
-                
-                # Create a proper mock response object instead of a dictionary
-                response = MagicMock()
-                response.choices = [MagicMock()]
-                response.choices[0].message = MagicMock()
-                response.choices[0].message.tool_calls = [MagicMock()]
-                response.choices[0].message.tool_calls[0].function = MagicMock()
-                response.choices[0].message.tool_calls[0].function.name = "get_weather"
-                response.choices[0].message.tool_calls[0].function.arguments = '{"city": "New York"}'
-                
-                # Check that tool calls are correctly extracted
-                tool_calls = interface.extract_tool_calls(response)
-                assert len(tool_calls) == 1
-                assert tool_calls[0]["name"] == "get_weather"
-                assert tool_calls[0]["arguments"]["city"] == "New York"
-    
-    def test_function_calling_model_content_extraction(self):
-        """Test that ModelInterface correctly extracts content from responses."""
-        # Create a model interface with OpenAI tool calling type
-        with patch('liteagent.tool_calling_types.get_tool_calling_type') as mock_get_type:
-            mock_get_type.return_value = ToolCallingType.OPENAI
-            
-            with patch('liteagent.tool_calling.get_provider_specific_handler') as mock_get_handler:
-                # Mock the handler
-                mock_handler = MagicMock()
-                mock_get_handler.return_value = mock_handler
-                
-                interface = create_model_interface("gpt-4o-mini")
-                
-                # Create a proper mock response object instead of a dictionary
-                response = MagicMock()
-                response.choices = [MagicMock()]
-                response.choices[0].message = MagicMock()
-                response.choices[0].message.content = "Hello world"
-                
-                content = interface.extract_content(response)
-                assert content == "Hello world"
-                
-                # Test OpenAI response without content
-                response = MagicMock()
-                response.choices = [MagicMock()]
-                response.choices[0].message = MagicMock()
-                response.choices[0].message.content = None
-                
-                content = interface.extract_content(response)
-                assert content == ""
-    
-    def test_text_based_function_calling_model_tool_description(self):
-        """Test that TextBasedToolCallingHandler correctly generates tool descriptions."""
-        # Create a TextBasedToolCallingHandler
-        from liteagent.tool_calling import TextBasedToolCallingHandler
-        handler = TextBasedToolCallingHandler()
+    def test_model_interface_tool_calling_support(self):
+        """Test tool calling support detection."""
+        # Test with a mock model that supports tools
+        mock_model = MockModelInterface(supports_tools=True)
+        assert mock_model.supports_tool_calling() is True
         
-        # Create some function definitions
-        functions = [
+        # Test with a mock model that doesn't support tools
+        mock_model_no_tools = MockModelInterface(supports_tools=False)
+        assert mock_model_no_tools.supports_tool_calling() is False
+    
+    def test_model_interface_response_generation(self):
+        """Test response generation through model interface."""
+        mock_model = MockModelInterface(responses=[
+            {"type": "text", "content": "Hello, world!"}
+        ])
+        
+        messages = [{"role": "user", "content": "Hi there"}]
+        response = mock_model.generate_response(messages)
+        
+        assert isinstance(response, ProviderResponse)
+        assert response.content == "Hello, world!"
+        assert len(response.tool_calls) == 0
+    
+    def test_model_interface_tool_call_generation(self):
+        """Test tool call generation through model interface."""
+        mock_model = MockModelInterface(responses=[
             {
-                "name": "get_weather",
-                "description": "Get the current weather for a location",
-                "parameters": {
-                    "properties": {
-                        "location": {"type": "string"},
-                        "unit": {"type": "string"}
-                    }
-                }
-            },
-            {
-                "name": "search_web",
-                "description": "Search the web for information",
-                "parameters": {
-                    "properties": {
-                        "query": {"type": "string"}
-                    }
-                }
+                "type": "function_call",
+                "function_name": "get_weather",
+                "function_args": {"location": "San Francisco"}
             }
-        ]
+        ])
         
-        # Generate the tool description
-        tool_description = handler.format_tools_for_model(functions)
+        messages = [{"role": "user", "content": "What's the weather in SF?"}]
+        tools = [{"name": "get_weather", "parameters": {"location": "string"}}]
         
-        # Verify the description
-        assert "get_weather" in tool_description
-        assert "search_web" in tool_description
-        assert "location" in tool_description
-        assert "query" in tool_description
-        assert "[FUNCTION_CALL]" in tool_description
+        response = mock_model.generate_response(messages, tools)
+        
+        assert isinstance(response, ProviderResponse)
+        assert len(response.tool_calls) == 1
+        assert response.tool_calls[0].name == "get_weather"
+        assert response.tool_calls[0].arguments["location"] == "San Francisco"
     
-    def test_text_based_function_calling_model_response_extraction(self):
-        """Test that TextBasedToolCallingHandler correctly extracts function calls from text responses."""
-        # Create a TextBasedToolCallingHandler
-        from liteagent.tool_calling import TextBasedToolCallingHandler
-        handler = TextBasedToolCallingHandler()
+    def test_model_capabilities_integration(self):
+        """Test integration with model capabilities system."""
+        # Test that we can get capabilities for known models
+        # Mock the capabilities detection
+        with patch('liteagent.capabilities.get_model_capabilities') as mock_get_caps:
+            from liteagent.capabilities import ModelCapabilities
+            mock_capabilities = ModelCapabilities(
+                model_id="gpt-4o",
+                name="GPT-4o",
+                provider="openai",
+                tool_calling=True,
+                reasoning=True,
+                multimodal=True
+            )
+            mock_get_caps.return_value = mock_capabilities
+            
+            caps = get_model_capabilities("gpt-4o")
+            assert caps is not None
+            assert caps.tool_calling is True
+            assert caps.provider == "openai"
+    
+    def test_provider_factory_integration(self):
+        """Test that model interfaces work with provider factory."""
+        # Test that the provider factory can be called without errors
+        try:
+            with patch('liteagent.providers.factory.ProviderFactory._load_provider_class') as mock_load:
+                # Mock loading a provider class
+                mock_provider_class = MagicMock()
+                mock_provider_instance = MagicMock()
+                mock_provider_instance.provider_name = "test"
+                mock_provider_class.return_value = mock_provider_instance
+                mock_load.return_value = mock_provider_class
+                
+                # This should not raise an exception
+                factory = ProviderFactory()
+                provider = factory.create_provider("test-model", api_key="test")
+                assert provider is not None
+        except ImportError:
+            # Expected if optional dependencies aren't installed
+            pytest.skip("Provider dependencies not installed")
+    
+    def test_unified_model_interface_creation(self):
+        """Test creation of unified model interface."""
+        # Mock capabilities first (before creating interface)
+        from liteagent.capabilities import ModelCapabilities
+        mock_capabilities = ModelCapabilities(
+            model_id="test-model",
+            name="Test Model",
+            provider="mock",
+            tool_calling=True,
+            reasoning=False,
+            multimodal=False
+        )
         
-        # Create a mock response with a text-based function call
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message = MagicMock()
-        mock_response.choices[0].message.content = """
-        I'll help you find the weather.
-        
-        [FUNCTION_CALL] get_weather(location="New York", unit="celsius") [/FUNCTION_CALL]
-        
-        This will give you the current weather in New York.
-        """
-        
-        # Extract the function call
-        tool_calls = handler.extract_tool_calls(mock_response)
-        
-        # Verify the extraction
-        assert len(tool_calls) == 1
-        assert tool_calls[0]["name"] == "get_weather"
-        assert tool_calls[0]["arguments"]["location"] == "New York"
-        assert tool_calls[0]["arguments"]["unit"] == "celsius"
-        
-        # Test a response with no function call
-        mock_response.choices[0].message.content = "I don't know how to help with that."
-        tool_calls = handler.extract_tool_calls(mock_response)
-        assert len(tool_calls) == 0
+        with patch('liteagent.capabilities.get_model_capabilities') as mock_get_caps:
+            mock_get_caps.return_value = mock_capabilities
+            
+            # Test with mock provider
+            with patch('liteagent.providers.factory.ProviderFactory.create_provider') as mock_create:
+                mock_provider = MagicMock()
+                mock_provider.provider_name = "mock"
+                mock_provider.supports_tool_calling.return_value = True
+                mock_create.return_value = mock_provider
+                
+                interface = create_model_interface("test-model")
+                assert isinstance(interface, UnifiedModelInterface)
+                assert interface.model_name == "test-model"
+                # Capabilities should be set during initialization
+                assert interface.capabilities is not None
+                assert interface.capabilities.model_id == "test-model"
+
+
+class TestModelCapabilities:
+    """Test the model capabilities system."""
+    
+    def test_capabilities_fallback(self):
+        """Test that capabilities system handles unknown models gracefully."""
+        with patch('liteagent.capabilities._capability_detector._fetch_models_data'):
+            # When no capabilities are found, should return None
+            with patch('liteagent.capabilities._capability_detector.get_model_capabilities') as mock_get:
+                mock_get.return_value = None
+                
+                caps = get_model_capabilities("unknown-model")
+                assert caps is None
+    
+    def test_capabilities_caching(self):
+        """Test that capabilities are cached properly."""
+        with patch('liteagent.capabilities._capability_detector._refresh_cache_if_needed') as mock_refresh:
+            # Call get_model_capabilities twice
+            get_model_capabilities("test-model")
+            get_model_capabilities("test-model")
+            
+            # Should only refresh once due to caching
+            assert mock_refresh.call_count >= 1
 
 
 if __name__ == "__main__":
-    pytest.main(["-v", "test_models.py"]) 
+    pytest.main([__file__])

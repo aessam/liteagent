@@ -16,220 +16,131 @@ from liteagent.providers.base import ProviderResponse, ToolCall
 from liteagent.capabilities import ModelCapabilities
 
 
-class MockModelInterface(UnifiedModelInterface):
+class MockProvider:
+    """Mock provider for testing."""
+    
+    def __init__(self, supports_tools: bool = True):
+        self.provider_name = "mock"
+        self.supports_tools = supports_tools
+    
+    def supports_tool_calling(self) -> bool:
+        return self.supports_tools
+
+
+class MockModelInterface:
     """Mock implementation of ModelInterface for testing purposes."""
     
-    def __init__(self, model_name: str = "mock-model", drop_params: bool = True,
-                 supports_tools: bool = True, responses: List[Dict] = None):
+    def __init__(self, model_name: str = "mock-model", supports_tools: bool = True, 
+                 responses: List[Dict] = None, api_key: str = None):
         """
         Initialize the mock model interface.
         
         Args:
             model_name: Name of the model to mock
-            drop_params: Whether to drop unsupported parameters
             supports_tools: Whether this mock model supports function calling
             responses: Predefined responses to return. If None, a default response is used.
+            api_key: Mock API key (not used)
         """
-        super().__init__(model_name, drop_params)
+        self.model_name = model_name
+        self.provider = MockProvider(supports_tools)
         self.supports_tools = supports_tools
         self.responses = responses or []
         self.response_index = 0
         
+        # Mock capabilities
+        self.capabilities = ModelCapabilities(
+            model_id=model_name,
+            name=model_name,
+            provider="mock",
+            tool_calling=supports_tools,
+            reasoning=True,
+            multimodal=False
+        )
+        
         # For tracking calls
         self.generate_response_calls = []
     
-    def generate_response(self, messages: List[Dict], functions: Optional[List[Dict]] = None) -> Any:
+    def supports_tool_calling(self) -> bool:
+        """Check if the model supports tool calling."""
+        return self.supports_tools
+    
+    def generate_response(self, messages: List[Dict], tools: Optional[List[Dict]] = None) -> ProviderResponse:
         """
         Generate a response from the model.
         
         Args:
             messages: List of conversation messages
-            functions: Optional list of function definitions
+            tools: Optional list of tool definitions
             
         Returns:
-            Dict containing the model's response
+            ProviderResponse containing the model's response
         """
         kwargs = {"model": self.model_name, "messages": messages}
         
-        if functions:
-            # For mock model, just pass functions directly
-            kwargs["functions"] = functions
+        if tools:
+            kwargs["tools"] = tools
         
         # Record the call for later assertions
         self.generate_response_calls.append(kwargs)
         
         # Return the next predefined response if available
         if self.responses and self.response_index < len(self.responses):
-            response = self.responses[self.response_index]
+            response_data = self.responses[self.response_index]
             self.response_index += 1
-            return self._create_mock_response(response)
+            return self._create_provider_response(response_data)
         
-        # Default to a text response if no function calls are specified
-        return self._create_mock_response({
-            "type": "text",
-            "content": "This is a mock response."
-        })
+        # Default to a text response
+        return ProviderResponse(
+            content="This is a mock response.",
+            tool_calls=[],
+            usage={"input_tokens": 10, "output_tokens": 5},
+            model=self.model_name,
+            provider="mock",
+            raw_response={"mock": "response"}
+        )
     
-    def extract_tool_calls(self, response: Any) -> List[Dict]:
+    def _create_provider_response(self, response_spec: Dict) -> ProviderResponse:
         """
-        Extract tool calls from the mock response.
-        
-        Args:
-            response: The mock model's response
-            
-        Returns:
-            List of dictionaries with tool call details
-        """
-        if not hasattr(response, "choices") or not response.choices:
-            return []
-            
-        message = response.choices[0].message
-        
-        # Check for OpenAI-style function calls
-        if hasattr(message, "function_call") and message.function_call:
-            function_call = message.function_call
-            
-            # Handle MagicMock objects
-            if hasattr(function_call, "arguments"):
-                if isinstance(function_call.arguments, str):
-                    try:
-                        function_args = json.loads(function_call.arguments)
-                    except json.JSONDecodeError:
-                        function_args = {}
-                else:
-                    # For MagicMock objects, just use an empty dict
-                    function_args = {}
-                    
-            return [{
-                "name": function_call.name,
-                "arguments": function_args,
-                "id": getattr(response, "id", "mock-response-id")
-            }]
-        
-        # Check for OpenAI-style tool calls
-        if hasattr(message, "tool_calls") and message.tool_calls:
-            tool_calls = []
-            for tool_call in message.tool_calls:
-                if tool_call.type == "function":
-                    function_call = tool_call.function
-                    
-                    # Handle MagicMock objects
-                    if hasattr(function_call, "arguments"):
-                        if isinstance(function_call.arguments, str):
-                            try:
-                                arguments = json.loads(function_call.arguments)
-                            except json.JSONDecodeError:
-                                arguments = {}
-                        else:
-                            # For MagicMock objects, just use an empty dict
-                            arguments = {}
-                            
-                    tool_calls.append({
-                        "name": function_call.name,
-                        "arguments": arguments,
-                        "id": tool_call.id
-                    })
-            return tool_calls
-            
-        return []
-    
-    def extract_content(self, response: Any) -> str:
-        """
-        Extract text content from the mock response.
-        
-        Args:
-            response: The mock model's response
-            
-        Returns:
-            str: The text content
-        """
-        if not hasattr(response, "choices") or not response.choices:
-            return ""
-            
-        message = response.choices[0].message
-        
-        if not hasattr(message, "content"):
-            return ""
-            
-        # Return the exact content from the message
-        return message.content if message.content is not None else ""
-    
-    def _create_mock_response(self, response_spec: Dict) -> Any:
-        """
-        Create a mock LiteLLM completion response object based on the response specification.
+        Create a ProviderResponse based on the response specification.
         
         Args:
             response_spec: Specification of the response to generate
             
         Returns:
-            A mock response object similar to what LiteLLM would return
+            ProviderResponse object
         """
         response_type = response_spec.get("type", "text")
         
-        # Create a MagicMock to mimic the LiteLLM response
-        mock_response = MagicMock()
-        mock_response.id = response_spec.get("id", "mock-response-id")
-        mock_response.choices = []
-        
-        mock_message = MagicMock()
-        
-        if response_type == "function_call":
-            # Function call response
+        if response_type == "function_call" or response_type == "tool_call":
+            # Tool call response
             function_name = response_spec.get("function_name", "test_function")
             function_args = response_spec.get("function_args", {})
+            tool_call_id = response_spec.get("id", "call_mock_123")
             
-            # Create function_call for OpenAI format
-            mock_function_call = MagicMock()
-            mock_function_call.name = function_name
-            mock_function_call.arguments = json.dumps(function_args)
-            mock_message.function_call = mock_function_call
+            tool_call = ToolCall(
+                id=tool_call_id,
+                name=function_name,
+                arguments=function_args
+            )
             
-            # Create tool_calls array for OpenAI format
-            mock_function = MagicMock()
-            mock_function.name = function_name
-            mock_function.arguments = json.dumps(function_args)
-            
-            mock_tool_call = MagicMock()
-            mock_tool_call.id = response_spec.get("id", "call_" + mock_response.id)
-            mock_tool_call.type = "function"
-            mock_tool_call.function = mock_function
-            
-            mock_message.tool_calls = [mock_tool_call]
-            # Set content to None for function calls
-            mock_message.content = None
+            return ProviderResponse(
+                content=response_spec.get("content"),  # Can be None for tool calls
+                tool_calls=[tool_call],
+                usage={"input_tokens": 10, "output_tokens": 5},
+                model=self.model_name,
+                provider="mock",
+                raw_response={"mock": "tool_call_response"}
+            )
         else:
-            # Text response - use the exact content from the response_spec
-            mock_message.content = response_spec.get("content", "This is a mock response.")
-            mock_message.tool_calls = None
-            mock_message.function_call = None
-        
-        mock_choice = MagicMock()
-        mock_choice.message = mock_message
-        mock_response.choices.append(mock_choice)
-        
-        return mock_response
-
-    def _call_api(self, kwargs: Dict) -> Any:
-        """
-        Make the actual API call to the model provider.
-        
-        Args:
-            kwargs: Dictionary of arguments for the API call
-            
-        Returns:
-            The model's response
-        """
-        # For the mock, we just use the predefined responses
-        if self.responses and self.response_index < len(self.responses):
-            response = self.responses[self.response_index]
-            self.response_index += 1
-            return self._create_mock_response(response)
-        
-        # Default to a text response if no function calls are specified
-        return self._create_mock_response({
-            "type": "text",
-            "content": "This is a mock response."
-        })
+            # Text response
+            return ProviderResponse(
+                content=response_spec.get("content", "This is a mock response."),
+                tool_calls=[],
+                usage={"input_tokens": 10, "output_tokens": 5},
+                model=self.model_name,
+                provider="mock",
+                raw_response={"mock": "text_response"}
+            )
 
 
 class TestMockModelInterface(unittest.TestCase):
@@ -244,9 +155,9 @@ class TestMockModelInterface(unittest.TestCase):
         messages = [{"role": "user", "content": "Hello!"}]
         response = mock_model.generate_response(messages)
         
-        content = mock_model.extract_content(response)
-        self.assertEqual(content, "Hello, I am a mock model!")
-        self.assertEqual(mock_model.extract_tool_calls(response), [])
+        self.assertIsInstance(response, ProviderResponse)
+        self.assertEqual(response.content, "Hello, I am a mock model!")
+        self.assertEqual(len(response.tool_calls), 0)
     
     def test_mock_model_function_call(self):
         """Test that the mock model correctly generates function calls."""
@@ -259,15 +170,15 @@ class TestMockModelInterface(unittest.TestCase):
         ])
         
         messages = [{"role": "user", "content": "What's the weather in New York?"}]
-        functions = [{"name": "get_weather", "parameters": {"location": "string", "unit": "string"}}]
+        tools = [{"name": "get_weather", "parameters": {"location": "string", "unit": "string"}}]
         
-        response = mock_model.generate_response(messages, functions)
+        response = mock_model.generate_response(messages, tools)
         
-        tool_calls = mock_model.extract_tool_calls(response)
-        self.assertEqual(len(tool_calls), 1)
-        self.assertEqual(tool_calls[0]["name"], "get_weather")
-        self.assertEqual(tool_calls[0]["arguments"]["location"], "New York")
-        self.assertEqual(tool_calls[0]["arguments"]["unit"], "celsius")
+        self.assertIsInstance(response, ProviderResponse)
+        self.assertEqual(len(response.tool_calls), 1)
+        self.assertEqual(response.tool_calls[0].name, "get_weather")
+        self.assertEqual(response.tool_calls[0].arguments["location"], "New York")
+        self.assertEqual(response.tool_calls[0].arguments["unit"], "celsius")
     
     def test_multiple_responses(self):
         """Test that the mock model correctly cycles through multiple responses."""
@@ -281,25 +192,26 @@ class TestMockModelInterface(unittest.TestCase):
         
         # First response
         response1 = mock_model.generate_response(messages)
-        self.assertEqual(mock_model.extract_content(response1), "First response")
+        self.assertEqual(response1.content, "First response")
+        self.assertEqual(len(response1.tool_calls), 0)
         
         # Second response
         response2 = mock_model.generate_response(messages)
-        tool_calls = mock_model.extract_tool_calls(response2)
-        self.assertEqual(len(tool_calls), 1)
-        self.assertEqual(tool_calls[0]["name"], "test_func")
-        self.assertEqual(tool_calls[0]["arguments"]["arg1"], 123)
+        self.assertEqual(len(response2.tool_calls), 1)
+        self.assertEqual(response2.tool_calls[0].name, "test_func")
+        self.assertEqual(response2.tool_calls[0].arguments["arg1"], 123)
         
         # Third response
         response3 = mock_model.generate_response(messages)
-        self.assertEqual(mock_model.extract_content(response3), "Third response")
+        self.assertEqual(response3.content, "Third response")
+        self.assertEqual(len(response3.tool_calls), 0)
     
     def test_tracks_calls(self):
         """Test that the mock model correctly tracks calls for later assertions."""
         mock_model = MockModelInterface()
         
         messages1 = [{"role": "user", "content": "First message"}]
-        functions1 = [{"name": "func1"}]
+        tools1 = [{"name": "func1"}]
         
         messages2 = [
             {"role": "user", "content": "First message"},
@@ -307,14 +219,22 @@ class TestMockModelInterface(unittest.TestCase):
             {"role": "user", "content": "Second message"}
         ]
         
-        mock_model.generate_response(messages1, functions1)
+        mock_model.generate_response(messages1, tools1)
         mock_model.generate_response(messages2)
         
         self.assertEqual(len(mock_model.generate_response_calls), 2)
         self.assertEqual(mock_model.generate_response_calls[0]["messages"], messages1)
-        self.assertEqual(mock_model.generate_response_calls[0]["functions"], functions1)
+        self.assertEqual(mock_model.generate_response_calls[0]["tools"], tools1)
         self.assertEqual(mock_model.generate_response_calls[1]["messages"], messages2)
+    
+    def test_supports_tool_calling(self):
+        """Test tool calling support detection."""
+        mock_model_with_tools = MockModelInterface(supports_tools=True)
+        mock_model_without_tools = MockModelInterface(supports_tools=False)
+        
+        self.assertTrue(mock_model_with_tools.supports_tool_calling())
+        self.assertFalse(mock_model_without_tools.supports_tool_calling())
 
 
 if __name__ == "__main__":
-    unittest.main() 
+    unittest.main()
