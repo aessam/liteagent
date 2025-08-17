@@ -212,10 +212,10 @@ class TestAgentImageSupport:
             agent = LiteAgent(model="gpt-3.5-turbo", name="test-agent")
             assert not agent._supports_image_input()
             
-            # Test when capabilities are None
+            # Test when capabilities are None - use valid model but mock None capabilities
             mock_caps.return_value = None
             
-            agent = LiteAgent(model="unknown-model", name="test-agent")
+            agent = LiteAgent(model="gpt-4o-mini", name="test-agent")
             assert not agent._supports_image_input()
     
     @patch('liteagent.agent.create_model_interface')
