@@ -262,7 +262,7 @@ class CapabilityDetector:
             ModelCapabilities("gpt-3.5-turbo", "GPT-3.5 Turbo", "openai", True, False, False, 16385, 4096),
             ModelCapabilities("claude-3-5-sonnet-20241022", "Claude 3.5 Sonnet", "anthropic", True, True, True, 200000, 4096),
             ModelCapabilities("claude-3-5-haiku-20241022", "Claude 3.5 Haiku", "anthropic", True, True, True, 200000, 4096),
-            ModelCapabilities("llama-3.1-70b-versatile", "Llama 3.1 70B", "groq", True, True, False, 131072, 8000),
+            ModelCapabilities("qwen3-32b", "Llama 3.1 70B", "groq", True, True, False, 131072, 8000),
             ModelCapabilities("mixtral-8x7b-32768", "Mixtral 8x7B", "groq", True, False, False, 32768, 8000),
             ModelCapabilities("mistral-large-latest", "Mistral Large", "mistral", True, True, False, 128000, 8192),
         ]

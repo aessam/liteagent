@@ -17,8 +17,7 @@ from liteagent.observer import (AgentObserver, AgentEvent, AgentInitializedEvent
                               FunctionCallEvent, FunctionResultEvent, AgentResponseEvent, 
                               ConsoleObserver, TreeTraceObserver)
 
-# Import our testing utilities
-from tests.unit.test_mock_llm import MockModelInterface
+# No mock imports - using real API calls
 
 
 class TestObserverEvents:

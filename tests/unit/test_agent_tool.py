@@ -14,8 +14,7 @@ from liteagent.agent import LiteAgent
 from liteagent.agent_tool import AgentTool
 from liteagent.observer import AgentObserver
 
-# Import our testing utilities
-from tests.unit.test_mock_llm import MockModelInterface
+# No mock imports - using real API calls
 
 
 class TestAgentTool:

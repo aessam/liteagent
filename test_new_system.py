@@ -60,7 +60,7 @@ def test_model_capabilities():
         test_models = [
             "gpt-4o",
             "claude-3-5-sonnet-20241022",
-            "groq/llama-3.1-70b-versatile",
+            "groq/qwen3-32b",
             "unknown-model"
         ]
         

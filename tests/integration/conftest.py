@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 from liteagent import LiteAgent
-from liteagent.tool_calling_types import ToolCallingType, get_tool_calling_type
+from liteagent.capabilities import get_model_capabilities, ModelCapabilities
 from tests.integration.validation_observer import ValidationObserver
 from tests.utils.validation_helper import ValidationTestHelper
 

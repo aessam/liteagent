@@ -12,7 +12,7 @@ import re
 import time
 
 from liteagent.observer import AgentObserver, AgentEvent, FunctionCallEvent, FunctionResultEvent
-from liteagent.tool_calling_types import ToolCallingType
+from liteagent.capabilities import ModelCapabilities
 # Removed auto_detect_handler import - using direct provider handlers now
 from typing_extensions import Protocol
 
@@ -32,12 +32,12 @@ class ValidationObserver(AgentObserver):
     arguments, and results, with support for different tool calling types.
     """
     
-    def __init__(self, tool_calling_type: Optional[ToolCallingType] = None):
+    def __init__(self, model_capabilities: Optional[ModelCapabilities] = None):
         """
         Initialize the validation observer.
         
         Args:
-            tool_calling_type: The tool calling type to use for validation.
+            model_capabilities: The model capabilities to use for validation.
                 If None, no validation strategy will be used until set_validation_strategy is called.
         """
         self.function_calls: List[Dict[str, Any]] = []
@@ -47,32 +47,29 @@ class ValidationObserver(AgentObserver):
         self.user_messages: List[str] = []
         self.agent_responses: List[str] = []
         
-        # Use handlers instead of strategies
-        self._tool_calling_type: Optional[ToolCallingType] = tool_calling_type
-        # Use text-based handler for validation (works with all response types)
-        from liteagent.handlers.text_based_handler import TextBasedToolCallingHandler
-        self._handler = TextBasedToolCallingHandler()
+        # Store model capabilities for validation
+        self._model_capabilities: Optional[ModelCapabilities] = model_capabilities
         self._response_parsers = {}
         
-    def set_validation_strategy(self, tool_calling_type: ToolCallingType):
+    def set_validation_strategy(self, model_capabilities: ModelCapabilities):
         """
-        Set the tool calling type for validation.
+        Set the model capabilities for validation.
         
         Args:
-            tool_calling_type: The tool calling type to use for validation
+            model_capabilities: The model capabilities to use for validation
         """
-        # Keep for backward compatibility, but use handlers internally
-        self._tool_calling_type = tool_calling_type
+        # Store the model capabilities
+        self._model_capabilities = model_capabilities
         
     @property
-    def validation_strategy(self) -> Optional[ToolCallingType]:
+    def validation_strategy(self) -> Optional[ModelCapabilities]:
         """
-        Get the current validation strategy's tool calling type.
+        Get the current model capabilities.
         
         Returns:
-            The tool calling type of the current validation strategy, or None if no strategy is set
+            The model capabilities, or None if not set
         """
-        return self._tool_calling_type
+        return self._model_capabilities
         
     def on_event(self, event: AgentEvent):
         """Base handler for all events."""

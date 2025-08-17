@@ -8,7 +8,7 @@ import os
 import re
 from typing import Dict, List, Any, Optional, Union
 
-from liteagent.tool_calling_types import ToolCallingType
+from liteagent.capabilities import ModelCapabilities
 
 
 class ValidationTestHelper:
@@ -102,7 +102,7 @@ class ValidationTestHelper:
         return prompt
     
     @staticmethod
-    def register_parsers_for_type(validation_observer: Any, tool_calling_type: ToolCallingType, tool_names: List[str]):
+    def register_parsers_for_type(validation_observer: Any, model_capabilities: ModelCapabilities, tool_names: List[str]):
         """
         Register appropriate parsers for the tools based on the tool calling type.
         

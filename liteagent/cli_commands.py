@@ -36,7 +36,7 @@ def parse_arguments():
                       help="Run all examples (this is the default behavior)")
     
     # Model selection for run command
-    run_parser.add_argument("--model", type=str, default="gpt-3.5-turbo",
+    run_parser.add_argument("--model", type=str, default="gpt-4o-mini",
                         help="Model to use for the agent (e.g., gpt-3.5-turbo, gpt-4o-mini, ollama/phi4)")
     
     # Ollama helper for run command

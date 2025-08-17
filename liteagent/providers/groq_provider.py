@@ -26,7 +26,7 @@ class GroqProvider(ProviderInterface):
         Initialize Groq provider.
         
         Args:
-            model_name: Name of the Groq model (e.g., 'llama-3.1-70b-versatile')
+            model_name: Name of the Groq model (e.g., 'qwen3-32b')
             api_key: Groq API key (will use GROQ_API_KEY env var if not provided)
             **kwargs: Additional configuration
                 - max_retries: Maximum number of retries
