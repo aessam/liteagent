@@ -202,12 +202,14 @@ to provide a final text response to the user."""
         if observer in self.observers:
             self.observers.remove(observer)
     
-    def chat(self, message: str) -> str:
+    def chat(self, message: str, images: Optional[List[str]] = None, enable_caching: bool = False) -> str:
         """
         Chat with the agent.
         
         Args:
             message: The user's message
+            images: Optional list of image paths or URLs for multimodal models
+            enable_caching: Enable prompt caching for supported models (Anthropic)
             
         Returns:
             str: The agent's response
@@ -222,11 +224,14 @@ to provide a final text response to the user."""
             message=message
         ))
         
-        # Add user message to memory
-        self.memory.add_user_message(message)
+        # Add user message to memory (with images if provided)
+        if images and self._supports_image_input():
+            self.memory.add_user_message_with_images(message, images)
+        else:
+            self.memory.add_user_message(message)
         
         # Generate response with tool calling
-        response = self._generate_response_with_tools()
+        response = self._generate_response_with_tools(enable_caching=enable_caching)
         
         # Add final response to memory
         self.memory.add_assistant_message(response)
@@ -241,10 +246,18 @@ to provide a final text response to the user."""
         
         self._log(f"Agent: {response}")
         return response
+    
+    def _supports_image_input(self) -> bool:
+        """Check if the current model supports image input."""
+        capabilities = get_model_capabilities(self.model)
+        return capabilities and capabilities.supports_image_input
         
-    def _generate_response_with_tools(self) -> str:
+    def _generate_response_with_tools(self, enable_caching: bool = False) -> str:
         """
         Generate a response with tool calling support.
+        
+        Args:
+            enable_caching: Enable prompt caching for supported models
         
         Returns:
             str: The final response
@@ -274,7 +287,7 @@ to provide a final text response to the user."""
             
             try:
                 # Generate response
-                response = self.model_interface.generate_response(messages, tools)
+                response = self.model_interface.generate_response(messages, tools, enable_caching=enable_caching)
                 
                 # Emit model response event
                 self._emit_event(ModelResponseEvent(

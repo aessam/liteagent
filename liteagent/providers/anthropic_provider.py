@@ -94,6 +94,35 @@ class AnthropicProvider(ProviderInterface):
         # Add tools if provided and model supports them
         if tools and self.supports_tool_calling():
             request_params['tools'] = self._convert_tools(tools)
+        
+        # Add caching support if enabled and model supports it
+        if kwargs.get('enable_caching', False) and self.supports_caching():
+            # Mark system message for caching if it's long enough
+            if system_message and len(system_message) > 1000:
+                request_params['system'] = [
+                    {
+                        "type": "text",
+                        "text": system_message,
+                        "cache_control": {"type": "ephemeral"}
+                    }
+                ]
+            
+            # Mark long messages for caching
+            for message in request_params['messages']:
+                if isinstance(message.get('content'), str) and len(message['content']) > 1000:
+                    message['content'] = [
+                        {
+                            "type": "text", 
+                            "text": message['content'],
+                            "cache_control": {"type": "ephemeral"}
+                        }
+                    ]
+                elif isinstance(message.get('content'), list):
+                    # For multimodal content, mark text parts for caching if long enough
+                    for content_item in message['content']:
+                        if (content_item.get('type') == 'text' and 
+                            len(content_item.get('text', '')) > 1000):
+                            content_item['cache_control'] = {"type": "ephemeral"}
             
         try:
             # Make the API call
@@ -143,10 +172,54 @@ class AnthropicProvider(ProviderInterface):
                     'content': content_blocks
                 })
             else:
-                anthropic_messages.append({
-                    'role': role,
-                    'content': content
-                })
+                # Handle multimodal content (text + images)
+                if isinstance(content, list):
+                    # Already in multimodal format - convert for Anthropic
+                    anthropic_content = []
+                    for item in content:
+                        if item['type'] == 'text':
+                            anthropic_content.append({
+                                'type': 'text',
+                                'text': item['text']
+                            })
+                        elif item['type'] == 'image_url':
+                            # Convert OpenAI image format to Anthropic format
+                            image_url = item['image_url']['url']
+                            if image_url.startswith('data:'):
+                                # Base64 encoded image
+                                # Extract media type and data
+                                parts = image_url.split(',', 1)
+                                if len(parts) == 2:
+                                    header = parts[0]  # data:image/jpeg;base64
+                                    data = parts[1]
+                                    # Extract media type
+                                    media_type = header.split(';')[0].replace('data:', '')
+                                    anthropic_content.append({
+                                        'type': 'image',
+                                        'source': {
+                                            'type': 'base64',
+                                            'media_type': media_type,
+                                            'data': data
+                                        }
+                                    })
+                            else:
+                                # External URL - Anthropic doesn't support external URLs directly
+                                # Add a text description instead
+                                anthropic_content.append({
+                                    'type': 'text',
+                                    'text': f'[Image URL provided: {image_url}]'
+                                })
+                    
+                    anthropic_messages.append({
+                        'role': role,
+                        'content': anthropic_content
+                    })
+                else:
+                    # Simple text content
+                    anthropic_messages.append({
+                        'role': role,
+                        'content': content
+                    })
                 
         return anthropic_messages
         
@@ -205,27 +278,36 @@ class AnthropicProvider(ProviderInterface):
         
     def supports_tool_calling(self) -> bool:
         """Check if the model supports tool calling."""
-        # Most Claude models support tool calling
-        tool_calling_models = [
-            'claude-3', 'claude-3.5', 'claude-4'
-        ]
-        return any(model in self.model_name for model in tool_calling_models)
+        from ..capabilities import get_model_capabilities
+        capabilities = get_model_capabilities(self.model_name)
+        return capabilities.tool_calling if capabilities else False
         
     def supports_parallel_tools(self) -> bool:
         """Check if the model supports parallel tool execution."""
-        # Claude 3.5 and later support parallel tools
-        return 'claude-3.5' in self.model_name or 'claude-4' in self.model_name
+        from ..capabilities import get_model_capabilities
+        capabilities = get_model_capabilities(self.model_name)
+        return capabilities.supports_parallel_tools if capabilities else False
+    
+    def supports_images(self) -> bool:
+        """Check if the model supports image input."""
+        from ..capabilities import get_model_capabilities
+        capabilities = get_model_capabilities(self.model_name)
+        return capabilities.supports_image_input if capabilities else False
+    
+    def supports_caching(self) -> bool:
+        """Check if the model supports caching."""
+        from ..capabilities import get_model_capabilities
+        capabilities = get_model_capabilities(self.model_name)
+        return capabilities.supports_caching if capabilities else False
         
     def get_max_tokens(self) -> Optional[int]:
         """Get the maximum token limit for this model."""
-        # Claude models have varying output limits
-        if 'claude-3' in self.model_name:
-            return 4096
-        return None
+        from ..capabilities import get_model_capabilities
+        capabilities = get_model_capabilities(self.model_name)
+        return capabilities.output_limit if capabilities else None
         
     def get_context_window(self) -> Optional[int]:
         """Get the context window size for this model."""
-        # Most recent Claude models have 200k context
-        if any(model in self.model_name for model in ['claude-3', 'claude-3.5', 'claude-4']):
-            return 200000
-        return None
+        from ..capabilities import get_model_capabilities
+        capabilities = get_model_capabilities(self.model_name)
+        return capabilities.context_limit if capabilities else None

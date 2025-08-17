@@ -162,54 +162,33 @@ class OpenAIProvider(ProviderInterface):
         
     def supports_tool_calling(self) -> bool:
         """Check if the model supports tool calling."""
-        # Most modern OpenAI models support tool calling
-        unsupported_models = [
-            'text-davinci-003', 'text-davinci-002', 'text-curie-001', 
-            'text-babbage-001', 'text-ada-001', 'davinci', 'curie', 'babbage', 'ada'
-        ]
-        return self.model_name not in unsupported_models
+        from ..capabilities import get_model_capabilities
+        capabilities = get_model_capabilities(self.model_name)
+        return capabilities.tool_calling if capabilities else False
         
     def supports_parallel_tools(self) -> bool:
         """Check if the model supports parallel tool execution."""
-        # Most recent OpenAI models support parallel tools
-        parallel_supported_models = [
-            'gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo'
-        ]
-        return any(supported in self.model_name for supported in parallel_supported_models)
+        from ..capabilities import get_model_capabilities
+        capabilities = get_model_capabilities(self.model_name)
+        return capabilities.supports_parallel_tools if capabilities else False
+    
+    def supports_images(self) -> bool:
+        """Check if the model supports image input."""
+        from ..capabilities import get_model_capabilities
+        capabilities = get_model_capabilities(self.model_name)
+        return capabilities.supports_image_input if capabilities else False
         
     def get_max_tokens(self) -> Optional[int]:
         """Get the maximum token limit for this model."""
-        # Common OpenAI model limits
-        model_limits = {
-            'gpt-4o': 4096,
-            'gpt-4o-mini': 16384,
-            'gpt-4-turbo': 4096,
-            'gpt-4': 8192,
-            'gpt-3.5-turbo': 4096,
-        }
-        
-        for model_prefix, limit in model_limits.items():
-            if self.model_name.startswith(model_prefix):
-                return limit
-                
-        return None
+        from ..capabilities import get_model_capabilities
+        capabilities = get_model_capabilities(self.model_name)
+        return capabilities.output_limit if capabilities else None
         
     def get_context_window(self) -> Optional[int]:
         """Get the context window size for this model."""
-        # Common OpenAI context windows
-        context_windows = {
-            'gpt-4o': 128000,
-            'gpt-4o-mini': 128000,
-            'gpt-4-turbo': 128000,
-            'gpt-4': 8192,
-            'gpt-3.5-turbo': 16385,
-        }
-        
-        for model_prefix, window in context_windows.items():
-            if self.model_name.startswith(model_prefix):
-                return window
-                
-        return None
+        from ..capabilities import get_model_capabilities
+        capabilities = get_model_capabilities(self.model_name)
+        return capabilities.context_limit if capabilities else None
 
 
 class DeepSeekProvider(OpenAIProvider):

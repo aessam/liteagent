@@ -190,45 +190,24 @@ class MistralProvider(ProviderInterface):
         
     def supports_tool_calling(self) -> bool:
         """Check if the model supports tool calling."""
-        # Mistral models that support tool calling
-        tool_calling_models = [
-            'mistral-large', 'mistral-medium', 'mistral-small', 'mixtral'
-        ]
-        return any(model in self.model_name for model in tool_calling_models)
+        from ..capabilities import get_model_capabilities
+        capabilities = get_model_capabilities(self.model_name)
+        return capabilities.tool_calling if capabilities else False
         
     def supports_parallel_tools(self) -> bool:
         """Check if the model supports parallel tool execution."""
-        # Mistral generally doesn't support parallel tools yet
-        return False
+        from ..capabilities import get_model_capabilities
+        capabilities = get_model_capabilities(self.model_name)
+        return capabilities.supports_parallel_tools if capabilities else False
         
     def get_max_tokens(self) -> Optional[int]:
         """Get the maximum token limit for this model."""
-        # Common Mistral model limits
-        model_limits = {
-            'mistral-large': 8192,
-            'mistral-medium': 8192,
-            'mistral-small': 8192,
-            'mixtral-8x7b': 8192,
-        }
-        
-        for model_prefix, limit in model_limits.items():
-            if self.model_name.startswith(model_prefix):
-                return limit
-                
-        return None
+        from ..capabilities import get_model_capabilities
+        capabilities = get_model_capabilities(self.model_name)
+        return capabilities.output_limit if capabilities else None
         
     def get_context_window(self) -> Optional[int]:
         """Get the context window size for this model."""
-        # Common Mistral context windows
-        context_windows = {
-            'mistral-large': 128000,
-            'mistral-medium': 32768,
-            'mistral-small': 32768,
-            'mixtral-8x7b': 32768,
-        }
-        
-        for model_prefix, window in context_windows.items():
-            if self.model_name.startswith(model_prefix):
-                return window
-                
-        return None
+        from ..capabilities import get_model_capabilities
+        capabilities = get_model_capabilities(self.model_name)
+        return capabilities.context_limit if capabilities else None

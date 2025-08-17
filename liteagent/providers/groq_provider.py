@@ -153,50 +153,24 @@ class GroqProvider(ProviderInterface):
         
     def supports_tool_calling(self) -> bool:
         """Check if the model supports tool calling."""
-        # Most Groq models support tool calling
-        tool_calling_models = [
-            'llama-3.1', 'llama-3.2', 'mixtral', 'gemma2'
-        ]
-        return any(model in self.model_name for model in tool_calling_models)
+        from ..capabilities import get_model_capabilities
+        capabilities = get_model_capabilities(self.model_name)
+        return capabilities.tool_calling if capabilities else False
         
     def supports_parallel_tools(self) -> bool:
         """Check if the model supports parallel tool execution."""
-        # Groq supports parallel tools on most recent models
-        parallel_models = [
-            'llama-3.1', 'llama-3.2', 'mixtral-8x7b'
-        ]
-        return any(model in self.model_name for model in parallel_models)
+        from ..capabilities import get_model_capabilities
+        capabilities = get_model_capabilities(self.model_name)
+        return capabilities.supports_parallel_tools if capabilities else False
         
     def get_max_tokens(self) -> Optional[int]:
         """Get the maximum token limit for this model."""
-        # Common Groq model limits
-        model_limits = {
-            'llama-3.1-70b': 8000,
-            'llama-3.1-8b': 8000,
-            'llama-3.2-90b': 8000,
-            'mixtral-8x7b': 8000,
-            'gemma2-9b': 8000,
-        }
-        
-        for model_prefix, limit in model_limits.items():
-            if self.model_name.startswith(model_prefix):
-                return limit
-                
-        return None
+        from ..capabilities import get_model_capabilities
+        capabilities = get_model_capabilities(self.model_name)
+        return capabilities.output_limit if capabilities else None
         
     def get_context_window(self) -> Optional[int]:
         """Get the context window size for this model."""
-        # Common Groq context windows
-        context_windows = {
-            'llama-3.1-70b': 131072,
-            'llama-3.1-8b': 131072,
-            'llama-3.2-90b': 131072,
-            'mixtral-8x7b': 32768,
-            'gemma2-9b': 8192,
-        }
-        
-        for model_prefix, window in context_windows.items():
-            if self.model_name.startswith(model_prefix):
-                return window
-                
-        return None
+        from ..capabilities import get_model_capabilities
+        capabilities = get_model_capabilities(self.model_name)
+        return capabilities.context_limit if capabilities else None

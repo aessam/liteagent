@@ -235,48 +235,25 @@ If you don't need to use any tools, respond normally without the JSON format.
         )
         
     def supports_tool_calling(self) -> bool:
-        """Check if the model supports tool calling (either native or via prompt)."""
-        # Most Ollama models can handle tools via prompt engineering
-        return True
+        """Check if the model supports tool calling."""
+        from ..capabilities import get_model_capabilities
+        capabilities = get_model_capabilities(self.model_name)
+        return capabilities.tool_calling if capabilities else False
         
     def supports_parallel_tools(self) -> bool:
         """Check if the model supports parallel tool execution."""
-        # Ollama generally doesn't support parallel tools
-        return False
+        from ..capabilities import get_model_capabilities
+        capabilities = get_model_capabilities(self.model_name)
+        return capabilities.supports_parallel_tools if capabilities else False
         
     def get_max_tokens(self) -> Optional[int]:
         """Get the maximum token limit for this model."""
-        # Ollama model limits depend on the specific model
-        # These are rough estimates for common models
-        model_limits = {
-            'llama3.1:8b': 8192,
-            'llama3.1:70b': 8192,
-            'llama3.2:1b': 2048,
-            'llama3.2:3b': 4096,
-            'mistral:7b': 8192,
-            'codellama:13b': 16384,
-        }
-        
-        for model_prefix, limit in model_limits.items():
-            if self.model_name.startswith(model_prefix):
-                return limit
-                
-        return None
+        from ..capabilities import get_model_capabilities
+        capabilities = get_model_capabilities(self.model_name)
+        return capabilities.output_limit if capabilities else None
         
     def get_context_window(self) -> Optional[int]:
         """Get the context window size for this model."""
-        # Ollama context windows depend on the model
-        context_windows = {
-            'llama3.1:8b': 131072,
-            'llama3.1:70b': 131072,
-            'llama3.2:1b': 131072,
-            'llama3.2:3b': 131072,
-            'mistral:7b': 32768,
-            'codellama:13b': 16384,
-        }
-        
-        for model_prefix, window in context_windows.items():
-            if self.model_name.startswith(model_prefix):
-                return window
-                
-        return None
+        from ..capabilities import get_model_capabilities
+        capabilities = get_model_capabilities(self.model_name)
+        return capabilities.context_limit if capabilities else None
