@@ -89,8 +89,7 @@ class GroqProvider(ProviderInterface):
         if tools and self.supports_tool_calling():
             # Groq has a limit of 128 tools per request
             if len(tools) > 128:
-                logger.warning(f"[{self.provider_name}] Too many tools ({len(tools)}), limiting to 128")
-                tools = tools[:128]
+                raise ValueError(f"Too many tools for Groq provider: {len(tools)}. Maximum allowed: 128")
                 
             request_params['tools'] = tools
             request_params['tool_choice'] = 'auto'
@@ -99,20 +98,16 @@ class GroqProvider(ProviderInterface):
             if self.supports_parallel_tools():
                 request_params['parallel_tool_calls'] = True
                 
-        try:
-            # Make the API call
-            response: ChatCompletion = self.client.chat.completions.create(**request_params)
-            
-            # Convert to standardized format
-            provider_response = self._convert_response(response)
-            
-            elapsed_time = time.time() - start_time
-            self._log_response(provider_response, elapsed_time)
-            
-            return provider_response
-            
-        except Exception as e:
-            self._handle_error(e, "during chat completion")
+        # Make the API call
+        response: ChatCompletion = self.client.chat.completions.create(**request_params)
+        
+        # Convert to standardized format
+        provider_response = self._convert_response(response)
+        
+        elapsed_time = time.time() - start_time
+        self._log_response(provider_response, elapsed_time)
+        
+        return provider_response
             
     def _convert_response(self, response: ChatCompletion) -> ProviderResponse:
         """Convert Groq response to standardized format."""
@@ -131,9 +126,8 @@ class GroqProvider(ProviderInterface):
                     try:
                         import json
                         arguments = json.loads(arguments)
-                    except json.JSONDecodeError:
-                        logger.warning(f"Failed to parse tool arguments: {arguments}")
-                        arguments = {}
+                    except json.JSONDecodeError as e:
+                        raise ValueError(f"Failed to parse tool arguments as JSON: {arguments}") from e
                         
                 tool_calls.append(ToolCall(
                     id=tc.id,

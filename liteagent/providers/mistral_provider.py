@@ -94,20 +94,16 @@ class MistralProvider(ProviderInterface):
             request_params['tools'] = self._convert_tools(tools)
             request_params['tool_choice'] = 'auto'
             
-        try:
-            # Make the API call
-            response: ChatCompletionResponse = self.client.chat.complete(**request_params)
-            
-            # Convert to standardized format
-            provider_response = self._convert_response(response)
-            
-            elapsed_time = time.time() - start_time
-            self._log_response(provider_response, elapsed_time)
-            
-            return provider_response
-            
-        except Exception as e:
-            self._handle_error(e, "during chat completion")
+        # Make the API call
+        response: ChatCompletionResponse = self.client.chat.complete(**request_params)
+        
+        # Convert to standardized format
+        provider_response = self._convert_response(response)
+        
+        elapsed_time = time.time() - start_time
+        self._log_response(provider_response, elapsed_time)
+        
+        return provider_response
             
     def _convert_messages(self, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Convert messages to Mistral format (function -> tool role)."""
@@ -163,9 +159,8 @@ class MistralProvider(ProviderInterface):
                     try:
                         import json
                         arguments = json.loads(arguments)
-                    except json.JSONDecodeError:
-                        logger.warning(f"Failed to parse tool arguments: {arguments}")
-                        arguments = {}
+                    except json.JSONDecodeError as e:
+                        raise ValueError(f"Failed to parse tool arguments as JSON: {arguments}") from e
                         
                 tool_calls.append(ToolCall(
                     id=tc.id,

@@ -118,20 +118,16 @@ class OpenAIProvider(ProviderInterface):
             if self.supports_parallel_tools():
                 request_params['parallel_tool_calls'] = True
                 
-        try:
-            # Make the API call
-            response: ChatCompletion = self.client.chat.completions.create(**request_params)
-            
-            # Convert to standardized format
-            provider_response = self._convert_response(response)
-            
-            elapsed_time = time.time() - start_time
-            self._log_response(provider_response, elapsed_time)
-            
-            return provider_response
-            
-        except Exception as e:
-            self._handle_error(e, "during chat completion")
+        # Make the API call
+        response: ChatCompletion = self.client.chat.completions.create(**request_params)
+        
+        # Convert to standardized format
+        provider_response = self._convert_response(response)
+        
+        elapsed_time = time.time() - start_time
+        self._log_response(provider_response, elapsed_time)
+        
+        return provider_response
             
     def _convert_response(self, response: ChatCompletion) -> ProviderResponse:
         """Convert OpenAI response to standardized format."""
@@ -150,9 +146,8 @@ class OpenAIProvider(ProviderInterface):
                     try:
                         import json
                         arguments = json.loads(arguments)
-                    except json.JSONDecodeError:
-                        logger.warning(f"Failed to parse tool arguments: {arguments}")
-                        arguments = {}
+                    except json.JSONDecodeError as e:
+                        raise ValueError(f"Failed to parse tool arguments as JSON: {arguments}") from e
                 elif not isinstance(arguments, dict):
                     arguments = {}
                     

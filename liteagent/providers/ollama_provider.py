@@ -94,20 +94,16 @@ class OllamaProvider(ProviderInterface):
                 messages = self._embed_tools_in_prompt(messages, tools)
                 request_params['messages'] = messages
                 
-        try:
-            # Make the API call
-            response = self.client.chat(**request_params)
-            
-            # Convert to standardized format
-            provider_response = self._convert_response(response, tools)
-            
-            elapsed_time = time.time() - start_time
-            self._log_response(provider_response, elapsed_time)
-            
-            return provider_response
-            
-        except Exception as e:
-            self._handle_error(e, "during chat completion")
+        # Make the API call
+        response = self.client.chat(**request_params)
+        
+        # Convert to standardized format
+        provider_response = self._convert_response(response, tools)
+        
+        elapsed_time = time.time() - start_time
+        self._log_response(provider_response, elapsed_time)
+        
+        return provider_response
             
     def _supports_native_tools(self) -> bool:
         """Check if the model supports native tool calling."""
@@ -170,27 +166,20 @@ If you don't need to use any tools, respond normally without the JSON format.
         """Extract tool calls from text response for non-native tool models."""
         tool_calls = []
         
-        try:
-            # Look for JSON tool call format
-            if '"tool_call"' in text:
-                lines = text.split('\n')
-                for line in lines:
-                    if '"tool_call"' in line:
-                        try:
-                            tool_data = json.loads(line.strip())
-                            if 'tool_call' in tool_data:
-                                call_data = tool_data['tool_call']
-                                tool_calls.append(ToolCall(
-                                    id=f"ollama_tool_{len(tool_calls)}",
-                                    name=call_data.get('name', ''),
-                                    arguments=call_data.get('arguments', {})
-                                ))
-                        except json.JSONDecodeError:
-                            continue
+        # Look for JSON tool call format
+        if '"tool_call"' in text:
+            lines = text.split('\n')
+            for line in lines:
+                if '"tool_call"' in line:
+                    tool_data = json.loads(line.strip())
+                    if 'tool_call' in tool_data:
+                        call_data = tool_data['tool_call']
+                        tool_calls.append(ToolCall(
+                            id=f"ollama_tool_{len(tool_calls)}",
+                            name=call_data.get('name', ''),
+                            arguments=call_data.get('arguments', {})
+                        ))
                             
-        except Exception as e:
-            logger.warning(f"Failed to extract tool calls from Ollama response: {e}")
-            
         return tool_calls
         
     def _convert_response(self, response: Dict[str, Any], tools: Optional[List[Dict]] = None) -> ProviderResponse:

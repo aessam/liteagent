@@ -124,20 +124,16 @@ class AnthropicProvider(ProviderInterface):
                             len(content_item.get('text', '')) > 1000):
                             content_item['cache_control'] = {"type": "ephemeral"}
             
-        try:
-            # Make the API call
-            response: Message = self.client.messages.create(**request_params)
-            
-            # Convert to standardized format
-            provider_response = self._convert_response(response)
-            
-            elapsed_time = time.time() - start_time
-            self._log_response(provider_response, elapsed_time)
-            
-            return provider_response
-            
-        except Exception as e:
-            self._handle_error(e, "during message creation")
+        # Make the API call
+        response: Message = self.client.messages.create(**request_params)
+        
+        # Convert to standardized format
+        provider_response = self._convert_response(response)
+        
+        elapsed_time = time.time() - start_time
+        self._log_response(provider_response, elapsed_time)
+        
+        return provider_response
             
     def _convert_messages(self, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Convert messages to Anthropic format."""
@@ -147,8 +143,20 @@ class AnthropicProvider(ProviderInterface):
             role = msg['role']
             content = msg['content']
             
-            # Skip function/tool role messages - they get embedded differently in Anthropic
+            # Handle function/tool result messages for Anthropic  
             if role in ['function', 'tool']:
+                # Convert tool result to Anthropic format
+                tool_call_id = msg.get('tool_call_id', msg.get('name', ''))
+                anthropic_messages.append({
+                    'role': 'user',
+                    'content': [
+                        {
+                            'type': 'tool_result',
+                            'tool_use_id': tool_call_id,
+                            'content': str(content)
+                        }
+                    ]
+                })
                 continue
                 
             # Convert assistant messages with tool calls
@@ -166,9 +174,8 @@ class AnthropicProvider(ProviderInterface):
                         try:
                             import json
                             arguments = json.loads(arguments)
-                        except json.JSONDecodeError:
-                            logger.warning(f"Failed to parse tool arguments: {arguments}")
-                            arguments = {}
+                        except json.JSONDecodeError as e:
+                            raise ValueError(f"Failed to parse tool arguments as JSON: {arguments}") from e
                     elif not isinstance(arguments, dict):
                         arguments = {}
                         

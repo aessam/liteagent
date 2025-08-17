@@ -118,7 +118,4 @@ class ProviderInterface(ABC):
         if response.usage:
             logger.info(f"[{self.provider_name}] Token usage: {response.usage}")
             
-    def _handle_error(self, error: Exception, context: str = "") -> None:
-        """Handle provider-specific errors."""
-        logger.error(f"[{self.provider_name}] Error {context}: {str(error)}")
-        raise error
+    # Removed _handle_error - all providers should fail fast without error handling

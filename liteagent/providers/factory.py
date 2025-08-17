@@ -116,7 +116,7 @@ class ProviderFactory:
                     return 'groq', model_name  # Use 'groq' provider but keep full model name
                 return provider, clean_name
             else:
-                logger.warning(f"Unknown provider prefix: {provider}")
+                raise ValueError(f"Unknown provider prefix: {provider}")
                 
         # Fall back to pattern matching
         model_lower = model_name.lower()
@@ -125,9 +125,8 @@ class ProviderFactory:
             if model_lower.startswith(pattern):
                 return provider, model_name
                 
-        # Default to OpenAI if we can't determine the provider
-        logger.warning(f"Could not determine provider for model: {model_name}, defaulting to OpenAI")
-        return 'openai', model_name
+        # Fail fast instead of defaulting
+        raise ValueError(f"Could not determine provider for model: {model_name}")
         
     @classmethod
     def _load_provider_class(cls, provider_name: str):
