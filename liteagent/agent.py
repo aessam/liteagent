@@ -1,41 +1,42 @@
 """
-LiteAgent - Core agent implementation.
+New LiteAgent implementation using official provider clients.
 
-This module contains the main LiteAgent class that handles conversation,
-function calling, and response processing.
+This module contains the updated LiteAgent class that uses the new provider system
+instead of LiteLLM.
 """
 
 import json
 import time
-import litellm
 import uuid
 from typing import Any, Callable, Dict, List, Optional, Union
 
 from .tools import get_function_definitions, BaseTool, FunctionTool, InstanceMethodTool, StaticMethodTool
-from .models import create_model_interface, ModelInterface
+from .models import create_model_interface, UnifiedModelInterface
 from .memory import ConversationMemory
-from .utils import logger, log_completion_request, log_completion_response
+from .capabilities import get_model_capabilities
+from .providers import ProviderResponse, ToolCall
+from .utils import logger
 from .observer import (AgentObserver, AgentEvent, AgentInitializedEvent, UserMessageEvent, 
                       ModelRequestEvent, ModelResponseEvent, FunctionCallEvent, 
                       FunctionResultEvent, AgentResponseEvent, generate_context_id)
-from .tool_calling import ToolCallTracker
-from .tool_calling_types import ToolCallingType, detect_model_capability
+
 
 class LiteAgent:
     """
-    A lightweight agent that uses LiteLLM for LLM interactions and tool usage.
+    A lightweight agent that uses official provider clients for LLM interactions.
     """
     
     DEFAULT_SYSTEM_PROMPT = """You are a helpful AI assistant. 
-Use the provided functions when needed to answer the user's question.
-IMPORTANT: After calling a function and receiving its result, you MUST provide a complete 
-text response to the user. DO NOT call the same function multiple times with the same arguments.
-DO NOT call functions repeatedly if you already have the information needed.
-If you've already received the information you need from a function call, use that information
+Use the provided tools when needed to answer the user's question.
+IMPORTANT: After calling a tool and receiving its result, you MUST provide a complete 
+text response to the user. DO NOT call the same tool multiple times with the same arguments.
+DO NOT call tools repeatedly if you already have the information needed.
+If you've already received the information you need from a tool call, use that information
 to provide a final text response to the user."""
 
-    def __init__(self, model, name, system_prompt=None, tools=None, debug=False, drop_params=True, 
-                 parent_context_id=None, context_id=None, observers=None, description=None):
+    def __init__(self, model, name, system_prompt=None, tools=None, debug=False, 
+                 api_key=None, parent_context_id=None, context_id=None, observers=None, 
+                 description=None, **kwargs):
         """
         Initialize the LiteAgent.
         
@@ -45,24 +46,30 @@ to provide a final text response to the user."""
             system_prompt (str, optional): System prompt to use. Defaults to DEFAULT_SYSTEM_PROMPT.
             tools (list, optional): List of tool functions to use. If None, uses all globally registered tools.
             debug (bool, optional): Whether to print debug information. Defaults to False.
-            drop_params (bool, optional): Whether to drop unsupported parameters. Defaults to True.
+            api_key (str, optional): API key for the provider
             parent_context_id (str, optional): Parent context ID if this agent was created by another agent.
             context_id (str, optional): Context ID for this agent. If None, a new ID will be generated.
             observers (list, optional): List of observers to notify of agent events.
             description (str, optional): A clear description of what this agent does and its capabilities.
-                                       If None, will be generated from system prompt and tools.
+            **kwargs: Additional provider-specific configuration
         """
         self.model = model
         self.name = name
         self.system_prompt = system_prompt or self.DEFAULT_SYSTEM_PROMPT
         self.debug = debug
-        self.drop_params = drop_params
+        self.api_key = api_key
         self.parent_context_id = parent_context_id
         self.context_id = context_id or generate_context_id()
         self.agent_id = str(uuid.uuid4())
         
+        # Get model capabilities
+        self.capabilities = get_model_capabilities(model)
+        if self.capabilities:
+            self._log(f"Model capabilities: tool_calling={self.capabilities.tool_calling}, "
+                     f"parallel_tools={self.capabilities.supports_parallel_tools}")
+        
         # Initialize the model interface
-        self.model_interface = create_model_interface(model, drop_params)
+        self.model_interface = create_model_interface(model, api_key, **kwargs)
         
         # Initialize memory
         self.memory = ConversationMemory(system_prompt=self.system_prompt)
@@ -79,20 +86,6 @@ to provide a final text response to the user."""
             # Get all registered tools
             from .tools import TOOLS
             self._register_tools(TOOLS)
-        
-        # Detect model capabilities and create appropriate handler
-        self.tool_calling_type = detect_model_capability(model, self.model_interface)
-        self._log(f"Detected model capabilities: {self.tool_calling_type}")
-        
-        # Create tool handler based on detected capabilities
-        from .handlers import create_tool_handler
-        self.tool_handler = create_tool_handler(self.tool_calling_type)
-        
-        # Enhance system prompt for structured output if needed
-        if tools and self.tool_calling_type == ToolCallingType.STRUCTURED_OUTPUT:
-            self._log("Using structured output prompt enhancement for tools")
-            self.system_prompt = self._enhance_prompt_with_tools(self.system_prompt, tools)
-            self.memory.system_prompt = self.system_prompt
         
         # Set or generate the agent's description
         if description:
@@ -115,7 +108,7 @@ to provide a final text response to the user."""
             tools=list(self.tools.keys())
         ))
         
-        self._log(f"Initialized agent {self.name} with model {self.model}")
+        self._log(f"Initialized agent {self.name} with model {self.model} using {self.model_interface.provider.provider_name} provider")
         
     def _register_tools(self, tool_functions):
         """
@@ -197,9 +190,8 @@ to provide a final text response to the user."""
         Args:
             observer: The observer to add
         """
-        if observer not in self.observers:
-            self.observers.append(observer)
-            
+        self.observers.append(observer)
+        
     def remove_observer(self, observer: AgentObserver) -> None:
         """
         Remove an observer from the agent.
@@ -209,7 +201,7 @@ to provide a final text response to the user."""
         """
         if observer in self.observers:
             self.observers.remove(observer)
-            
+    
     def chat(self, message: str) -> str:
         """
         Chat with the agent.
@@ -220,444 +212,239 @@ to provide a final text response to the user."""
         Returns:
             str: The agent's response
         """
-        # Add user message to memory
-        self.memory.add_user_message(message)
+        self._log(f"User: {message}")
         
         # Emit user message event
         self._emit_event(UserMessageEvent(
             agent_id=self.agent_id,
             agent_name=self.name,
             context_id=self.context_id,
-            parent_context_id=self.parent_context_id,
             message=message
         ))
         
-        # Get messages from memory
-        messages = self.memory.get_messages()
+        # Add user message to memory
+        self.memory.add_user_message(message)
         
-        # Get function definitions
-        functions = list(self.tools.values()) if self.tools else None
+        # Generate response with tool calling
+        response = self._generate_response_with_tools()
         
-        function_called = False
-        max_consecutive_function_calls = 10
-        consecutive_function_calls = 0
-        
-        # Track function calls to detect loops
-        function_call_counts = {}
-        
-        while consecutive_function_calls < max_consecutive_function_calls:
-            # Emit model request event
-            self._emit_event(ModelRequestEvent(
-                agent_id=self.agent_id,
-                agent_name=self.name,
-                context_id=self.context_id,
-                parent_context_id=self.parent_context_id,
-                messages=messages,
-                functions=functions
-            ))
-            
-            # Generate a response
-            response = self.model_interface.generate_response(messages, functions)
-            
-            # Emit model response event
-            self._emit_event(ModelResponseEvent(
-                agent_id=self.agent_id,
-                agent_name=self.name,
-                context_id=self.context_id,
-                parent_context_id=self.parent_context_id,
-                response=response
-            ))
-            
-            # Check if the model wants to call a function
-            tool_calls = self.model_interface.extract_tool_calls(response)
-            
-            if tool_calls:
-                function_called = True
-                consecutive_function_calls += 1
-                
-                # Process each tool call
-                for tool_call in tool_calls:
-                    function_name = tool_call.get('name')
-                    function_args = tool_call.get('arguments', {})
-                    function_id = tool_call.get('id', str(uuid.uuid4()))
-                    
-                    # Try to parse function arguments as JSON if it's a string
-                    if isinstance(function_args, str):
-                        try:
-                            function_args = json.loads(function_args)
-                        except json.JSONDecodeError:
-                            # Handle error case
-                            error_message = f"Error parsing arguments for function {function_name}: {function_args}"
-                            logger.error(error_message)
-                            # Add function call error to memory
-                            self.memory.add_function_result(function_name, error_message, function_args)
-                            continue
-                    
-                    # Check for repeated function calls with same arguments
-                    call_key = f"{function_name}:{json.dumps(function_args, sort_keys=True)}"
-                    function_call_counts[call_key] = function_call_counts.get(call_key, 0) + 1
-                    
-                    # If the same function with same args has been called too many times, break the loop
-                    if function_call_counts[call_key] >= 2:
-                        logger.warning(f"Detected repeated function call: {function_name} with args {function_args}")
-                        
-                        # Get the provider name
-                        provider = getattr(self.model_interface, 'provider', '')
-                        
-                        # For Mistral models, use user message instead of system message
-                        if provider and provider.lower() == 'mistral':
-                            # Force the agent to generate a text response instead using a user message for Mistral
-                            self.memory.add_user_message(
-                                "IMPORTANT: You have called the same function multiple times with the same arguments. "
-                                "You MUST now provide a final text response based on the information you already have. "
-                                "DO NOT make any more function calls. Summarize what you know and respond directly to the user."
-                            )
-                        else:
-                            # For other providers, use system message as before
-                            self.memory.add_system_message(
-                                "IMPORTANT: You have called the same function multiple times with the same arguments. "
-                                "You MUST now provide a final text response based on the information you already have. "
-                                "DO NOT make any more function calls. Summarize what you know and respond directly to the user."
-                            )
-                        
-                        # Get updated messages
-                        messages = self.memory.get_messages()
-                        
-                        # Make one more model call to get a text response
-                        self._emit_event(ModelRequestEvent(
-                            agent_id=self.agent_id,
-                            agent_name=self.name,
-                            context_id=self.context_id,
-                            parent_context_id=self.parent_context_id,
-                            messages=messages,
-                            functions=None  # Don't provide functions to force a text response
-                        ))
-                        
-                        # Generate a response without function calling
-                        final_response = self.model_interface.generate_response(messages, None)
-                        
-                        # Emit model response event
-                        self._emit_event(ModelResponseEvent(
-                            agent_id=self.agent_id,
-                            agent_name=self.name,
-                            context_id=self.context_id,
-                            parent_context_id=self.parent_context_id,
-                            response=final_response
-                        ))
-                        
-                        # Extract the text content
-                        content = self.model_interface.extract_content(final_response)
-                        
-                        # Add assistant message to memory
-                        self.memory.add_assistant_message(content)
-                        
-                        # Emit agent response event
-                        self._emit_event(AgentResponseEvent(
-                            agent_id=self.agent_id,
-                            agent_name=self.name,
-                            context_id=self.context_id,
-                            parent_context_id=self.parent_context_id,
-                            response=content
-                        ))
-                        
-                        # Return the final response
-                        return content
-                    
-                    # Emit function call event
-                    self._emit_event(FunctionCallEvent(
-                        agent_id=self.agent_id,
-                        agent_name=self.name,
-                        context_id=self.context_id,
-                        parent_context_id=self.parent_context_id,
-                        function_name=function_name,
-                        function_args=function_args,
-                        function_call_id=function_id
-                    ))
-                    
-                    # Execute the function
-                    if function_name in self.tool_instances:
-                        try:
-                            # Use our new tool execution method that tracks calls
-                            tool_call_data = {
-                                "name": function_name,
-                                "arguments": function_args,
-                                "id": function_id
-                            }
-                            
-                            # Add context_id to the arguments
-                            function_args['_context_id'] = self.context_id
-                            
-                            # Execute the tool call
-                            tool_result = self._execute_tool_call(tool_call_data, self.tool_instances)
-                            
-                            # Extract the result
-                            function_result = tool_result.get("result")
-                            
-                            # Add result to memory with the function call ID
-                            self.memory.add_function_result(
-                                name=function_name, 
-                                content=function_result, 
-                                args=function_args,
-                                call_id=function_id,
-                                provider=self.model_interface.provider
-                            )
-                            
-                            # Emit function result event
-                            self._emit_event(FunctionResultEvent(
-                                agent_id=self.agent_id,
-                                agent_name=self.name,
-                                context_id=self.context_id,
-                                parent_context_id=self.parent_context_id,
-                                function_name=function_name,
-                                function_args=function_args,
-                                result=function_result,
-                                function_call_id=function_id
-                            ))
-                        except Exception as e:
-                            error_message = f"Error executing function {function_name}: {str(e)}"
-                            logger.error(error_message)
-                            
-                            # Add function call error to memory with the function call ID
-                            self.memory.add_function_result(
-                                name=function_name, 
-                                content=error_message, 
-                                args=function_args,
-                                call_id=function_id,
-                                is_error=True,
-                                provider=self.model_interface.provider
-                            )
-                            
-                            # Emit function result event with error
-                            self._emit_event(FunctionResultEvent(
-                                agent_id=self.agent_id,
-                                agent_name=self.name,
-                                context_id=self.context_id,
-                                parent_context_id=self.parent_context_id,
-                                function_name=function_name,
-                                function_args=function_args,
-                                error=str(e),
-                                function_call_id=function_id
-                            ))
-                    else:
-                        error_message = f"Function {function_name} not found"
-                        logger.error(error_message)
-                        
-                        # Add function call error to memory with the function call ID
-                        self.memory.add_function_result(
-                            name=function_name, 
-                            content=error_message, 
-                            args=function_args,
-                            call_id=function_id,
-                            is_error=True,
-                            provider=self.model_interface.provider
-                        )
-                        
-                        # Emit function result event with error
-                        self._emit_event(FunctionResultEvent(
-                            agent_id=self.agent_id,
-                            agent_name=self.name,
-                            context_id=self.context_id,
-                            parent_context_id=self.parent_context_id,
-                            function_name=function_name,
-                            function_args=function_args,
-                            error=error_message,
-                            function_call_id=function_id
-                        ))
-                
-                # Get updated messages after processing all tool calls
-                messages = self.memory.get_messages()
-            else:
-                # Extract the text content
-                content = self.model_interface.extract_content(response)
-                
-                # Add assistant message to memory
-                self.memory.add_assistant_message(content)
-                
-                # Emit agent response event
-                self._emit_event(AgentResponseEvent(
-                    agent_id=self.agent_id,
-                    agent_name=self.name,
-                    context_id=self.context_id,
-                    parent_context_id=self.parent_context_id,
-                    response=content
-                ))
-                
-                return content
-        
-        # If we've reached the maximum number of consecutive function calls,
-        # force the agent to generate a text response
-        self.memory.add_system_message(
-            "IMPORTANT: You have made too many consecutive function calls. "
-            "You MUST now provide a final text response based on the information you have. "
-            "DO NOT make any more function calls. Summarize what you know and respond directly to the user."
-        )
-        
-        # Get updated messages
-        messages = self.memory.get_messages()
-        
-        # Make one more model call to get a text response
-        self._emit_event(ModelRequestEvent(
-            agent_id=self.agent_id,
-            agent_name=self.name,
-            context_id=self.context_id,
-            parent_context_id=self.parent_context_id,
-            messages=messages,
-            functions=None  # Don't provide functions to force a text response
-        ))
-        
-        # Generate a response without function calling
-        final_response = self.model_interface.generate_response(messages, None)
-        
-        # Emit model response event
-        self._emit_event(ModelResponseEvent(
-            agent_id=self.agent_id,
-            agent_name=self.name,
-            context_id=self.context_id,
-            parent_context_id=self.parent_context_id,
-            response=final_response
-        ))
-        
-        # Extract the text content
-        content = self.model_interface.extract_content(final_response)
-        
-        # Add assistant message to memory
-        self.memory.add_assistant_message(content)
+        # Add final response to memory
+        self.memory.add_assistant_message(response)
         
         # Emit agent response event
         self._emit_event(AgentResponseEvent(
             agent_id=self.agent_id,
             agent_name=self.name,
             context_id=self.context_id,
-            parent_context_id=self.parent_context_id,
-            response=content
+            response=response
         ))
         
-        # Return the final response
-        return content
-    
-    def reset_memory(self):
-        """Reset the agent's memory."""
-        self.memory = ConversationMemory(system_prompt=self.system_prompt)
+        self._log(f"Agent: {response}")
+        return response
         
-    def _log(self, message, level="debug"):
-        """Log a message if debug mode is enabled."""
-        if self.debug:
-            log_func = getattr(logger, level)
-            log_func(f"[{self.name}] {message}")
-
-    def _enhance_prompt_with_tools(self, system_prompt, tools):
+    def _generate_response_with_tools(self) -> str:
         """
-        Enhance the system prompt with tool descriptions for structured output models.
+        Generate a response with tool calling support.
         
-        Args:
-            system_prompt: The original system prompt
-            tools: List of tools to include in the prompt
-            
         Returns:
-            Enhanced system prompt
+            str: The final response
         """
-        tool_descriptions = []
+        max_tool_iterations = 10
+        iteration = 0
         
-        for tool in tools:
-            if isinstance(tool, dict) and "schema" in tool:
-                schema = tool["schema"]
-                name = schema.get("name", "")
-                description = schema.get("description", "")
-                params = schema.get("parameters", {}).get("properties", {})
-                param_desc = []
-                
-                for param_name, param_info in params.items():
-                    param_type = param_info.get("type", "any")
-                    param_desc.append(f"- {param_name} ({param_type}): {param_info.get('description', '')}")
-                
-                tool_desc = f"""
-Function: {name}
-Description: {description}
-Parameters:
-{"".join(param_desc)}
-"""
-                tool_descriptions.append(tool_desc)
-            elif hasattr(tool, "to_dict"):
-                tool_dict = tool.to_dict()
-                name = tool_dict.get("name", "")
-                description = tool_dict.get("description", "")
-                
-                tool_desc = f"""
-Function: {name}
-Description: {description}
-"""
-                tool_descriptions.append(tool_desc)
-        
-        tool_instruction = """
-You have access to the following tools:
-
-{}
-
-When you need to use a tool, respond using this format:
-```
-Thought: I need to use a tool to help answer the question.
-Action: tool_name
-Action Input: {{"param1": value1, "param2": value2}}
-```
-
-After receiving the tool output, continue with:
-```
-Observation: [Tool Output]
-Thought: I now know the answer.
-Answer: [Your response to the user]
-```
-""".format("\n".join(tool_descriptions))
-        
-        return f"{system_prompt}\n\n{tool_instruction}"
+        while iteration < max_tool_iterations:
+            iteration += 1
             
-    def _execute_tool_call(self, tool_call, function_map):
+            # Get current messages
+            messages = self.memory.get_messages()
+            
+            # Prepare tools if model supports them
+            tools = None
+            if self.model_interface.supports_tool_calling() and self.tools:
+                tools = self._prepare_tools()
+            
+            # Emit model request event
+            self._emit_event(ModelRequestEvent(
+                agent_id=self.agent_id,
+                agent_name=self.name,
+                context_id=self.context_id,
+                messages=messages,
+                tools=tools
+            ))
+            
+            try:
+                # Generate response
+                response = self.model_interface.generate_response(messages, tools)
+                
+                # Emit model response event
+                self._emit_event(ModelResponseEvent(
+                    agent_id=self.agent_id,
+                    agent_name=self.name,
+                    context_id=self.context_id,
+                    response=response
+                ))
+                
+                # Extract tool calls
+                tool_calls = response.tool_calls if isinstance(response, ProviderResponse) else []
+                
+                if not tool_calls:
+                    # No tool calls, return the content
+                    content = response.content if isinstance(response, ProviderResponse) else str(response)
+                    return content or "I apologize, but I couldn't generate a response."
+                
+                # Process tool calls
+                self._process_tool_calls(tool_calls, response)
+                
+            except Exception as e:
+                self._log(f"Error generating response: {e}")
+                return f"I encountered an error: {str(e)}"
+        
+        return "I reached the maximum number of tool iterations. Please try rephrasing your question."
+        
+    def _prepare_tools(self) -> List[Dict]:
         """
-        Execute a tool call and return the result.
+        Prepare tools for the model.
         
-        Args:
-            tool_call: The tool call to execute
-            function_map: Map of function names to functions
-            
         Returns:
-            Result of the tool call
+            List of tool definitions
         """
-        try:
-            function_name = tool_call["name"]
-            function_args = tool_call["arguments"]
-            tool_call_id = tool_call.get("id")
-            
-            logger.debug(f"Executing tool call: {function_name} with args: {function_args}")
-            
-            # Record the tool call for testing purposes
-            ToolCallTracker.get_instance().record_call(function_name, function_args)
-            
-            # Get the function or tool
-            if function_name not in function_map:
-                error_message = f"Unknown function: {function_name}"
-                logger.error(error_message)
-                return {"error": error_message}
-                
-            # Get the function or tool
-            func_or_tool = function_map[function_name]
-            
-            # Execute the function or tool
-            if hasattr(func_or_tool, 'execute'):
-                # It's a BaseTool or derived class
-                result = func_or_tool.execute(**function_args)
+        tools = []
+        for tool_name, tool_def in self.tools.items():
+            if 'function' in tool_def:
+                # Already in tools format
+                tools.append(tool_def)
             else:
-                # It's a plain function
-                result = func_or_tool(**function_args)
+                # Convert to tools format
+                tools.append({
+                    'type': 'function',
+                    'function': tool_def
+                })
+        return tools
+        
+    def _process_tool_calls(self, tool_calls: List[ToolCall], response: ProviderResponse) -> None:
+        """
+        Process tool calls from the model response.
+        
+        Args:
+            tool_calls: List of tool calls to process
+            response: The model response containing the tool calls
+        """
+        # Add assistant message with tool calls to memory
+        if response.content:
+            # If there's content along with tool calls, add it
+            self.memory.add_assistant_message(response.content)
             
-            # Record the result for testing purposes
-            ToolCallTracker.get_instance().record_result(function_name, result)
+        # Add tool calls to memory
+        for tool_call in tool_calls:
+            self._emit_event(FunctionCallEvent(
+                agent_id=self.agent_id,
+                agent_name=self.name,
+                context_id=self.context_id,
+                function_name=tool_call.name,
+                arguments=tool_call.arguments
+            ))
             
-            logger.debug(f"Tool call result: {result}")
-            return {
-                "name": function_name,
-                "result": result,
-                "tool_call_id": tool_call_id
-            }
-        except Exception as e:
-            error_message = f"Error executing tool call: {str(e)}"
-            logger.error(error_message)
-            return {"error": error_message}
+            # Check for repeated function calls
+            if self.memory.is_function_call_loop(tool_call.name, tool_call.arguments):
+                logger.warning(f"Detected repeated function call: {tool_call.name} with args {tool_call.arguments}")
+                continue
+            
+            # Add tool call to memory
+            self.memory.add_tool_call(tool_call.name, tool_call.arguments, tool_call.id)
+            
+            # Execute the tool
+            try:
+                result = self._execute_tool(tool_call.name, tool_call.arguments)
+                
+                # Emit function result event
+                self._emit_event(FunctionResultEvent(
+                    agent_id=self.agent_id,
+                    agent_name=self.name,
+                    context_id=self.context_id,
+                    function_name=tool_call.name,
+                    result=result
+                ))
+                
+                # Add result to memory
+                self.memory.add_tool_result(tool_call.name, str(result), tool_call.id)
+                
+            except Exception as e:
+                error_msg = f"Error executing {tool_call.name}: {str(e)}"
+                self._log(error_msg)
+                
+                # Add error result to memory
+                self.memory.add_tool_result(tool_call.name, error_msg, tool_call.id, is_error=True)
+                
+    def _execute_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Any:
+        """
+        Execute a tool function.
+        
+        Args:
+            tool_name: Name of the tool to execute
+            arguments: Arguments to pass to the tool
+            
+        Returns:
+            The result of the tool execution
+        """
+        if tool_name not in self.tool_instances:
+            raise ValueError(f"Tool {tool_name} not found")
+            
+        tool_instance = self.tool_instances[tool_name]
+        
+        if hasattr(tool_instance, 'execute'):
+            # For tool objects
+            return tool_instance.execute(**arguments)
+        elif callable(tool_instance):
+            # For function objects
+            return tool_instance(**arguments)
+        else:
+            raise ValueError(f"Tool {tool_name} is not executable")
+    
+    def _log(self, message: str) -> None:
+        """
+        Log a message if debug mode is enabled.
+        
+        Args:
+            message: The message to log
+        """
+        if self.debug:
+            logger.info(f"[{self.name}] {message}")
+        
+    def reset_memory(self) -> None:
+        """Reset the agent's conversation memory."""
+        self.memory.reset()
+        self._log("Memory reset")
+        
+    def get_memory(self) -> ConversationMemory:
+        """Get the agent's conversation memory."""
+        return self.memory
+        
+    def get_tools(self) -> Dict[str, Dict]:
+        """Get the agent's registered tools."""
+        return self.tools.copy()
+        
+    def add_tool(self, tool) -> None:
+        """
+        Add a single tool to the agent.
+        
+        Args:
+            tool: The tool to add
+        """
+        self._register_tools([tool])
+        
+    def remove_tool(self, tool_name: str) -> None:
+        """
+        Remove a tool from the agent.
+        
+        Args:
+            tool_name: Name of the tool to remove
+        """
+        if tool_name in self.tools:
+            del self.tools[tool_name]
+        if tool_name in self.tool_instances:
+            del self.tool_instances[tool_name]
+        self._log(f"Removed tool: {tool_name}")
+
+
+# Backward compatibility alias
+LiteAgentNew = LiteAgent

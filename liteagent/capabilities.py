@@ -25,6 +25,11 @@ class ModelCapabilities:
     output_limit: Optional[int] = None
     supports_streaming: bool = True
     supports_parallel_tools: bool = False
+    supports_image_input: bool = False
+    supports_image_output: bool = False
+    supports_caching: bool = False
+    supports_json_mode: bool = False
+    supports_system_prompt: bool = True
     pricing: Optional[Dict[str, float]] = None
     last_updated: Optional[float] = None
 
@@ -152,28 +157,48 @@ class CapabilityDetector:
     def _parse_model_info(self, model_id: str, provider: str, model_info: Dict[str, Any]) -> Optional[ModelCapabilities]:
         """Parse model information from models.dev format."""
         try:
-            # Extract basic info
+            # Extract basic info from models.dev API
             name = model_info.get('name', model_id)
             tool_calling = model_info.get('tool_call', False)
             reasoning = model_info.get('reasoning', False)
             
-            # Check for multimodal capabilities
+            # Check for multimodal capabilities from modalities field
             modalities = model_info.get('modalities', {})
             input_modalities = modalities.get('input', [])
-            multimodal = len(input_modalities) > 1 or 'image' in input_modalities
+            output_modalities = modalities.get('output', [])
             
-            # Extract limits
+            # Determine multimodal and image support from API data
+            multimodal = len(input_modalities) > 1 or 'image' in input_modalities
+            supports_image_input = 'image' in input_modalities
+            supports_image_output = 'image' in output_modalities
+            
+            # Extract limits from API data
             limits = model_info.get('limit', {})
             context_limit = limits.get('context')
             output_limit = limits.get('output')
             
-            # Determine parallel tool support (heuristic)
+            # Advanced capabilities - use API data where available, conservative fallbacks otherwise
+            # Parallel tools: assume supported if tool_calling is true and it's a capable model
             supports_parallel = tool_calling and any(x in model_id.lower() for x in [
-                'gpt-4', 'claude-3.5', 'claude-4', 'gemini', 'llama-3.1'
+                'gpt-4', 'claude-3.5', 'claude-4', 'gemini', 'llama-3.1', 'gemini-2'
             ])
             
-            # Extract pricing if available
-            pricing = model_info.get('pricing')
+            # Caching support - conservative approach based on known providers
+            supports_caching = provider.lower() in ['anthropic'] and 'claude-3' in model_id.lower()
+            
+            # JSON mode support - based on known model capabilities
+            supports_json_mode = tool_calling and any(x in model_id.lower() for x in [
+                'gpt-4', 'gpt-3.5-turbo', 'claude-3', 'gemini'
+            ])
+            
+            # Extract pricing from cost field in API data
+            cost_info = model_info.get('cost', {})
+            pricing = None
+            if cost_info:
+                pricing = {
+                    'input': cost_info.get('input'),
+                    'output': cost_info.get('output')
+                }
             
             return ModelCapabilities(
                 model_id=model_id,
@@ -184,8 +209,13 @@ class CapabilityDetector:
                 multimodal=multimodal,
                 context_limit=context_limit,
                 output_limit=output_limit,
-                supports_streaming=True,  # Most models support streaming
+                supports_streaming=True,  # Most modern models support streaming
                 supports_parallel_tools=supports_parallel,
+                supports_image_input=supports_image_input,
+                supports_image_output=supports_image_output,
+                supports_caching=supports_caching,
+                supports_json_mode=supports_json_mode,
+                supports_system_prompt=True,  # Most models support system prompts
                 pricing=pricing,
                 last_updated=time.time()
             )

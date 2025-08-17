@@ -11,11 +11,10 @@ from typing import Any, Dict, List, Optional, Union
 from unittest.mock import MagicMock, patch
 
 # Import LiteAgent components
-from liteagent.models import ModelInterface, create_model_interface
+from liteagent.models import UnifiedModelInterface, create_model_interface
 from liteagent.agent import LiteAgent
 from liteagent.observer import ConsoleObserver, AgentObserver
 from liteagent.tools import BaseTool, FunctionTool
-from liteagent.tool_calling import ToolCallingType
 
 # Import our mock model interface
 from tests.unit.test_mock_llm import MockModelInterface

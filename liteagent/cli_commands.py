@@ -8,7 +8,6 @@ import os
 import argparse
 import json
 from dotenv import load_dotenv
-import litellm
 from .utils import setup_logging, logger
 from .observer import ConsoleObserver, FileObserver, TreeTraceObserver
 from .tools import get_function_definitions, FunctionTool, InstanceMethodTool, liteagent_tool
@@ -17,7 +16,7 @@ from typing import List, Dict, Any
 def parse_arguments():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description="LiteAgent - A lightweight agent framework using LiteLLM for LLM interactions",
+        description="LiteAgent - A lightweight agent framework for LLM interactions",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     
@@ -61,8 +60,6 @@ def parse_arguments():
     debug_group = parser.add_argument_group("Debugging options")
     debug_group.add_argument("--debug", action="store_true",
                        help="Enable debug mode with verbose logging")
-    debug_group.add_argument("--debug-litellm", action="store_true",
-                       help="Enable debug mode with verbose logging for LiteLLM")
     debug_group.add_argument("--log-file", action="store_true",
                        help="Log output to a file in addition to console")
     debug_group.add_argument("--no-color", action="store_true",
@@ -84,12 +81,7 @@ def show_version():
         except ImportError:
             print("LiteAgent version: unknown")
     
-    print("Using LiteLLM for model interactions")
-    try:
-        import litellm
-        print(f"LiteLLM version: {litellm.__version__}")
-    except (ImportError, AttributeError):
-        print("LiteLLM version: unknown")
+    print("Using official provider client libraries for model interactions")
     
     sys.exit(0)
 
@@ -132,15 +124,15 @@ def handle_model_prefix(model_name, use_ollama=False):
         use_ollama: Whether to use Ollama for local inference
         
     Returns:
-        Correctly formatted model name for use with LiteLLM
+        Correctly formatted model name
     """
-    # Common providers that don't need prefixes with LiteLLM
+    # Common providers that don't need prefixes
     no_prefix_providers = ['openai', 'anthropic', 'google']
     
     # Providers that need to keep their prefix
     keep_prefix_providers = ['ollama']
     
-    # Special case for Groq models - they need the groq/ prefix in litellm
+    # Special case for Groq models - they need the groq/ prefix
     groq_models = ['llama-3', 'llama-3.1', 'mixtral', 'gemma']
     
     # Check if model has a provider prefix (format: "provider/model")
@@ -509,13 +501,7 @@ def main():
             
         logger.info(f"Using model: {args.model}")
         
-        # Set litellm options
-        litellm.drop_params = True
-        
-        # Enable debug mode for LiteLLM if requested
-        if hasattr(args, 'debug_litellm') and (args.debug_litellm or (os.environ.get("LITELLM_VERBOSE") == "true")):
-            logger.info("LiteLLM debug mode enabled")
-            litellm._turn_on_debug()
+        # Debug mode handling is now done by individual providers
             
         # Automatically prepend 'ollama/' to model name if requested
         if hasattr(args, 'ollama') and args.ollama and not args.model.startswith("ollama/"):
