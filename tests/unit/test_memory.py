@@ -57,7 +57,7 @@ class TestConversationMemory:
         memory.add_function_result("get_weather", '{"temp": 72, "condition": "sunny"}')
         
         assert len(memory.messages) == 2
-        assert memory.messages[1]["role"] == "function"
+        assert memory.messages[1]["role"] == "tool"  # Modern format uses 'tool' instead of 'function'
         assert memory.messages[1]["name"] == "get_weather"
         assert memory.messages[1]["content"] == '{"temp": 72, "condition": "sunny"}'
         
@@ -72,7 +72,7 @@ class TestConversationMemory:
         )
         
         assert len(memory.messages) == 3
-        assert memory.messages[2]["role"] == "function"
+        assert memory.messages[2]["role"] == "tool"  # Modern format uses 'tool' instead of 'function'
         assert memory.messages[2]["name"] == "get_weather"
         assert memory.messages[2]["content"] == '{"temp": 65, "condition": "cloudy"}'
         assert memory.last_function_call == {

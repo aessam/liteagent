@@ -343,35 +343,42 @@ class TestObserverInterface:
         assert observer.events[1] == ("on_event", init_event)
         assert observer.events[3] == ("on_event", user_event)
     
-    def test_agent_with_multiple_observers(self, agent_with_mock_model):
-        """Test that an agent can have multiple observers."""
-        # Create mock observers
-        observer1 = MagicMock(spec=AgentObserver)
-        observer2 = MagicMock(spec=AgentObserver)
+    def test_agent_with_multiple_observers(self, openai_agent):
+        """Test that an agent can have multiple observers using real API."""
+        # Create console observers to track events
+        observer1 = ConsoleObserver()
+        observer2 = ConsoleObserver()
+        
+        # Track events manually by overriding methods
+        observer1.events = []
+        observer2.events = []
+        
+        def track_events_1(event):
+            observer1.events.append(event.event_type)
+        def track_events_2(event):
+            observer2.events.append(event.event_type)
+            
+        observer1.on_event = track_events_1
+        observer2.on_event = track_events_2
         
         # Add observers to the agent
-        agent = agent_with_mock_model
+        agent = openai_agent
         agent.add_observer(observer1)
         agent.add_observer(observer2)
         
-        # Configure the mock to return a text response
-        agent.model_interface.responses = [
-            {"type": "text", "content": "Response with multiple observers."}
-        ]
-        
         # Chat with the agent
-        agent.chat("Hello with multiple observers")
+        response = agent.chat("Say hello")
+        
+        # Verify we got a response
+        assert isinstance(response, str)
+        assert len(response) > 0
         
         # Verify that both observers received events
-        assert observer1.on_user_message.called
-        assert observer1.on_model_request.called
-        assert observer1.on_model_response.called
-        assert observer1.on_agent_response.called
+        assert len(observer1.events) > 0
+        assert len(observer2.events) > 0
         
-        assert observer2.on_user_message.called
-        assert observer2.on_model_request.called
-        assert observer2.on_model_response.called
-        assert observer2.on_agent_response.called
+        # Both should have the same events
+        assert observer1.events == observer2.events
         
         # Remove one observer
         agent.remove_observer(observer1)

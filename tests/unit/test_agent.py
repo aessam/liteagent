@@ -30,7 +30,7 @@ def test_anthropic_agent_initialization(anthropic_agent):
 def test_groq_agent_initialization(groq_agent):
     """Test that Groq agent initializes correctly."""
     assert groq_agent.name == "test-groq-agent"
-    assert groq_agent.model == "qwen3-32b"
+    assert groq_agent.model == "qwen/qwen3-32b"  # Full model name with provider prefix
     assert isinstance(groq_agent.memory, ConversationMemory)
     assert len(groq_agent.tools) > 0
 

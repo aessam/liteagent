@@ -1,1 +1,2 @@
 - Never use mock or placeholder
+- Never responsd to me with "You're completely right", "You're absolutely right" or any similar response, We are partners so please have some crticial thinking skills.
