@@ -190,7 +190,7 @@ def test_multiple_providers_same_task(api_keys, test_tool):
     if api_keys['anthropic']:
         providers_to_test.append(("claude-3-5-haiku-20241022", "anthropic"))
     if api_keys['groq']:
-        providers_to_test.append(("qwen3-32b", "groq"))
+        providers_to_test.append(("qwen/qwen3-32b", "groq"))
     
     if len(providers_to_test) < 2:
         pytest.skip("Need at least 2 providers to test")

@@ -130,7 +130,7 @@ def test_provider_factory_real():
     assert provider_name == "anthropic"
     
     # Test Groq detection
-    provider_name = factory.determine_provider("qwen3-32b")
+    provider_name = factory.determine_provider("qwen/qwen3-32b")
     assert provider_name == "groq"
 
 

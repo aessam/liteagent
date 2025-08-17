@@ -144,11 +144,22 @@ class OpenAIProvider(ProviderInterface):
         tool_calls = []
         if message.tool_calls:
             for tc in message.tool_calls:
+                # Parse arguments safely
+                arguments = tc.function.arguments
+                if isinstance(arguments, str):
+                    try:
+                        import json
+                        arguments = json.loads(arguments)
+                    except json.JSONDecodeError:
+                        logger.warning(f"Failed to parse tool arguments: {arguments}")
+                        arguments = {}
+                elif not isinstance(arguments, dict):
+                    arguments = {}
+                    
                 tool_calls.append(ToolCall(
                     id=tc.id,
                     name=tc.function.name,
-                    arguments=tc.function.arguments if isinstance(tc.function.arguments, dict) 
-                             else eval(tc.function.arguments)  # Parse JSON string if needed
+                    arguments=arguments
                 ))
                 
         # Extract usage info

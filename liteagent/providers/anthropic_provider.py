@@ -160,11 +160,23 @@ class AnthropicProvider(ProviderInterface):
                     content_blocks.append({'type': 'text', 'text': content})
                     
                 for tool_call in msg['tool_calls']:
+                    # Ensure arguments are a dictionary for Anthropic API
+                    arguments = tool_call['function']['arguments']
+                    if isinstance(arguments, str):
+                        try:
+                            import json
+                            arguments = json.loads(arguments)
+                        except json.JSONDecodeError:
+                            logger.warning(f"Failed to parse tool arguments: {arguments}")
+                            arguments = {}
+                    elif not isinstance(arguments, dict):
+                        arguments = {}
+                        
                     content_blocks.append({
                         'type': 'tool_use',
                         'id': tool_call['id'],
                         'name': tool_call['function']['name'],
-                        'input': tool_call['function']['arguments']
+                        'input': arguments
                     })
                     
                 anthropic_messages.append({
