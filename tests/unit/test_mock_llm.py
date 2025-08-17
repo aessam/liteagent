@@ -11,11 +11,12 @@ from typing import Any, Dict, List, Optional, Union
 from unittest.mock import MagicMock, patch
 
 # Import from the liteagent module
-from liteagent.models import ModelInterface, create_model_interface
-from liteagent.tool_calling import ToolCallingType
+from liteagent.models import UnifiedModelInterface, create_model_interface
+from liteagent.providers.base import ProviderResponse, ToolCall
+from liteagent.capabilities import ModelCapabilities
 
 
-class MockModelInterface(ModelInterface):
+class MockModelInterface(UnifiedModelInterface):
     """Mock implementation of ModelInterface for testing purposes."""
     
     def __init__(self, model_name: str = "mock-model", drop_params: bool = True,
