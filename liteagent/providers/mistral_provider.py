@@ -68,8 +68,12 @@ class MistralProvider(ProviderInterface):
         start_time = time.time()
         self._log_request(messages, tools)
         
+        # Process messages for Mistral constraints (ordering, system message handling)
+        from ..provider_roles import process_messages_for_provider
+        processed_messages = process_messages_for_provider(messages, "mistral")
+        
         # Convert messages to Mistral format (handle function -> tool role conversion)
-        mistral_messages = self._convert_messages(messages)
+        mistral_messages = self._convert_messages(processed_messages)
         
         # Prepare request parameters
         request_params = {
