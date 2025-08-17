@@ -232,7 +232,7 @@ DO NOT try to create reports without using the generate_integrated_report tool.
         )
     
     @pytest.mark.integration
-    @pytest.mark.longrun
+    # @pytest.mark.longrun
     def test_multi_agent_orchestration(self, model, orchestration_agent, integration_agent, 
                                       user_data_agent, system_status_agent, 
                                       multi_agent_observer, tree_observer):

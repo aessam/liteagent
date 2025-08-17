@@ -161,11 +161,13 @@ class TestOpenAIToolCallingHandler:
         result = {"temperature": 72, "conditions": "sunny"}
         formatted_result = handler.format_tool_results("get_weather", result, tool_call_id="call_123")
         
-        # Verify format
+        # Verify format - OpenAI format only includes role, tool_call_id, and content
         assert formatted_result["role"] == "tool"
         assert formatted_result["tool_call_id"] == "call_123"
-        assert formatted_result["name"] == "get_weather"
         assert formatted_result["content"] == '{"temperature": 72, "conditions": "sunny"}'
+        
+        # Ensure name is NOT included in OpenAI format (unlike other providers)
+        assert "name" not in formatted_result
 
 
 class TestAnthropicToolCallingHandler:
@@ -239,12 +241,13 @@ class TestAnthropicToolCallingHandler:
         result = {"temperature": 72, "conditions": "sunny"}
         formatted_result = handler.format_tool_results("get_weather", result, tool_id="toolu_123")
         
-        # Verify format
-        assert formatted_result["role"] == "tool"
+        # Verify Anthropic format - uses type and tool_use_id, not role
+        assert formatted_result["type"] == "tool_result"
+        assert formatted_result["tool_use_id"] == "toolu_123"
         assert "content" in formatted_result
         assert isinstance(formatted_result["content"], str)
-        assert "72" in formatted_result["content"] or "72" in str(formatted_result["content"])
-        assert "sunny" in formatted_result["content"] or "sunny" in str(formatted_result["content"])
+        assert "72" in formatted_result["content"]
+        assert "sunny" in formatted_result["content"]
 
 
 class TestOllamaToolCallingHandler:
@@ -298,13 +301,13 @@ class TestOllamaToolCallingHandler:
         # Format tools
         formatted_tools = handler.format_tools_for_model(tools)
         
-        # Verify Ollama format
+        # Verify Ollama format (OpenAI-compatible)
         assert len(formatted_tools) == 1
         assert formatted_tools[0]["type"] == "function"
         assert formatted_tools[0]["function"]["name"] == "get_weather"
-        assert formatted_tools[0]["function"]["description"].startswith("Get the weather for a location")
-        assert "[FUNCTION_CALL]" in formatted_tools[0]["function"]["description"]
+        assert formatted_tools[0]["function"]["description"] == "Get the weather for a location"
         assert "parameters" in formatted_tools[0]["function"]
+        assert formatted_tools[0]["function"]["parameters"]["type"] == "object"
     
     def test_format_tool_results(self):
         """Test formatting tool results for Ollama models."""

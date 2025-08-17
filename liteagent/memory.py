@@ -129,16 +129,16 @@ class ConversationMemory:
                 "content": f"I called the {name} function with {args} and got this result: {content}"
             }
         else:
-            # For other models, use the standard function role
+            # Use modern 'tool' role instead of deprecated 'function' role
             message = {
-                "role": "function",
+                "role": "tool",
                 "name": name,
                 "content": str(content)
             }
             
-            # Add function call ID if provided
+            # Add tool call ID if provided (modern format)
             if call_id:
-                message["function_call_id"] = call_id
+                message["tool_call_id"] = call_id
                 
             # Add error flag if this is an error result
             if is_error:
@@ -323,7 +323,8 @@ class ConversationMemory:
             str or None: The function result or None if not found
         """
         for message in reversed(self.messages):
-            if message.get("role") == "function" and message.get("name") == function_name:
+            # Check for both 'tool' (modern) and 'function' (legacy) roles for backward compatibility
+            if (message.get("role") in ["tool", "function"]) and message.get("name") == function_name:
                 return message.get("content")
         return None
         
