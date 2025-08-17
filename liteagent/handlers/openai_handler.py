@@ -6,9 +6,9 @@ import json
 import uuid
 from typing import Dict, List, Any, Optional
 
-from ..pattern_tool_handler import PatternToolHandler
+from ..simple_tool_handler import SimpleToolCallingHandler
 
-class OpenAIToolCallingHandler(PatternToolHandler):
+class OpenAIToolCallingHandler(SimpleToolCallingHandler):
     """Handler for OpenAI-style function calling using native API format."""
     
     def extract_tool_calls(self, response: Any) -> List[Dict]:

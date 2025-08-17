@@ -17,8 +17,8 @@ from .agent_tool import FunctionDefinition
 from .tool_calling_types import ToolCallingType
 from .utils import logger
 
-# Import our base class and pattern-based handler
-from .pattern_tool_handler import ToolCallingHandlerBase, PatternToolHandler
+# Import our base class
+from .simple_tool_handler import ToolCallingHandlerBase, SimpleToolCallingHandler
 
 # Tool call tracking for tests
 class ToolCallTracker:
@@ -72,24 +72,16 @@ from .handlers.ollama_handler import OllamaToolCallingHandler
 from .handlers.text_based_handler import TextBasedToolCallingHandler
 from .handlers.structured_output_handler import StructuredOutputHandler
 from .handlers.noop_handler import NoopToolCallingHandler
-from .handlers.auto_detect_handler import AutoDetectToolCallingHandler
-
-def get_tool_calling_handler(tool_calling_type: Optional[ToolCallingType] = None) -> ToolCallingHandlerBase:
+def get_tool_calling_handler(tool_calling_type: ToolCallingType) -> ToolCallingHandlerBase:
     """
-    Get a tool calling handler for a given model.
+    Get a tool calling handler for a given tool calling type.
     
     Args:
-        tool_calling_type: The tool calling type to use (overrides automatic detection)
+        tool_calling_type: The tool calling type to use (required)
         
     Returns:
         A tool calling handler
     """
-    # Default to auto-detection if none specified
-    if tool_calling_type is None:
-        # We used to have a model registry here, but now we try to auto-detect the format from responses
-        return AutoDetectToolCallingHandler()
-        
-    # If a specific tool calling type is specified, use it
     if tool_calling_type == ToolCallingType.OPENAI:
         return OpenAIToolCallingHandler()
     elif tool_calling_type == ToolCallingType.ANTHROPIC:
@@ -105,8 +97,8 @@ def get_tool_calling_handler(tool_calling_type: Optional[ToolCallingType] = None
     elif tool_calling_type == ToolCallingType.NONE:
         return NoopToolCallingHandler()
     else:
-        logger.warning(f"Unknown tool calling type: {tool_calling_type}. Using auto-detection instead.")
-        return AutoDetectToolCallingHandler()
+        logger.warning(f"Unknown tool calling type: {tool_calling_type}. Using text-based fallback.")
+        return TextBasedToolCallingHandler()
 
 def get_provider_specific_handler(provider: str, tool_calling_type: ToolCallingType) -> ToolCallingHandlerBase:
     """

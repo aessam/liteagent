@@ -6,9 +6,9 @@ import json
 import uuid
 from typing import Dict, List, Any
 
-from ..pattern_tool_handler import PatternToolHandler
+from ..simple_tool_handler import SimpleToolCallingHandler
 
-class GroqToolCallingHandler(PatternToolHandler):
+class GroqToolCallingHandler(SimpleToolCallingHandler):
     """
     Handler for Groq tool calling using OpenAI-compatible format.
     Groq uses the same API format as OpenAI for function calling.

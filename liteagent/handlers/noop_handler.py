@@ -9,10 +9,10 @@ import json
 import uuid
 from typing import Dict, List, Any
 
-from ..pattern_tool_handler import PatternToolHandler
+from ..simple_tool_handler import SimpleToolCallingHandler
 
 
-class NoopToolCallingHandler(PatternToolHandler):
+class NoopToolCallingHandler(SimpleToolCallingHandler):
     """Compatibility class for no-op tool calling."""
     
     def format_tools_for_model(self, tools: List[Dict]) -> None:

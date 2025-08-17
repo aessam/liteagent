@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "WebSearch",
-      "Bash(mv:*)"
+      "Bash(mv:*)",
+      "Bash(git log:*)"
     ],
     "deny": [],
     "ask": []

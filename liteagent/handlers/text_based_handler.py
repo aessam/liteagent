@@ -10,10 +10,10 @@ import re
 import uuid
 from typing import Dict, List, Any
 
-from ..pattern_tool_handler import PatternToolHandler
+from ..simple_tool_handler import SimpleToolCallingHandler
 
 
-class TextBasedToolCallingHandler(PatternToolHandler):
+class TextBasedToolCallingHandler(SimpleToolCallingHandler):
     """Compatibility class for text-based tool calling."""
     
     def extract_tool_calls(self, response: Any) -> List[Dict]:

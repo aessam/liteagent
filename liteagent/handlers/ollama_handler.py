@@ -6,10 +6,10 @@ import json
 import uuid
 from typing import Dict, List, Any
 
-from ..pattern_tool_handler import PatternToolHandler
+from ..simple_tool_handler import SimpleToolCallingHandler
 
 
-class OllamaToolCallingHandler(PatternToolHandler):
+class OllamaToolCallingHandler(SimpleToolCallingHandler):
     """Handler for Ollama tool calling using native API format."""
     
     def __init__(self):

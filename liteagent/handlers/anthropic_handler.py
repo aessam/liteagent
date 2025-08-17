@@ -6,9 +6,9 @@ import json
 import uuid
 from typing import Dict, List, Any
 
-from ..pattern_tool_handler import PatternToolHandler
+from ..simple_tool_handler import SimpleToolCallingHandler
 
-class AnthropicToolCallingHandler(PatternToolHandler):
+class AnthropicToolCallingHandler(SimpleToolCallingHandler):
     """Handler for Anthropic Claude tool use with native API format."""
     
     def extract_tool_calls(self, response: Any) -> List[Dict]:

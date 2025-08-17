@@ -13,7 +13,7 @@ import time
 
 from liteagent.observer import AgentObserver, AgentEvent, FunctionCallEvent, FunctionResultEvent
 from liteagent.tool_calling_types import ToolCallingType
-from liteagent.handlers.auto_detect_handler import AutoDetectToolCallingHandler
+# Removed auto_detect_handler import - using direct provider handlers now
 from typing_extensions import Protocol
 
 T = TypeVar('T')
@@ -49,7 +49,9 @@ class ValidationObserver(AgentObserver):
         
         # Use handlers instead of strategies
         self._tool_calling_type: Optional[ToolCallingType] = tool_calling_type
-        self._handler = AutoDetectToolCallingHandler()
+        # Use text-based handler for validation (works with all response types)
+        from liteagent.handlers.text_based_handler import TextBasedToolCallingHandler
+        self._handler = TextBasedToolCallingHandler()
         self._response_parsers = {}
         
     def set_validation_strategy(self, tool_calling_type: ToolCallingType):

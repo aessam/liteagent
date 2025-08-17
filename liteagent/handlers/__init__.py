@@ -12,7 +12,6 @@ from .ollama_handler import OllamaToolCallingHandler
 from .text_based_handler import TextBasedToolCallingHandler
 from .structured_output_handler import StructuredOutputHandler
 from .noop_handler import NoopToolCallingHandler
-from .auto_detect_handler import AutoDetectToolCallingHandler
 from ..tool_calling_types import ToolCallingType
 
 __all__ = [
@@ -23,16 +22,15 @@ __all__ = [
     'TextBasedToolCallingHandler',
     'StructuredOutputHandler',
     'NoopToolCallingHandler',
-    'AutoDetectToolCallingHandler',
     'create_tool_handler',
 ]
 
 def create_tool_handler(tool_calling_type: ToolCallingType):
     """
-    Create the appropriate tool calling handler based on the detected type.
+    Create the appropriate tool calling handler based on the tool calling type.
     
     Args:
-        tool_calling_type: The detected tool calling type
+        tool_calling_type: The tool calling type
         
     Returns:
         An appropriate tool calling handler instance
@@ -52,5 +50,5 @@ def create_tool_handler(tool_calling_type: ToolCallingType):
     elif tool_calling_type == ToolCallingType.NONE:
         return NoopToolCallingHandler()
     else:
-        # Default to auto-detect if unsure
-        return AutoDetectToolCallingHandler() 
+        # Default to text-based fallback
+        return TextBasedToolCallingHandler() 

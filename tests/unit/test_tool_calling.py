@@ -16,7 +16,7 @@ from liteagent.tool_calling_types import (
     get_tool_calling_type,
     get_tool_calling_handler_type
 )
-from liteagent.pattern_tool_handler import PatternToolHandler, ToolCallingHandlerBase
+from liteagent.simple_tool_handler import SimpleToolCallingHandler, ToolCallingHandlerBase
 from liteagent.handlers import (
     OpenAIToolCallingHandler, 
     AnthropicToolCallingHandler,
@@ -24,8 +24,7 @@ from liteagent.handlers import (
     OllamaToolCallingHandler, 
     TextBasedToolCallingHandler,
     StructuredOutputHandler, 
-    NoopToolCallingHandler,
-    AutoDetectToolCallingHandler
+    NoopToolCallingHandler
 )
 
 
@@ -81,8 +80,8 @@ class TestToolCallingTypes:
         assert isinstance(get_tool_calling_handler(ToolCallingType.OLLAMA), OllamaToolCallingHandler)
         assert isinstance(get_tool_calling_handler(ToolCallingType.STRUCTURED_OUTPUT), StructuredOutputHandler)
         
-        # Auto detect fallback
-        assert isinstance(get_tool_calling_handler(), AutoDetectToolCallingHandler)
+        # Unknown type fallback - now uses text-based handler
+        assert isinstance(get_tool_calling_handler(ToolCallingType.TEXT_BASED), TextBasedToolCallingHandler)
 
 
 class TestOpenAIToolCallingHandler:
@@ -524,84 +523,8 @@ class TestNoopToolCallingHandler:
         assert "tool_call_id" in formatted_result
 
 
-class TestAutoDetectToolCallingHandler:
-    """Test the auto-detect tool calling handler."""
-    
-    @patch('liteagent.handlers.auto_detect_handler.detect_tool_calling_format')
-    @patch('liteagent.handlers.openai_handler.OpenAIToolCallingHandler.extract_tool_calls')
-    def test_extract_tool_calls(self, mock_extract, mock_detect):
-        """Test that the handler correctly delegates to the right implementation."""
-        # Setup
-        mock_detect.return_value = ToolCallingType.OPENAI
-        mock_extract.return_value = [{"name": "test_function", "arguments": {}}]
-        
-        # Create handler and test
-        handler = AutoDetectToolCallingHandler()
-        mock_response = MagicMock()
-        result = handler.extract_tool_calls(mock_response)
-        
-        # Verify correct delegation
-        assert result == [{"name": "test_function", "arguments": {}}]
-        mock_detect.assert_called_once_with(mock_response)
-        mock_extract.assert_called_once_with(mock_response)
-    
-    @patch('liteagent.handlers.openai_handler.OpenAIToolCallingHandler.format_tools_for_model')
-    def test_format_tools_for_model(self, mock_format):
-        """Test that the handler correctly delegates formatting."""
-        # Setup
-        mock_format.return_value = [{"type": "function", "function": {"name": "test"}}]
-        
-        # Create handler
-        handler = AutoDetectToolCallingHandler()
-        
-        # Set the detected type and handler manually
-        handler._detected_type = ToolCallingType.OPENAI
-        handler._specific_handler = OpenAIToolCallingHandler()
-        
-        # Test with a detected handler
-        tools = [{"name": "test", "description": "A test function"}]
-        result = handler.format_tools_for_model(tools)
-        
-        # Verify correct delegation
-        assert result == [{"type": "function", "function": {"name": "test"}}]
-        mock_format.assert_called_once_with(tools)
-        
-        # Test with no detected handler yet
-        handler = AutoDetectToolCallingHandler()
-        with patch.object(handler, '_detected_type', None):
-            with patch.object(handler, '_specific_handler', None):
-                # This should default to OpenAI format
-                result = handler.format_tools_for_model(tools)
-                assert isinstance(result, list)
-    
-    @patch('liteagent.handlers.openai_handler.OpenAIToolCallingHandler.format_tool_results')
-    def test_format_tool_results(self, mock_format):
-        """Test that the handler correctly delegates result formatting."""
-        # Setup
-        mock_format.return_value = {"role": "tool", "content": "result"}
-        
-        # Create handler
-        handler = AutoDetectToolCallingHandler()
-        
-        # Set the detected type and handler manually
-        handler._detected_type = ToolCallingType.OPENAI
-        handler._specific_handler = OpenAIToolCallingHandler()
-        
-        # Test
-        result = handler.format_tool_results("test_function", "result")
-        
-        # Verify
-        assert result == {"role": "tool", "content": "result"}
-        mock_format.assert_called_once_with("test_function", "result")
-        
-        # Test with no detected handler yet
-        handler = AutoDetectToolCallingHandler()
-        with patch.object(handler, '_detected_type', None):
-            with patch.object(handler, '_specific_handler', None):
-                # This should default to OpenAI format
-                result = handler.format_tool_results("test_function", "result")
-                assert isinstance(result, dict)
-                assert result.get("role") == "tool"
+# Removed TestAutoDetectToolCallingHandler class - auto-detection no longer supported
+# We now use direct provider-specific handlers based on known model types
 
 
 if __name__ == "__main__":

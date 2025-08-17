@@ -329,17 +329,9 @@ def detect_model_capability(model_name: str, model_interface) -> ToolCallingType
             _MODEL_CAPABILITIES_CACHE[model_name] = ToolCallingType.STRUCTURED_OUTPUT
             return ToolCallingType.STRUCTURED_OUTPUT
             
-        # Get a test response
-        response = model_interface.chat(test_messages, tools=[test_add])
-        
-        # Use existing detector
-        from .tool_calling_detection import detect_tool_calling_format
-        calling_type = detect_tool_calling_format(response)
-        
-        # Check if the model actually used the tool - cases like Phi4-mini
-        # that accept tools but don't use proper tool calling format
-        if calling_type == ToolCallingType.STRUCTURED_OUTPUT:
-            calling_type = ToolCallingType.STRUCTURED_OUTPUT
+        # Use direct provider mapping instead of runtime detection
+        # This is more reliable and faster than testing responses
+        calling_type = get_tool_calling_type(model_name)
         
         # Cache the result
         _MODEL_CAPABILITIES_CACHE[model_name] = calling_type
