@@ -10,13 +10,19 @@ from ..pattern_tool_handler import PatternToolHandler
 
 class GroqToolCallingHandler(PatternToolHandler):
     """
-    Handler for Groq-style tool calling.
-    Groq's API is similar to OpenAI's, so we can inherit most functionality from the pattern handler.
+    Handler for Groq tool calling using OpenAI-compatible format.
+    Groq uses the same API format as OpenAI for function calling.
     """
+    
+    def __init__(self):
+        """Initialize with Groq-specific limits."""
+        super().__init__()
+        self.max_tools = 128  # Groq supports up to 128 tools
+        self.supports_parallel_tools = True
     
     def extract_tool_calls(self, response: Any) -> List[Dict]:
         """
-        Extract tool calls from a Groq response.
+        Extract tool calls from a Groq response (OpenAI-compatible format).
         
         Args:
             response: The model response
@@ -27,32 +33,35 @@ class GroqToolCallingHandler(PatternToolHandler):
         # Handle empty response or empty choices
         if not hasattr(response, 'choices') or not response.choices:
             return []
-            
-        # Handle OpenAI-like format which Groq uses
+        
+        tool_calls = []
         try:
-            if (hasattr(response.choices[0], 'message') and
-                hasattr(response.choices[0].message, 'tool_calls') and
-                isinstance(response.choices[0].message.tool_calls, list) and
-                len(response.choices[0].message.tool_calls) > 0):
-                
-                # This is OpenAI-like format
-                tool_calls = []
-                for tc in response.choices[0].message.tool_calls:
+            message = response.choices[0].message
+            
+            # Groq uses OpenAI format for tool calls
+            if hasattr(message, 'tool_calls') and message.tool_calls:
+                for tc in message.tool_calls:
                     if hasattr(tc, 'function'):
+                        # Parse arguments if they're a JSON string
+                        args = tc.function.arguments
+                        if isinstance(args, str):
+                            try:
+                                args = json.loads(args)
+                            except json.JSONDecodeError:
+                                args = {}
+                        
                         tool_call_data = {
                             "name": tc.function.name,
-                            "arguments": json.loads(tc.function.arguments) if isinstance(tc.function.arguments, str) else tc.function.arguments,
+                            "arguments": args,
                             "id": tc.id if hasattr(tc, 'id') else str(uuid.uuid4())
                         }
                         tool_calls.append(tool_call_data)
                         self._track_tool_call(tool_call_data["name"], tool_call_data["arguments"])
-                return tool_calls
-        except (IndexError, AttributeError, json.JSONDecodeError):
-            # Handle any exceptions during the extraction
-            return []
-        
-        # Fall back to pattern-based handling for other responses
-        return super().extract_tool_calls(response)
+                        
+        except (IndexError, AttributeError):
+            pass
+            
+        return tool_calls
     
     def format_tools_for_model(self, tools: List[Dict]) -> List[Dict]:
         """
@@ -62,8 +71,12 @@ class GroqToolCallingHandler(PatternToolHandler):
             tools: A list of tool definitions
             
         Returns:
-            Formatted tools for Groq
+            Formatted tools for Groq (max 128 tools)
         """
+        # Validate tool count
+        if len(tools) > self.max_tools:
+            raise ValueError(f"Groq supports a maximum of {self.max_tools} tools, but {len(tools)} were provided")
+        
         # Groq uses OpenAI-compatible format
         formatted_tools = []
         
@@ -92,8 +105,7 @@ class GroqToolCallingHandler(PatternToolHandler):
         Returns:
             A formatted tool result for Groq
         """
-        # Format result as in OpenAI format
-        content = result
+        # Convert result to string format
         if isinstance(result, (dict, list)):
             content = json.dumps(result)
         else:
@@ -102,12 +114,11 @@ class GroqToolCallingHandler(PatternToolHandler):
         # Track for testing
         self._track_tool_result(tool_name, result)
         
-        # Format in OpenAI style
-        tool_id = kwargs.get("tool_call_id", kwargs.get("tool_id", f"call_{uuid.uuid4()}"))
+        # Format in OpenAI style (Groq is OpenAI-compatible)
+        tool_call_id = kwargs.get("tool_call_id") or kwargs.get("tool_id") or str(uuid.uuid4())
         
         return {
             "role": "tool",
-            "tool_call_id": tool_id,
-            "name": tool_name,
+            "tool_call_id": tool_call_id,
             "content": content
         } 

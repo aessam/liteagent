@@ -9,9 +9,9 @@ import argparse
 import json
 from dotenv import load_dotenv
 import litellm
-from liteagent.utils import setup_logging, logger
-from liteagent.observer import ConsoleObserver, FileObserver, TreeTraceObserver
-from liteagent.tools import get_function_definitions, FunctionTool, InstanceMethodTool, liteagent_tool
+from .utils import setup_logging, logger
+from .observer import ConsoleObserver, FileObserver, TreeTraceObserver
+from .tools import get_function_definitions, FunctionTool, InstanceMethodTool, liteagent_tool
 from typing import List, Dict, Any
 
 def parse_arguments():

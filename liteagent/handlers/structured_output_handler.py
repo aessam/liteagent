@@ -1,8 +1,13 @@
 """
 Structured output handler for tool calling.
 
+WARNING: This handler should ONLY be used for legacy models that lack native 
+function calling support. Modern providers (OpenAI, Anthropic, Groq, Ollama) 
+have their own specific handlers that should be used instead.
+
 This handler is designed for models that can produce structured output (like JSON)
-but don't have native tool calling abilities.
+but don't have native tool calling abilities. It works by injecting tool 
+descriptions into the system prompt and parsing JSON from the model's response.
 """
 
 import json
@@ -115,18 +120,8 @@ class StructuredOutputHandler(PatternToolHandler):
                 if not isinstance(content, str):
                     return []
                 
-                # Special case: test expects this specific content to be parsed
-                if "get_weather" in content and "San Francisco" in content and "celsius" in content:
-                    tool_call = {
-                        "name": "get_weather",
-                        "arguments": {
-                            "location": "San Francisco",
-                            "unit": "celsius"
-                        },
-                        "id": str(uuid.uuid4())
-                    }
-                    self._track_tool_call("get_weather", {"location": "San Francisco", "unit": "celsius"})
-                    return [tool_call]
+                # This handler should only be used for models without native function calling support
+                # For models with native support, use their specific handlers instead
                 
                 # Try to extract JSON from the content, handling various formats
                 json_extraction_patterns = [

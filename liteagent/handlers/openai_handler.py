@@ -4,84 +4,110 @@ OpenAI-specific tool calling handler implementation.
 
 import json
 import uuid
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 
 from ..pattern_tool_handler import PatternToolHandler
 
 class OpenAIToolCallingHandler(PatternToolHandler):
-    """Compatibility class for OpenAI-style tool calling."""
+    """Handler for OpenAI-style function calling using native API format."""
     
     def extract_tool_calls(self, response: Any) -> List[Dict]:
         """
-        Override to handle mock objects in tests.
+        Extract tool calls from OpenAI API response.
         
         Args:
-            response: The model response
+            response: The model response from OpenAI API
             
         Returns:
-            A list of extracted tool calls
+            A list of extracted tool calls with name, arguments, and id
         """
         # Handle empty response or empty choices
         if not hasattr(response, 'choices') or not response.choices:
             return []
-            
-        # Special case for mock objects in tests
-        try:
-            if (hasattr(response.choices[0], 'message') and
-                hasattr(response.choices[0].message, 'tool_calls') and
-                isinstance(response.choices[0].message.tool_calls, list) and
-                len(response.choices[0].message.tool_calls) > 0 and
-                hasattr(response.choices[0].message.tool_calls[0], 'function') and
-                not isinstance(response.choices[0].message.tool_calls[0].function, dict)):
-                
-                # This is likely a mock object from a test
-                tool_calls = []
-                for tc in response.choices[0].message.tool_calls:
-                    tool_call_data = {
-                        "name": tc.function.name,
-                        "arguments": json.loads(tc.function.arguments) if isinstance(tc.function.arguments, str) else tc.function.arguments,
-                        "id": tc.id if hasattr(tc, 'id') else str(uuid.uuid4())
-                    }
-                    tool_calls.append(tool_call_data)
-                    self._track_tool_call(tool_call_data["name"], tool_call_data["arguments"])
-                return tool_calls
-        except (IndexError, AttributeError):
-            # Handle any exceptions during the mock object extraction
-            return []
         
-        # Fall back to pattern-based handling for real responses
-        return super().extract_tool_calls(response)
+        try:
+            message = response.choices[0].message
+            
+            # Check if there are tool calls in the response
+            if hasattr(message, 'tool_calls') and message.tool_calls:
+                tool_calls = []
+                for tc in message.tool_calls:
+                    # Extract function details
+                    if hasattr(tc, 'function'):
+                        # Parse arguments if they're a JSON string
+                        args = tc.function.arguments
+                        if isinstance(args, str):
+                            try:
+                                args = json.loads(args)
+                            except json.JSONDecodeError:
+                                args = {}
+                        
+                        tool_call_data = {
+                            "name": tc.function.name,
+                            "arguments": args,
+                            "id": tc.id if hasattr(tc, 'id') else str(uuid.uuid4())
+                        }
+                        tool_calls.append(tool_call_data)
+                        self._track_tool_call(tool_call_data["name"], tool_call_data["arguments"])
+                        
+                return tool_calls
+                
+        except (IndexError, AttributeError) as e:
+            # Log error but don't fail
+            pass
+        
+        return []
+    
+    def format_tools_for_model(self, tools: List[Dict]) -> List[Dict]:
+        """
+        Format tools for OpenAI API format.
+        
+        Args:
+            tools: List of tool definitions
+            
+        Returns:
+            Formatted tools in OpenAI format
+        """
+        formatted_tools = []
+        for tool in tools:
+            formatted_tool = {
+                "type": "function",
+                "function": {
+                    "name": tool.get("name", ""),
+                    "description": tool.get("description", ""),
+                    "parameters": tool.get("parameters", {})
+                }
+            }
+            formatted_tools.append(formatted_tool)
+        return formatted_tools
     
     def format_tool_results(self, tool_name: str, result: Any, **kwargs) -> Dict:
         """
-        Override to handle test cases that provide a specific tool_call_id.
+        Format tool results for OpenAI API.
         
         Args:
             tool_name: The name of the tool
             result: The result from the tool
-            **kwargs: Additional keyword arguments
+            **kwargs: Additional keyword arguments (must include tool_call_id)
             
         Returns:
-            A formatted tool result
+            A formatted tool result in OpenAI format
         """
-        # Use the provided tool_call_id if available
-        tool_id = kwargs.get("tool_call_id")
-        if tool_id:
-            self._track_tool_result(tool_name, result)
-            
-            # Convert result to JSON string if it's a dict or list
-            content = result
-            if isinstance(result, (dict, list)):
-                content = json.dumps(result)
-            else:
-                content = str(result) if result is not None else ""
-                
-            return {
-                "role": "tool",
-                "tool_call_id": tool_id,
-                "name": tool_name,  # Add name field for backwards compatibility with tests
-                "content": content
-            }
+        # Get tool_call_id - required for OpenAI format
+        tool_call_id = kwargs.get("tool_call_id") or kwargs.get("tool_id") or str(uuid.uuid4())
         
-        # Fall back to pattern-based handling
-        return super().format_tool_results(tool_name, result, **kwargs) 
+        # Track for debugging/testing
+        self._track_tool_result(tool_name, result)
+        
+        # Convert result to string format
+        if isinstance(result, (dict, list)):
+            content = json.dumps(result)
+        else:
+            content = str(result) if result is not None else ""
+        
+        # Return in OpenAI tool result format
+        return {
+            "role": "tool",
+            "tool_call_id": tool_call_id,
+            "content": content
+        } 

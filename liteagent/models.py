@@ -56,21 +56,25 @@ class ModelInterface(ABC):
         
         # Add functions if provided and supported
         if functions:
-            # Format functions based on tool calling type
+            # Let each handler format tools appropriately for their provider
+            # and LiteLLM will handle the actual API translation
             formatted_tools = self.tool_handler.format_tools_for_model(functions)
             
-            # Add functions to kwargs based on tool calling type
-            if self.tool_calling_type == ToolCallingType.OPENAI:
-                # OpenAI-style function calling
+            # For providers with native function calling, pass tools directly to LiteLLM
+            if self.tool_calling_type in [ToolCallingType.OPENAI, ToolCallingType.ANTHROPIC, ToolCallingType.OLLAMA]:
                 kwargs["tools"] = formatted_tools
-                kwargs["tool_choice"] = "auto"
-            elif self.tool_calling_type == ToolCallingType.ANTHROPIC:
-                # Anthropic-style tool calling
-                kwargs["tools"] = formatted_tools
-            elif self.tool_calling_type in [ToolCallingType.OLLAMA, ToolCallingType.TEXT_BASED, ToolCallingType.STRUCTURED_OUTPUT]:
-                # For these types, we need to modify the system prompt
+                
+                # Add provider-specific parameters
+                if self.tool_calling_type == ToolCallingType.OPENAI:
+                    kwargs["tool_choice"] = "auto"
+                    # Enable parallel tool calls for OpenAI and Groq (both support it)
+                    if self.provider in ['openai', 'groq', 'deepseek']:
+                        kwargs["parallel_tool_calls"] = True
+                    
+            elif self.tool_calling_type in [ToolCallingType.TEXT_BASED, ToolCallingType.STRUCTURED_OUTPUT]:
+                # Only for legacy models without native support, inject into system prompt
                 tool_description = formatted_tools
-                if messages and messages[0]["role"] == "system":
+                if isinstance(tool_description, str) and messages and messages[0]["role"] == "system":
                     # Create a copy of messages to avoid modifying the original
                     messages = messages.copy()
                     # Update the system prompt with tool descriptions

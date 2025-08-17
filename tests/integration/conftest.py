@@ -71,7 +71,7 @@ STANDARD_TEST_MODELS = [
     "groq/qwen-qwq-32b",
     "mistral/open-mixtral-8x22b",
     "deepseek/deepseek-chat",
-    "ollama/phi4"
+    "ollama/gpt-oss:20b"
 ]
 
 
