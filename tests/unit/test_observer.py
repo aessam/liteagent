@@ -8,7 +8,6 @@ monitoring and tracking of agent operations and interactions.
 import json
 import pytest
 import time
-from unittest.mock import MagicMock, patch, call
 from collections import defaultdict
 
 # Import LiteAgent components
@@ -16,8 +15,9 @@ from liteagent.observer import (AgentObserver, AgentEvent, AgentInitializedEvent
                               UserMessageEvent, ModelRequestEvent, ModelResponseEvent, 
                               FunctionCallEvent, FunctionResultEvent, AgentResponseEvent, 
                               ConsoleObserver, TreeTraceObserver)
+from liteagent.agent import LiteAgent
 
-# No mock imports - using real API calls
+# NO MOCKS - using real API calls only
 
 
 class TestObserverEvents:
@@ -383,37 +383,40 @@ class TestObserverInterface:
         # Remove one observer
         agent.remove_observer(observer1)
         
-        # Reset mock call counts
-        observer1.reset_mock()
-        observer2.reset_mock()
+        # Reset event tracking for next test
+        observer1.events = []
+        observer2.events = []
         
         # Chat again
-        agent.chat("Hello after removing an observer")
+        response = agent.chat("Hello after removing an observer")
         
-        # Verify that only observer2 received events
-        assert not observer1.on_user_message.called
-        assert observer2.on_user_message.called
+        # Verify we got a response
+        assert isinstance(response, str)
+        assert len(response) > 0
+        
+        # Verify that only observer2 received events (observer1 was removed)
+        assert len(observer1.events) == 0  # Should not receive any events
+        assert len(observer2.events) > 0   # Should still receive events
 
 
 class TestTreeTraceObserver:
     """Test the TreeTraceObserver functionality."""
     
-    def test_tree_trace_observer_tracking(self, agent_with_mock_model):
+    def test_tree_trace_observer_tracking(self, openai_agent):
         """Test that TreeTraceObserver properly tracks agent events."""
         # Create a TreeTraceObserver
         tree_observer = TreeTraceObserver()
         
         # Add the observer to the agent
-        agent = agent_with_mock_model
+        agent = openai_agent
         agent.add_observer(tree_observer)
         
-        # Configure the mock to return a text response
-        agent.model_interface.responses = [
-            {"type": "text", "content": "Hello from the agent!"}
-        ]
-        
         # Chat with the agent
-        agent.chat("Hello, agent!")
+        response = agent.chat("Say hello")
+        
+        # Verify we got a response
+        assert isinstance(response, str)
+        assert len(response) > 0
         
         # Check that the observer tracked the context
         assert agent.context_id in tree_observer.context_map
@@ -429,14 +432,14 @@ class TestTreeTraceObserver:
         assert "ModelResponseEvent" in event_types
         assert "AgentResponseEvent" in event_types
     
-    def test_tree_trace_observer_multi_agent(self, agent_with_mock_model, agent_with_tools):
+    def test_tree_trace_observer_multi_agent(self, openai_agent, anthropic_agent):
         """Test that TreeTraceObserver properly tracks multiple agents and their relationships."""
         # Create a TreeTraceObserver
         tree_observer = TreeTraceObserver()
         
         # Add the observer to both agents
-        agent1 = agent_with_mock_model
-        agent2 = agent_with_tools
+        agent1 = openai_agent
+        agent2 = anthropic_agent
         
         agent1.add_observer(tree_observer)
         agent2.add_observer(tree_observer)
@@ -445,17 +448,13 @@ class TestTreeTraceObserver:
         agent1_context_id = agent1.context_id
         agent2.parent_context_id = agent1_context_id
         
-        # Configure the mocks to return text responses
-        agent1.model_interface.responses = [
-            {"type": "text", "content": "Response from parent agent!"}
-        ]
-        agent2.model_interface.responses = [
-            {"type": "text", "content": "Response from child agent!"}
-        ]
-        
         # Chat with both agents
-        agent1.chat("Hello, parent agent!")
-        agent2.chat("Hello, child agent!")
+        response1 = agent1.chat("Say hello")
+        response2 = agent2.chat("Say hi")
+        
+        # Verify we got responses
+        assert isinstance(response1, str) and len(response1) > 0
+        assert isinstance(response2, str) and len(response2) > 0
         
         # Check that both agents' contexts are tracked
         assert agent1.context_id in tree_observer.context_map
@@ -472,50 +471,50 @@ class TestTreeTraceObserver:
         assert len(tree_observer.agent_events[agent1.agent_id]) > 0
         assert len(tree_observer.agent_events[agent2.agent_id]) > 0
     
-    def test_tree_trace_observer_tree_visualization(self, agent_with_mock_model):
+    def test_tree_trace_observer_tree_visualization(self, openai_agent):
         """Test the tree visualization methods of TreeTraceObserver."""
         # Create a TreeTraceObserver
         tree_observer = TreeTraceObserver()
         
         # Add the observer to the agent
-        agent = agent_with_mock_model
+        agent = openai_agent
         agent.add_observer(tree_observer)
         
-        # Configure the mock to return a text response
-        agent.model_interface.responses = [
-            {"type": "text", "content": "Hello from the agent!"}
-        ]
-        
         # Chat with the agent
-        agent.chat("Hello, agent!")
+        response = agent.chat("Say hello")
         
-        # Mock the print function to capture output
-        with patch('builtins.print') as mock_print:
-            # Test the _print_agent_tree method
+        # Verify we got a response
+        assert isinstance(response, str)
+        assert len(response) > 0
+        
+        # Test that the observer has the methods we expect
+        assert hasattr(tree_observer, '_print_agent_tree')
+        assert hasattr(tree_observer, '_print_agent_events')
+        assert hasattr(tree_observer, '_format_args')
+        
+        # Test _format_args method
+        args = {"param1": "value1", "param2": 123}
+        formatted = tree_observer._format_args(args)
+        assert "param1" in formatted
+        assert "value1" in formatted
+        assert "param2" in formatted
+        assert "123" in formatted
+        
+        # Verify the observer tracked events properly
+        assert agent.agent_id in tree_observer.agent_events
+        assert len(tree_observer.agent_events[agent.agent_id]) > 0
+        
+        # Test that we can call visualization methods without errors
+        # These methods print to stdout, so we just verify they don't crash
+        try:
             tree_observer._print_agent_tree(agent.context_id, "", True)
-            
-            # Verify print was called at least once
-            assert mock_print.call_count > 0
-            
-            # Reset mock
-            mock_print.reset_mock()
-            
-            # Test the _print_agent_events method directly
             tree_observer._print_agent_events(agent.agent_id, "")
+            # If we get here, the methods ran without errors
+            visualization_works = True
+        except Exception:
+            visualization_works = False
             
-            # Verify print was called at least once for events
-            assert mock_print.call_count > 0
-            
-            # Reset mock
-            mock_print.reset_mock()
-            
-            # Test _format_args method
-            args = {"param1": "value1", "param2": 123}
-            formatted = tree_observer._format_args(args)
-            assert "param1" in formatted
-            assert "value1" in formatted
-            assert "param2" in formatted
-            assert "123" in formatted
+        assert visualization_works
             
             # Test with a more complex structure
             nested_args = {"param1": {"nested": "value"}, "param2": [1, 2, 3]}
