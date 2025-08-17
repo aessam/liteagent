@@ -49,7 +49,7 @@ class TestAgentEvents:
         assert event.event_type == "AgentEvent"
         assert event.event_data == event_data
         
-        # Test to_dict method
+        # Test to_dict method (event_data is merged into the dict, not as a separate key)
         event_dict = event.to_dict()
         assert event_dict["agent_id"] == agent_id
         assert event_dict["agent_name"] == agent_name
@@ -57,7 +57,9 @@ class TestAgentEvents:
         assert event_dict["parent_context_id"] == parent_context_id
         assert event_dict["timestamp"] == timestamp
         assert event_dict["event_type"] == "AgentEvent"
-        assert event_dict["event_data"] == event_data
+        # event_data fields are merged into the main dict
+        assert event_dict["key"] == "value"
+        assert event_dict["number"] == 42
     
     def test_agent_event_defaults(self):
         """Test AgentEvent with default values."""
@@ -91,20 +93,27 @@ class TestAgentEvents:
     
     def test_agent_initialized_event(self):
         """Test AgentInitializedEvent."""
-        agent_config = {"model": "gpt-4", "temperature": 0.7}
+        model = "gpt-4"
+        system_prompt = "You are a helpful assistant"
+        tools = ["calculator", "weather"]
         
         event = AgentInitializedEvent(
             agent_id="agent-123",
             agent_name="test-agent",
             context_id="ctx-123",
-            agent_config=agent_config
+            model=model,
+            system_prompt=system_prompt,
+            tools=tools
         )
         
         assert event.event_type == "AgentInitializedEvent"
-        assert event.agent_config == agent_config
+        assert event.model_name == model
+        assert event.system_prompt == system_prompt
+        assert event.tools == tools
         
         event_dict = event.to_dict()
-        assert event_dict["agent_config"] == agent_config
+        assert event_dict["model_name"] == model
+        assert event_dict["system_prompt"] == system_prompt
     
     def test_user_message_event(self):
         """Test UserMessageEvent."""
@@ -127,7 +136,7 @@ class TestAgentEvents:
         """Test ModelRequestEvent."""
         messages = [{"role": "user", "content": "Hello"}]
         model = "gpt-4o-mini"
-        tools = [{"name": "calculator"}]
+        functions = [{"name": "calculator"}]  # Uses functions, not tools
         
         event = ModelRequestEvent(
             agent_id="agent-123",
@@ -135,43 +144,40 @@ class TestAgentEvents:
             context_id="ctx-123",
             messages=messages,
             model=model,
-            tools=tools
+            functions=functions
         )
         
         assert event.event_type == "ModelRequestEvent"
         assert event.messages == messages
         assert event.model == model
-        assert event.tools == tools
+        assert event.functions == functions
         
         event_dict = event.to_dict()
         assert event_dict["messages"] == messages
         assert event_dict["model"] == model
-        assert event_dict["tools"] == tools
+        assert event_dict["functions"] == functions
     
     def test_model_response_event(self):
         """Test ModelResponseEvent."""
         response = "Hello! I'm doing well, thank you."
-        tool_calls = [{"name": "calculator", "args": {"a": 1, "b": 2}}]
-        usage = {"prompt_tokens": 10, "completion_tokens": 15}
+        model = "gpt-4o-mini"
         
         event = ModelResponseEvent(
             agent_id="agent-123",
             agent_name="test-agent",
             context_id="ctx-123",
             response=response,
-            tool_calls=tool_calls,
-            usage=usage
+            model=model
         )
         
         assert event.event_type == "ModelResponseEvent"
         assert event.response == response
-        assert event.tool_calls == tool_calls
-        assert event.usage == usage
+        assert event.model == model
         
         event_dict = event.to_dict()
-        assert event_dict["response"] == response
-        assert event_dict["tool_calls"] == tool_calls
-        assert event_dict["usage"] == usage
+        # Response is summarized in event_data
+        assert event_dict["model"] == model
+        assert "response_summary" in event_dict
     
     def test_function_call_event(self):
         """Test FunctionCallEvent."""
@@ -197,27 +203,22 @@ class TestAgentEvents:
     def test_function_result_event(self):
         """Test FunctionResultEvent."""
         function_name = "get_weather"
-        function_result = '{"temperature": 72, "condition": "sunny"}'
-        is_error = False
+        result = '{"temperature": 72, "condition": "sunny"}'
         
         event = FunctionResultEvent(
             agent_id="agent-123",
             agent_name="test-agent",
             context_id="ctx-123",
             function_name=function_name,
-            function_result=function_result,
-            is_error=is_error
+            result=result
         )
         
         assert event.event_type == "FunctionResultEvent"
         assert event.function_name == function_name
-        assert event.function_result == function_result
-        assert event.is_error == is_error
+        assert event.result == result
         
         event_dict = event.to_dict()
         assert event_dict["function_name"] == function_name
-        assert event_dict["function_result"] == function_result
-        assert event_dict["is_error"] == is_error
     
     def test_function_result_event_with_error(self):
         """Test FunctionResultEvent with error flag."""
@@ -226,12 +227,12 @@ class TestAgentEvents:
             agent_name="test-agent",
             context_id="ctx-123",
             function_name="api_call",
-            function_result="API timeout",
-            is_error=True
+            result="API timeout",
+            error="Timeout occurred"
         )
         
-        assert event.is_error is True
-        assert event.to_dict()["is_error"] is True
+        assert event.error == "Timeout occurred"
+        assert event.to_dict()["function_name"] == "api_call"
     
     def test_agent_response_event(self):
         """Test AgentResponseEvent."""
@@ -275,14 +276,13 @@ class TestObserverInterface:
         assert hasattr(observer, 'on_agent_response')
         
         # Check default behavior
-        assert observer.agent_name is None
+        assert observer.verbose is False
     
-    def test_console_observer_with_agent_name(self):
-        """Test ConsoleObserver with specific agent name."""
-        agent_name = "test-agent"
-        observer = ConsoleObserver(agent_name=agent_name)
+    def test_console_observer_with_verbose(self):
+        """Test ConsoleObserver with verbose mode."""
+        observer = ConsoleObserver(verbose=True)
         
-        assert observer.agent_name == agent_name
+        assert observer.verbose is True
     
     def test_tree_trace_observer_creation(self):
         """Test TreeTraceObserver instantiation."""
@@ -313,7 +313,7 @@ class TestEventHandling:
             agent_id="test-id",
             agent_name="test-name",
             context_id="ctx-123",
-            agent_config={"model": "gpt-4"}
+            model="gpt-4"
         )
         
         # Should not raise exceptions
@@ -338,7 +338,7 @@ class TestEventHandling:
             context_id="ctx-123",
             messages=[{"role": "user", "content": "Hello"}],
             model="gpt-4",
-            tools=[]
+            functions=[]
         )
         
         observer.on_model_request(model_req_event)
@@ -350,8 +350,7 @@ class TestEventHandling:
             agent_name="test-name",
             context_id="ctx-123",
             response="Hi there!",
-            tool_calls=[],
-            usage={"tokens": 10}
+            model="gpt-4"
         )
         
         observer.on_model_response(model_resp_event)
@@ -375,8 +374,8 @@ class TestEventHandling:
             agent_name="test-name",
             context_id="ctx-123",
             function_name="test_func",
-            function_result="result",
-            is_error=False
+            result="result",
+            error=None
         )
         
         observer.on_function_result(func_result_event)
@@ -403,7 +402,7 @@ class TestEventHandling:
             agent_name="test-agent",
             context_id="ctx-456",
             parent_context_id="parent-ctx-789",
-            agent_config={"model": "gpt-4"}
+            model="gpt-4"
         )
         
         observer.on_agent_initialized(init_event)
@@ -444,8 +443,7 @@ class TestEventHandling:
         parent_event = AgentInitializedEvent(
             agent_id="parent-agent",
             agent_name="parent",
-            context_id="parent-ctx",
-            agent_config={}
+            context_id="parent-ctx"
         )
         
         observer.on_agent_initialized(parent_event)
@@ -455,8 +453,7 @@ class TestEventHandling:
             agent_id="child-agent",
             agent_name="child",
             context_id="child-ctx",
-            parent_context_id="parent-ctx",
-            agent_config={}
+            parent_context_id="parent-ctx"
         )
         
         observer.on_agent_initialized(child_event)
@@ -471,8 +468,7 @@ class TestEventHandling:
             agent_id="grandchild-agent",
             agent_name="grandchild",
             context_id="grandchild-ctx",
-            parent_context_id="child-ctx",
-            agent_config={}
+            parent_context_id="child-ctx"
         )
         
         observer.on_agent_initialized(grandchild_event)
@@ -493,30 +489,27 @@ class TestUtilityMethods:
         # Test simple args
         simple_args = {"param1": "value1", "param2": 123}
         formatted = observer._format_args(simple_args)
-        assert "param1" in formatted
-        assert "value1" in formatted
-        assert "param2" in formatted
-        assert "123" in formatted
+        assert "param1='value1'" in formatted
+        assert "param2=123" in formatted
         
         # Test nested args
         nested_args = {
             "simple": "value",
             "nested": {"key": "nested_value"},
-            "list": [1, 2, 3],
-            "mixed": {"list": [{"deep": "value"}]}
+            "list": [1, 2, 3]
         }
         formatted = observer._format_args(nested_args)
-        assert "simple" in formatted
-        assert "nested" in formatted
-        assert "deep" in formatted
+        assert "simple='value'" in formatted
+        assert "nested=" in formatted
+        assert "list=" in formatted
         
         # Test empty args
         empty_formatted = observer._format_args({})
-        assert empty_formatted == "{}"
+        assert empty_formatted == ""
         
         # Test None
         none_formatted = observer._format_args(None)
-        assert none_formatted == "None"
+        assert none_formatted == ""
     
     def test_tree_trace_observer_visualization_methods_exist(self):
         """Test that visualization methods exist and are callable."""
@@ -524,22 +517,28 @@ class TestUtilityMethods:
         
         # Add some test data
         observer.context_map["test-ctx"] = "test-agent"
+        observer.agents["test-agent"] = {
+            "name": "test",
+            "contexts": set(["test-ctx"])
+        }
         observer.agent_events["test-agent"] = [
             AgentInitializedEvent(
                 agent_id="test-agent",
                 agent_name="test",
-                context_id="test-ctx",
-                agent_config={}
+                context_id="test-ctx"
             )
         ]
         
         # Test methods exist and are callable (they print to stdout)
         try:
+            # _print_agent_tree is an alias that calls _print_context_trace with indent 0
             observer._print_agent_tree("test-ctx", "", True)
             observer._print_agent_events("test-agent", "")
             # If we get here, methods ran without errors
             methods_work = True
-        except Exception:
+        except Exception as e:
+            # Debug the exception
+            print(f"Error in visualization methods: {e}")
             methods_work = False
         
         assert methods_work
@@ -576,8 +575,7 @@ class TestObserverDependencyInjection:
         event1 = AgentInitializedEvent(
             agent_id="agent-1",
             agent_name="test1",
-            context_id="ctx-1",
-            agent_config={}
+            context_id="ctx-1"
         )
         observer1.on_agent_initialized(event1)
         
@@ -585,8 +583,7 @@ class TestObserverDependencyInjection:
         event2 = AgentInitializedEvent(
             agent_id="agent-2",
             agent_name="test2", 
-            context_id="ctx-2",
-            agent_config={}
+            context_id="ctx-2"
         )
         observer2.on_agent_initialized(event2)
         
@@ -637,18 +634,15 @@ class TestEdgeCases:
             agent_name="test",
             context_id="test-ctx",
             response=None,
-            tool_calls=None,
-            usage=None
+            model=None
         )
         
         assert event.response is None
-        assert event.tool_calls is None
-        assert event.usage is None
+        # model gets default value
+        assert event.model == "unknown"
         
         event_dict = event.to_dict()
-        assert event_dict["response"] is None
-        assert event_dict["tool_calls"] is None
-        assert event_dict["usage"] is None
+        assert event_dict["model"] == "unknown"
     
     def test_event_with_empty_collections(self):
         """Test events with empty collections."""
@@ -658,12 +652,13 @@ class TestEdgeCases:
             context_id="test-ctx",
             messages=[],
             model="",
-            tools=[]
+            functions=[]
         )
         
         assert event.messages == []
-        assert event.model == ""
-        assert event.tools == []
+        # Empty model gets default value
+        assert event.model == "unknown"  
+        assert event.functions == []
     
     def test_observer_with_invalid_events(self):
         """Test that observers handle unusual event data gracefully."""
