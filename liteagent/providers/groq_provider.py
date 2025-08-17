@@ -69,11 +69,20 @@ class GroqProvider(ProviderInterface):
         start_time = time.time()
         self._log_request(messages, tools)
         
+        # Filter out unsupported parameters for Groq
+        supported_params = {
+            'temperature', 'max_tokens', 'top_p', 'stream', 'stop',
+            'frequency_penalty', 'presence_penalty', 'n', 'user',
+            'response_format', 'seed', 'max_completion_tokens'
+        }
+        
+        filtered_kwargs = {k: v for k, v in kwargs.items() if k in supported_params}
+        
         # Prepare request parameters
         request_params = {
             'model': self.model_name,
             'messages': messages,
-            **kwargs  # Include any additional parameters
+            **filtered_kwargs  # Include only supported parameters
         }
         
         # Add tools if provided and model supports them

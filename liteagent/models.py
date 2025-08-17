@@ -39,13 +39,14 @@ class ModelInterface(ABC):
         logger.info(f"Initialized {self.provider.provider_name} model interface for {model_name}")
         
     @abstractmethod
-    def generate_response(self, messages: List[Dict], functions: Optional[List[Dict]] = None) -> Any:
+    def generate_response(self, messages: List[Dict], functions: Optional[List[Dict]] = None, **kwargs) -> Any:
         """
         Generate a response from the model.
         
         Args:
             messages: List of message dictionaries
             functions: Optional list of function definitions
+            **kwargs: Additional parameters (e.g. enable_caching)
             
         Returns:
             The model's response
@@ -123,13 +124,15 @@ class UnifiedModelInterface(ModelInterface):
     This is the main interface that should be used by agents.
     """
     
-    def generate_response(self, messages: List[Dict], functions: Optional[List[Dict]] = None) -> ProviderResponse:
+    def generate_response(self, messages: List[Dict], functions: Optional[List[Dict]] = None, enable_caching: bool = False, **kwargs) -> ProviderResponse:
         """
         Generate a response from the model.
         
         Args:
             messages: List of message dictionaries
             functions: Optional list of function definitions
+            enable_caching: Whether to enable caching (for supported models)
+            **kwargs: Additional parameters to pass to the provider
             
         Returns:
             ProviderResponse: Standardized response object
@@ -139,8 +142,12 @@ class UnifiedModelInterface(ModelInterface):
         if functions:
             tools = self._convert_functions_to_tools(functions)
             
+        # Merge enable_caching with other kwargs
+        provider_kwargs = kwargs.copy()
+        provider_kwargs['enable_caching'] = enable_caching
+            
         # Generate response using the provider
-        response = self.provider.generate_response(messages, tools)
+        response = self.provider.generate_response(messages, tools, **provider_kwargs)
         
         return response
         
