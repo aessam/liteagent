@@ -50,6 +50,7 @@ class ProviderFactory:
         
         # Mistral models
         'mistral': 'mistral',
+        'open-mixtral': 'mistral',  # For models like open-mixtral-8x22b
         
         # DeepSeek models
         'deepseek': 'deepseek',

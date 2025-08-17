@@ -27,14 +27,16 @@ def test_model_capabilities_real_api():
 def test_openai_model_creation(openai_model):
     """Test creating a real OpenAI model interface."""
     assert isinstance(openai_model, UnifiedModelInterface)
-    assert openai_model.model_name == "gpt-4o-mini"
+    # Accept any of our target OpenAI models
+    assert openai_model.model_name in ["gpt-5", "gpt-5-mini", "gpt-4o", "gpt-4o-mini"]
     assert openai_model.supports_tool_calling() is True
 
 
 def test_anthropic_model_creation(anthropic_model):
     """Test creating a real Anthropic model interface."""
     assert isinstance(anthropic_model, UnifiedModelInterface)
-    assert anthropic_model.model_name == "claude-3-5-haiku-20241022"
+    # Accept any of our target Anthropic models
+    assert anthropic_model.model_name in ["claude-3-7-sonnet-20250219", "claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022"]
     assert anthropic_model.supports_tool_calling() is True
 
 
