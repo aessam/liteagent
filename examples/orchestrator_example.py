@@ -45,6 +45,7 @@ class WebSearchAgent:
             model=model,
             name="web-search-agent",
             api_key=api_key,
+            provider=provider,
             tools=[self._search_duckduckgo],
             system_prompt="""You are a specialized web search agent. Your only job is to search the web using DuckDuckGo and return well-formatted results.
 
@@ -60,7 +61,7 @@ Be helpful and thorough in your search results."""
     def _search_duckduckgo(self, query: str) -> str:
         """Search the web using DuckDuckGo."""
         try:
-            from duckduckgo_search import DDGS
+            from ddgs import DDGS
             
             print(f"🔍 [Web Search Agent] Searching for: '{query}'")
             
@@ -83,7 +84,7 @@ Be helpful and thorough in your search results."""
             return f"Web search results for '{query}':\n\n{search_summary}"
             
         except ImportError:
-            return "Error: duckduckgo-search library not installed. Install with: pip install duckduckgo-search"
+            return "Error: ddgs library not installed. Install with: pip install ddgs"
         except Exception as e:
             return f"Error during web search: {str(e)}"
     
@@ -100,6 +101,7 @@ class FileAgent:
             model=model,
             name="file-agent",
             api_key=api_key,
+            provider=provider,
             tools=[self._read_file, self._grep_files, self._find_files, self._list_directory],
             system_prompt="""You are a specialized file operations agent. Your job is to help with file-related tasks.
 
@@ -373,6 +375,7 @@ Always be helpful, clear, and explain your actions."""
         model=model,
         name="orchestrator",
         api_key=api_key,
+        provider=provider,
         tools=[search_web, call_file_agent],
         system_prompt=system_prompt
     )
@@ -401,11 +404,12 @@ Examples:
   python examples/orchestrator_example.py -p anthropic -m claude-3-5-sonnet-20241022
   python examples/orchestrator_example.py -p groq -m qwen/qwen3-32b
   python examples/orchestrator_example.py -p mistral -m open-mixtral-8x22b
+  python examples/orchestrator_example.py -p ollama -m gpt-oss:20b
         """
     )
     
     parser.add_argument("-p", "--provider", required=True, 
-                       choices=["openai", "anthropic", "groq", "mistral", "deepseek"],
+                       choices=["openai", "anthropic", "groq", "mistral", "deepseek", "ollama"],
                        help="AI provider to use")
     parser.add_argument("-m", "--model", required=True,
                        help="Model name to use")
@@ -415,7 +419,11 @@ Examples:
     
     # Get API key
     api_key = args.api_key
-    if not api_key:
+    
+    # Ollama is local and doesn't need an API key
+    if args.provider == "ollama":
+        api_key = "local"  # Placeholder for local provider
+    elif not api_key:
         env_vars = {
             "openai": "OPENAI_API_KEY",
             "anthropic": "ANTHROPIC_API_KEY", 

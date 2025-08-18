@@ -61,6 +61,7 @@ class ProviderFactory:
         cls, 
         model_name: str, 
         api_key: Optional[str] = None,
+        provider: Optional[str] = None,
         **kwargs
     ) -> ProviderInterface:
         """
@@ -69,6 +70,7 @@ class ProviderFactory:
         Args:
             model_name: Full model name (may include provider prefix)
             api_key: API key for the provider
+            provider: Explicit provider name (overrides auto-detection)
             **kwargs: Additional provider-specific configuration
             
         Returns:
@@ -77,7 +79,13 @@ class ProviderFactory:
         Raises:
             ValueError: If the provider cannot be determined or is not supported
         """
-        provider_name, clean_model_name = cls._parse_model_name(model_name)
+        if provider:
+            # Use explicit provider, skip auto-detection
+            provider_name = provider
+            clean_model_name = model_name
+        else:
+            # Auto-detect provider from model name
+            provider_name, clean_model_name = cls._parse_model_name(model_name)
         
         if provider_name not in cls.PROVIDER_MAP:
             raise ValueError(f"Unsupported provider: {provider_name}")
@@ -243,16 +251,17 @@ class ProviderFactory:
 
 
 # Convenience function for creating providers
-def create_provider(model_name: str, api_key: Optional[str] = None, **kwargs) -> ProviderInterface:
+def create_provider(model_name: str, api_key: Optional[str] = None, provider: Optional[str] = None, **kwargs) -> ProviderInterface:
     """
     Convenience function to create a provider.
     
     Args:
         model_name: Model name (with or without provider prefix)
         api_key: API key for the provider
+        provider: Explicit provider name (overrides auto-detection)
         **kwargs: Additional provider configuration
         
     Returns:
         ProviderInterface: The appropriate provider instance
     """
-    return ProviderFactory.create_provider(model_name, api_key, **kwargs)
+    return ProviderFactory.create_provider(model_name, api_key, provider=provider, **kwargs)

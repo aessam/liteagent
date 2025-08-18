@@ -170,12 +170,12 @@ class TestMemoryModelTypes:
             # Set up mock to return a canned response
             mock_chat.return_value = "The weather in San Francisco is sunny and 72°F."
             
-            # Create the agent with text-based tool calling
-            with patch("liteagent.models.get_tool_calling_type") as mock_get_type:
-                mock_get_type.return_value = ToolCallingType.TEXT_BASED
+            # Create the agent with basic tool calling
+            with patch("liteagent.tool_calling_types.get_tool_calling_type") as mock_get_type:
+                mock_get_type.return_value = ToolCallingType.BASIC
                 
                 agent = LiteAgent(
-                    model="open-mistral",
+                    model="mistral/open-mistral",
                     name="weather-agent",
                     system_prompt=system_prompt,
                     tools=[FunctionTool(get_weather)],

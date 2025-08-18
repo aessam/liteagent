@@ -17,13 +17,14 @@ from .utils import logger
 class ModelInterface(ABC):
     """Abstract base class for model interfaces."""
     
-    def __init__(self, model_name: str, api_key: Optional[str] = None, **kwargs):
+    def __init__(self, model_name: str, api_key: Optional[str] = None, provider: Optional[str] = None, **kwargs):
         """
         Initialize the model interface.
         
         Args:
             model_name: Name of the model to use
             api_key: API key for the provider
+            provider: Explicit provider name (overrides auto-detection)
             **kwargs: Provider-specific configuration
         """
         self.model_name = model_name
@@ -34,7 +35,7 @@ class ModelInterface(ABC):
         self.capabilities = get_model_capabilities(model_name)
         
         # Create the appropriate provider
-        self.provider = create_provider(model_name, api_key, **kwargs)
+        self.provider = create_provider(model_name, api_key, provider=provider, **kwargs)
         
         logger.info(f"Initialized {self.provider.provider_name} model interface for {model_name}")
         
@@ -221,19 +222,20 @@ class LiteLLMInterface(UnifiedModelInterface):
         return self.provider.generate_response(messages, tools, **other_params)
 
 
-def create_model_interface(model_name: str, api_key: Optional[str] = None, **kwargs) -> ModelInterface:
+def create_model_interface(model_name: str, api_key: Optional[str] = None, provider: Optional[str] = None, **kwargs) -> ModelInterface:
     """
     Create a model interface for the given model.
     
     Args:
         model_name: Name of the model
         api_key: API key for the provider
+        provider: Explicit provider name (overrides auto-detection)
         **kwargs: Additional configuration
         
     Returns:
         ModelInterface: The appropriate model interface
     """
-    return UnifiedModelInterface(model_name, api_key, **kwargs)
+    return UnifiedModelInterface(model_name, api_key, provider=provider, **kwargs)
 
 
 def create_legacy_interface(model_name: str, drop_params: bool = True, **kwargs) -> LiteLLMInterface:

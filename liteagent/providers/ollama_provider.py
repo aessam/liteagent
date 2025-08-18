@@ -193,10 +193,19 @@ If you don't need to use any tools, respond normally without the JSON format.
         # Check for native tool calls first
         if 'tool_calls' in message:
             for tc in message['tool_calls']:
+                # Parse arguments if they're a JSON string
+                arguments = tc['function']['arguments']
+                if isinstance(arguments, str):
+                    try:
+                        arguments = json.loads(arguments)
+                    except json.JSONDecodeError:
+                        logger.warning(f"Failed to parse tool call arguments: {arguments}")
+                        arguments = {}
+                
                 tool_calls.append(ToolCall(
                     id=tc.get('id', f"ollama_tool_{len(tool_calls)}"),
                     name=tc['function']['name'],
-                    arguments=tc['function']['arguments']
+                    arguments=arguments
                 ))
         elif tools and content:
             # Extract tool calls from text for non-native models

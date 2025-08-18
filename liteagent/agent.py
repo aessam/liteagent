@@ -35,7 +35,7 @@ If you've already received the information you need from a tool call, use that i
 to provide a final text response to the user."""
 
     def __init__(self, model, name, system_prompt=None, tools=None, debug=False, 
-                 api_key=None, parent_context_id=None, context_id=None, observers=None, 
+                 api_key=None, provider=None, parent_context_id=None, context_id=None, observers=None, 
                  description=None, **kwargs):
         """
         Initialize the LiteAgent.
@@ -47,6 +47,7 @@ to provide a final text response to the user."""
             tools (list, optional): List of tool functions to use. If None, uses all globally registered tools.
             debug (bool, optional): Whether to print debug information. Defaults to False.
             api_key (str, optional): API key for the provider
+            provider (str, optional): Explicit provider name (overrides auto-detection)
             parent_context_id (str, optional): Parent context ID if this agent was created by another agent.
             context_id (str, optional): Context ID for this agent. If None, a new ID will be generated.
             observers (list, optional): List of observers to notify of agent events.
@@ -69,7 +70,7 @@ to provide a final text response to the user."""
                      f"parallel_tools={self.capabilities.supports_parallel_tools}")
         
         # Initialize the model interface
-        self.model_interface = create_model_interface(model, api_key, **kwargs)
+        self.model_interface = create_model_interface(model, api_key, provider=provider, **kwargs)
         
         # Initialize memory
         self.memory = ConversationMemory(system_prompt=self.system_prompt)

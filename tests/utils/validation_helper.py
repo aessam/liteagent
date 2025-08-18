@@ -9,6 +9,7 @@ import re
 from typing import Dict, List, Any, Optional, Union
 
 from liteagent.capabilities import ModelCapabilities
+from liteagent.tool_calling_types import ToolCallingType, get_tool_calling_type
 
 
 class ValidationTestHelper:
@@ -102,7 +103,7 @@ class ValidationTestHelper:
         return prompt
     
     @staticmethod
-    def register_parsers_for_type(validation_observer: Any, model_capabilities: ModelCapabilities, tool_names: List[str]):
+    def register_parsers_for_type(validation_observer: Any, tool_calling_type: ToolCallingType, tool_names: List[str]):
         """
         Register appropriate parsers for the tools based on the tool calling type.
         
@@ -111,22 +112,16 @@ class ValidationTestHelper:
             tool_calling_type: The tool calling type
             tool_names: List of tool names
         """
+        # For provider-specific logic, we would need to derive provider from tool_calling_type
+        # For now, we'll use generic parsing since we don't have model info here
+        provider = "generic"
+        
         for tool_name in tool_names:
             if tool_name == "get_weather":
-                if tool_calling_type == ToolCallingType.OPENAI:
-                    validation_observer.register_response_parser(
-                        r"weather\s+in\s+([A-Za-z\s]+).*?(\d+)[°℃C].*?(\w+)",
-                        lambda m: {"city": m.group(1), "temperature": m.group(2), "condition": m.group(3)}
-                    )
-                elif tool_calling_type == ToolCallingType.ANTHROPIC:
-                    validation_observer.register_response_parser(
-                        r"weather\s+in\s+([A-Za-z\s]+).*?(\d+)[°℃C].*?(\w+)",
-                        lambda m: {"city": m.group(1), "temperature": m.group(2), "condition": m.group(3)}
-                    )
-                else:
-                    validation_observer.register_response_parser(
-                        "get_weather", ValidationTestHelper.parse_weather_response_default
-                    )
+                # Use generic weather response parsing for all providers
+                validation_observer.register_response_parser(
+                    "get_weather", ValidationTestHelper.parse_weather_response_default
+                )
             elif tool_name == "add_numbers":
                 validation_observer.register_response_parser(
                     r"(sum|add|total|addition).*?(\d+).*?(\d+).*?=?\s*(\d+)",
