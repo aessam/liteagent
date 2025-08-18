@@ -13,9 +13,27 @@ import statistics
 
 from liteagent.agent import LiteAgent
 from liteagent import liteagent_tool
-from liteagent.examples import (
-    get_weather, add_numbers, search_database, calculate_area
-)
+
+# Define test tools directly instead of importing from broken examples module
+@liteagent_tool
+def get_weather(city: str, date: str = "today") -> str:
+    """Get weather information for a city."""
+    return f"Weather in {city} on {date}: Sunny, 22°C"
+
+@liteagent_tool
+def add_numbers(a: int, b: int) -> int:
+    """Add two numbers together."""
+    return a + b
+
+@liteagent_tool
+def search_database(query: str, limit: int = 10) -> list:
+    """Search database for information."""
+    return [{"id": i, "title": f"Result {i} for {query}"} for i in range(1, min(limit + 1, 4))]
+
+@liteagent_tool
+def calculate_area(length: float, width: float) -> float:
+    """Calculate area of a rectangle."""
+    return length * width
 
 from tests.integration.validation_observer import ValidationObserver
 

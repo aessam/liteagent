@@ -1,0 +1,11 @@
+# Optional dependencies for examples
+# Install with: pip install -r examples/requirements-examples.txt
+
+# For .env file support (recommended)
+python-dotenv>=1.0.0
+
+# For web search functionality in orchestrator example
+duckduckgo-search>=6.0.0
+
+# For enhanced file operations (optional)
+python-magic>=0.4.27
