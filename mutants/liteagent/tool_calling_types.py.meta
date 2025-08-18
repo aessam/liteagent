@@ -1,0 +1,10 @@
+{
+    "exit_code_by_key": {
+        "liteagent.tool_calling_types.x_get_tool_calling_type__mutmut_1": null,
+        "liteagent.tool_calling_types.x_get_tool_calling_type__mutmut_2": null,
+        "liteagent.tool_calling_types.x_get_tool_calling_type__mutmut_3": null,
+        "liteagent.tool_calling_types.x_get_tool_calling_type__mutmut_4": null,
+        "liteagent.tool_calling_types.x_get_tool_calling_type__mutmut_5": null
+    },
+    "hash_by_function_name": {}
+}

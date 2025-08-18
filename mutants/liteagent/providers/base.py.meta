@@ -1,0 +1,31 @@
+{
+    "exit_code_by_key": {
+        "liteagent.providers.base.x\u01c1ProviderInterface\u01c1__init____mutmut_1": null,
+        "liteagent.providers.base.x\u01c1ProviderInterface\u01c1__init____mutmut_2": null,
+        "liteagent.providers.base.x\u01c1ProviderInterface\u01c1__init____mutmut_3": null,
+        "liteagent.providers.base.x\u01c1ProviderInterface\u01c1__init____mutmut_4": null,
+        "liteagent.providers.base.x\u01c1ProviderInterface\u01c1_log_request__mutmut_1": null,
+        "liteagent.providers.base.x\u01c1ProviderInterface\u01c1_log_request__mutmut_2": null,
+        "liteagent.providers.base.x\u01c1ProviderInterface\u01c1_log_request__mutmut_3": null,
+        "liteagent.providers.base.x\u01c1ProviderInterface\u01c1_log_request__mutmut_4": null,
+        "liteagent.providers.base.x\u01c1ProviderInterface\u01c1_log_request__mutmut_5": null,
+        "liteagent.providers.base.x\u01c1ProviderInterface\u01c1_log_request__mutmut_6": null,
+        "liteagent.providers.base.x\u01c1ProviderInterface\u01c1_log_request__mutmut_7": null,
+        "liteagent.providers.base.x\u01c1ProviderInterface\u01c1_log_request__mutmut_8": null,
+        "liteagent.providers.base.x\u01c1ProviderInterface\u01c1_log_request__mutmut_9": null,
+        "liteagent.providers.base.x\u01c1ProviderInterface\u01c1_log_request__mutmut_10": null,
+        "liteagent.providers.base.x\u01c1ProviderInterface\u01c1_log_request__mutmut_11": null,
+        "liteagent.providers.base.x\u01c1ProviderInterface\u01c1_log_request__mutmut_12": null,
+        "liteagent.providers.base.x\u01c1ProviderInterface\u01c1_log_request__mutmut_13": null,
+        "liteagent.providers.base.x\u01c1ProviderInterface\u01c1_log_request__mutmut_14": null,
+        "liteagent.providers.base.x\u01c1ProviderInterface\u01c1_log_request__mutmut_15": null,
+        "liteagent.providers.base.x\u01c1ProviderInterface\u01c1_log_request__mutmut_16": null,
+        "liteagent.providers.base.x\u01c1ProviderInterface\u01c1_log_request__mutmut_17": null,
+        "liteagent.providers.base.x\u01c1ProviderInterface\u01c1_log_request__mutmut_18": null,
+        "liteagent.providers.base.x\u01c1ProviderInterface\u01c1_log_request__mutmut_19": null,
+        "liteagent.providers.base.x\u01c1ProviderInterface\u01c1_log_response__mutmut_1": null,
+        "liteagent.providers.base.x\u01c1ProviderInterface\u01c1_log_response__mutmut_2": null,
+        "liteagent.providers.base.x\u01c1ProviderInterface\u01c1_log_response__mutmut_3": null
+    },
+    "hash_by_function_name": {}
+}
