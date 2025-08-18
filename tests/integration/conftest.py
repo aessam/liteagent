@@ -49,29 +49,46 @@ def pytest_configure(config):
 
 
 @pytest.fixture
-def validation_observer():
+def validation_observer(model):
     """
-    Fixture that provides a ValidationObserver instance.
+    Fixture that provides a ValidationObserver instance with pre-configured parsers.
     
     The ValidationObserver is reset before each test to ensure a clean state.
     """
+    from liteagent.tool_calling_types import get_tool_calling_type
+    from tests.utils.validation_helper import ValidationTestHelper
+    
     observer = ValidationObserver()
+    
+    # Extract model name from tuple for tool calling type detection
+    provider, model_name = model
+    
+    # Pre-configure validation strategy and parsers based on model
+    tool_calling_type = get_tool_calling_type(model_name)
+    observer.set_validation_strategy(tool_calling_type)
+    
+    # Register parsers for common tools used in tests
+    common_tools = ["get_weather", "add_numbers", "multiply_numbers", "get_user_data", "calculate_area"]
+    ValidationTestHelper.register_parsers_for_type(
+        observer, 
+        tool_calling_type, 
+        common_tools
+    )
+    
     yield observer
     # Reset the observer after each test
     observer.reset()
 
 
 # Standard set of models to test across all providers
+# Using (provider, model) tuples
 STANDARD_TEST_MODELS = [
-    "openai/gpt-5",
-    "openai/gpt-5-nano",
-    "openai/gpt-5-mini",
-    "anthropic/claude-3-7-sonnet-20250219",
-    "anthropic/claude-3-5-sonnet-20241022",
-    "groq/qwen3-32b",
-    "mistral/open-mixtral-8x22b",
-    "deepseek/deepseek-chat",
-    "ollama/gpt-oss:20b"
+    ("openai", "gpt-5-nano"),
+    ("anthropic", "claude-3-7-sonnet-20250219"), 
+    ("groq", "llama3-70b-8192"),
+    ("mistral", "mistral-large-latest"),
+    ("deepseek", "deepseek-chat"),
+    ("ollama", "gpt-oss:20b")
 ]
 
 
@@ -84,21 +101,21 @@ def model(request):
     is not available or required dependencies are not installed.
     
     Returns:
-        str: The model name to use for testing
+        tuple: (provider, model_name) tuple for testing
     """
-    model_name = request.param
+    provider, model_name = request.param
     
     # Skip if API key not available or required dependencies missing
-    if not ValidationTestHelper.has_api_key_for_model(model_name):
-        print(f"DEBUG: Skipping test for {model_name} due to missing API key")
-        pytest.skip(f"API key for {model_name} not available")
+    if not ValidationTestHelper.has_api_key_for_model(f"{provider}/{model_name}"):
+        print(f"DEBUG: Skipping test for {provider}/{model_name} due to missing API key")
+        pytest.skip(f"API key for {provider} not available")
     
     # Skip Ollama tests if Ollama is not installed
-    if model_name.startswith("ollama/") and os.system("which ollama > /dev/null 2>&1") != 0:
-        print(f"DEBUG: Skipping test for {model_name} due to missing Ollama installation")
+    if provider == "ollama" and os.system("which ollama > /dev/null 2>&1") != 0:
+        print(f"DEBUG: Skipping test for {provider}/{model_name} due to missing Ollama installation")
         pytest.skip("Ollama is not installed or not in PATH")
     
-    return model_name
+    return (provider, model_name)
 
 
 @pytest.fixture
@@ -110,7 +127,7 @@ def configured_agent(model, validation_observer, tools, system_prompt):
     to create a fully configured agent ready for testing.
     
     Args:
-        model: The model name to use
+        model: (provider, model_name) tuple
         validation_observer: The validation observer to attach
         tools: The tools to provide to the agent
         system_prompt: The system prompt to use
@@ -118,13 +135,16 @@ def configured_agent(model, validation_observer, tools, system_prompt):
     Returns:
         LiteAgent: A configured agent ready for testing
     """
+    provider, model_name = model
+    
     # Create agent with specified configuration
     agent = LiteAgent(
-        model=model,
-        name=f"TestAgent_{model.replace('/', '_')}",
+        model=model_name,
+        name=f"TestAgent_{provider}_{model_name.replace(':', '_').replace('/', '_')}",
         system_prompt=system_prompt,
         tools=tools,
-        observers=[validation_observer]
+        observers=[validation_observer],
+        provider=provider  # Explicit provider from tuple
     )
     
     return agent

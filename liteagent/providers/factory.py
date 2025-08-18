@@ -59,7 +59,7 @@ class ProviderFactory:
     @classmethod
     def create_provider(
         cls, 
-        model_name: str, 
+        model_name, 
         api_key: Optional[str] = None,
         provider: Optional[str] = None,
         **kwargs
@@ -68,7 +68,7 @@ class ProviderFactory:
         Create the appropriate provider for the given model.
         
         Args:
-            model_name: Full model name (may include provider prefix)
+            model_name: Full model name (string) or (provider, model) tuple
             api_key: API key for the provider
             provider: Explicit provider name (overrides auto-detection)
             **kwargs: Additional provider-specific configuration
@@ -79,7 +79,15 @@ class ProviderFactory:
         Raises:
             ValueError: If the provider cannot be determined or is not supported
         """
-        if provider:
+        # Handle tuple input: (provider, model_name)
+        if isinstance(model_name, tuple):
+            tuple_provider, tuple_model_name = model_name
+            # Use tuple provider if no explicit provider given
+            if not provider:
+                provider = tuple_provider
+            clean_model_name = tuple_model_name
+            provider_name = provider
+        elif provider:
             # Use explicit provider, skip auto-detection
             provider_name = provider
             clean_model_name = model_name
@@ -123,6 +131,9 @@ class ProviderFactory:
                 # Special case: for Groq models like qwen/qwen3-32b, keep the full name
                 if provider == 'qwen':
                     return 'groq', model_name  # Use 'groq' provider but keep full model name
+                # Special case: for groq/qwen3-32b format, extract just the model name
+                elif provider == 'groq' and 'qwen' in clean_name:
+                    return provider, clean_name  # Return clean model name without provider prefix
                 return provider, clean_name
             else:
                 raise ValueError(f"Unknown provider prefix: {provider}")
@@ -251,12 +262,12 @@ class ProviderFactory:
 
 
 # Convenience function for creating providers
-def create_provider(model_name: str, api_key: Optional[str] = None, provider: Optional[str] = None, **kwargs) -> ProviderInterface:
+def create_provider(model_name, api_key: Optional[str] = None, provider: Optional[str] = None, **kwargs) -> ProviderInterface:
     """
     Convenience function to create a provider.
     
     Args:
-        model_name: Model name (with or without provider prefix)
+        model_name: Model name (string) or (provider, model) tuple
         api_key: API key for the provider
         provider: Explicit provider name (overrides auto-detection)
         **kwargs: Additional provider configuration

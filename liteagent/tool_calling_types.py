@@ -18,12 +18,12 @@ class ToolCallingType(Enum):
     ADVANCED = "advanced"
 
 
-def get_tool_calling_type(model_name: str) -> ToolCallingType:
+def get_tool_calling_type(model_name) -> ToolCallingType:
     """
     Get the tool calling type for a given model.
     
     Args:
-        model_name: Name of the model
+        model_name: Name of the model (string) or (provider, model) tuple
         
     Returns:
         ToolCallingType: The tool calling capability type

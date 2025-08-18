@@ -108,7 +108,7 @@ class CapabilityDetector:
                 logger.warning(f"Failed to refresh model capabilities: {e}")
                 if not self._capability_cache:
                     # Fall back to static capabilities if cache is empty
-                    self._load_static_capabilities()
+                    logger.warning("Failed to fetch from models.dev API, no static fallback available")
                     
     def _fetch_models_data(self) -> None:
         """Fetch model data from models.dev API."""
@@ -253,33 +253,20 @@ class CapabilityDetector:
                     
         return None
         
-    def _load_static_capabilities(self) -> None:
-        """Load static fallback capabilities."""
-        # Fallback static capabilities for common models
-        static_capabilities = [
-            ModelCapabilities("gpt-4o", "GPT-4o", "openai", True, True, True, 128000, 4096),
-            ModelCapabilities("gpt-4o-mini", "GPT-4o Mini", "openai", True, True, True, 128000, 16384),
-            ModelCapabilities("gpt-3.5-turbo", "GPT-3.5 Turbo", "openai", True, False, False, 16385, 4096),
-            ModelCapabilities("claude-3-5-sonnet-20241022", "Claude 3.5 Sonnet", "anthropic", True, True, True, 200000, 4096),
-            ModelCapabilities("claude-3-5-haiku-20241022", "Claude 3.5 Haiku", "anthropic", True, True, True, 200000, 4096),
-            ModelCapabilities("qwen3-32b", "Llama 3.1 70B", "groq", True, True, False, 131072, 8000),
-            ModelCapabilities("mixtral-8x7b-32768", "Mixtral 8x7B", "groq", True, False, False, 32768, 8000),
-            ModelCapabilities("mistral-large-latest", "Mistral Large", "mistral", True, True, False, 128000, 8192),
-        ]
-        
-        for cap in static_capabilities:
-            self._capability_cache[cap.model_id] = cap
-            self._add_model_aliases(cap.model_id, cap)
-            
-        logger.info("Loaded static model capabilities as fallback")
 
 
 # Global instance
 _capability_detector = CapabilityDetector()
 
-def get_model_capabilities(model_name: str) -> Optional[ModelCapabilities]:
+def get_model_capabilities(model_name) -> Optional[ModelCapabilities]:
     """Get capabilities for a model (convenience function)."""
-    return _capability_detector.get_model_capabilities(model_name)
+    # Handle both string and tuple inputs
+    if isinstance(model_name, tuple):
+        provider, actual_model_name = model_name
+        # Use the actual model name for capability lookup
+        return _capability_detector.get_model_capabilities(actual_model_name)
+    else:
+        return _capability_detector.get_model_capabilities(model_name)
 
 def get_tool_calling_models() -> List[ModelCapabilities]:
     """Get all models that support tool calling (convenience function)."""

@@ -91,3 +91,33 @@ class ToolCallTracker:
     def unique_tools_called(self) -> List[str]:
         """Get list of unique tool names that were called."""
         return list(self._call_counts.keys())
+    
+    def get_tool_args(self, tool_name: str) -> Optional[Dict[str, Any]]:
+        """
+        Get the arguments from the most recent call to a tool.
+        
+        Args:
+            tool_name: Name of the tool
+            
+        Returns:
+            Dict containing the arguments, or None if tool wasn't called
+        """
+        calls = self.get_calls_for_tool(tool_name)
+        if calls:
+            return calls[-1].arguments
+        return None
+    
+    def get_tool_result(self, tool_name: str) -> Any:
+        """
+        Get the result from the most recent call to a tool.
+        
+        Args:
+            tool_name: Name of the tool
+            
+        Returns:
+            The result of the most recent call, or None if tool wasn't called
+        """
+        calls = self.get_calls_for_tool(tool_name)
+        if calls:
+            return calls[-1].result
+        return None

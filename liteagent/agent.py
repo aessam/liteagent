@@ -19,6 +19,7 @@ from .utils import logger
 from .observer import (AgentObserver, AgentEvent, AgentInitializedEvent, UserMessageEvent, 
                       ModelRequestEvent, ModelResponseEvent, FunctionCallEvent, 
                       FunctionResultEvent, AgentResponseEvent, generate_context_id)
+from .tool_calling import ToolCallTracker
 
 
 class LiteAgent:
@@ -56,11 +57,7 @@ to provide a final text response to the user."""
         """
         self.model = model
         self.name = name
-        # Combine custom prompt with default termination logic
-        if system_prompt:
-            self.system_prompt = f"{system_prompt}\n\n{self.DEFAULT_SYSTEM_PROMPT}"
-        else:
-            self.system_prompt = self.DEFAULT_SYSTEM_PROMPT
+        self.system_prompt = system_prompt or self.DEFAULT_SYSTEM_PROMPT
         self.debug = debug
         self.api_key = api_key
         self.parent_context_id = parent_context_id
@@ -414,14 +411,43 @@ to provide a final text response to the user."""
             
         tool_instance = self.tool_instances[tool_name]
         
-        if hasattr(tool_instance, 'execute'):
-            # For tool objects
-            return tool_instance.execute(**arguments)
-        elif callable(tool_instance):
-            # For function objects
-            return tool_instance(**arguments)
-        else:
-            raise ValueError(f"Tool {tool_name} is not executable")
+        start_time = time.time()
+        result = None
+        error = None
+        
+        try:
+            if hasattr(tool_instance, 'execute'):
+                # For tool objects
+                result = tool_instance.execute(**arguments)
+            elif callable(tool_instance):
+                # For function objects
+                result = tool_instance(**arguments)
+            else:
+                raise ValueError(f"Tool {tool_name} is not executable")
+            
+            # Record successful tool call
+            execution_time = time.time() - start_time
+            ToolCallTracker.get_instance().record_call(
+                name=tool_name,
+                arguments=arguments,
+                result=result,
+                execution_time=execution_time
+            )
+            
+            return result
+            
+        except Exception as e:
+            # Record failed tool call
+            execution_time = time.time() - start_time
+            error_msg = str(e)
+            ToolCallTracker.get_instance().record_call(
+                name=tool_name,
+                arguments=arguments,
+                result=None,
+                execution_time=execution_time,
+                error=error_msg
+            )
+            raise  # Re-raise the original exception
     
     def _log(self, message: str) -> None:
         """
