@@ -46,6 +46,7 @@ class WebSearchAgent:
             name="web-search-agent",
             api_key=api_key,
             provider=provider,
+            debug=True,
             tools=[self._search_duckduckgo],
             system_prompt="""You are a specialized web search agent. Your only job is to search the web using DuckDuckGo and return well-formatted results.
 
@@ -102,6 +103,7 @@ class FileAgent:
             name="file-agent",
             api_key=api_key,
             provider=provider,
+            debug=True,
             tools=[self._read_file, self._grep_files, self._find_files, self._list_directory],
             system_prompt="""You are a specialized file operations agent. Your job is to help with file-related tasks.
 
@@ -376,6 +378,7 @@ Always be helpful, clear, and explain your actions."""
         name="orchestrator",
         api_key=api_key,
         provider=provider,
+        debug=True,
         tools=[search_web, call_file_agent],
         system_prompt=system_prompt
     )

@@ -66,9 +66,12 @@ class OllamaProvider(ProviderInterface):
         self._log_request(messages, tools)
         
         # Prepare request parameters
+        # Preprocess messages to convert tool call arguments from strings to dicts for Ollama
+        processed_messages = self._preprocess_messages_for_ollama(messages)
+        
         request_params = {
             'model': self.model_name,
-            'messages': messages,
+            'messages': processed_messages,
             'stream': False,  # We want complete responses
         }
         
@@ -84,16 +87,13 @@ class OllamaProvider(ProviderInterface):
         if options:
             request_params['options'] = options
             
-        # Handle tools for Ollama (embed in system prompt for non-tool-native models)
+        # Handle tools for Ollama using native tool calling
         if tools and self.supports_tool_calling():
-            # For Ollama, we need to check if the model supports native tool calling
-            if self._supports_native_tools():
-                request_params['tools'] = self._convert_tools(tools)
-            else:
-                # Embed tools in system prompt for models without native support
-                messages = self._embed_tools_in_prompt(messages, tools)
-                request_params['messages'] = messages
+            request_params['tools'] = self._convert_tools(tools)
                 
+        # Debug: Log the processed messages before API call
+        logger.debug(f"Ollama API call with processed messages: {json.dumps(processed_messages, indent=2)}")
+        
         # Make the API call
         response = self.client.chat(**request_params)
         
@@ -107,11 +107,8 @@ class OllamaProvider(ProviderInterface):
             
     def _supports_native_tools(self) -> bool:
         """Check if the model supports native tool calling."""
-        # Some newer Ollama models support native tools
-        native_tool_models = [
-            'llama3.1', 'llama3.2', 'mistral-nemo', 'qwen2.5'
-        ]
-        return any(model in self.model_name.lower() for model in native_tool_models)
+        # Modern Ollama supports tool calling for most models
+        return True
         
     def _convert_tools(self, tools: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Convert tool definitions to Ollama format."""
@@ -161,6 +158,42 @@ If you don't need to use any tools, respond normally without the JSON format.
             modified_messages.insert(0, {'role': 'system', 'content': tool_prompt})
             
         return modified_messages
+    
+    def _preprocess_messages_for_ollama(self, messages: List[Dict]) -> List[Dict]:
+        """
+        Preprocess messages to ensure tool call arguments are dicts for Ollama client.
+        The memory stores arguments as JSON strings, but Ollama expects dicts.
+        """
+        processed_messages = []
+        
+        for message in messages:
+            # Deep copy the message to avoid modifying the original
+            processed_message = json.loads(json.dumps(message))
+            
+            # Check if this message has tool calls
+            if 'tool_calls' in processed_message and processed_message['tool_calls']:
+                for tool_call in processed_message['tool_calls']:
+                    # Convert arguments from string to dict if needed
+                    if 'function' in tool_call and 'arguments' in tool_call['function']:
+                        arguments = tool_call['function']['arguments']
+                        if isinstance(arguments, str):
+                            try:
+                                # Parse JSON string to dict
+                                parsed_args = json.loads(arguments)
+                                tool_call['function']['arguments'] = parsed_args
+                                logger.debug(f"Converted string arguments to dict: {arguments} -> {parsed_args}")
+                            except json.JSONDecodeError as e:
+                                logger.warning(f"Failed to parse tool call arguments '{arguments}': {e}")
+                                # Keep as empty dict if parsing fails
+                                tool_call['function']['arguments'] = {}
+                        elif not isinstance(arguments, dict):
+                            # Handle any other non-dict types
+                            logger.warning(f"Tool call arguments not string or dict: {type(arguments)} -> {arguments}")
+                            tool_call['function']['arguments'] = {}
+            
+            processed_messages.append(processed_message)
+        
+        return processed_messages
         
     def _extract_tool_calls_from_text(self, text: str) -> List[ToolCall]:
         """Extract tool calls from text response for non-native tool models."""
@@ -187,10 +220,9 @@ If you don't need to use any tools, respond normally without the JSON format.
         message = response.get('message', {})
         content = message.get('content', '')
         
-        # Extract tool calls
+        # Extract tool calls from native tool calling
         tool_calls = []
         
-        # Check for native tool calls first
         if 'tool_calls' in message:
             for tc in message['tool_calls']:
                 # Parse arguments if they're a JSON string
@@ -207,9 +239,6 @@ If you don't need to use any tools, respond normally without the JSON format.
                     name=tc['function']['name'],
                     arguments=arguments
                 ))
-        elif tools and content:
-            # Extract tool calls from text for non-native models
-            tool_calls = self._extract_tool_calls_from_text(content)
             
         # Extract usage info (Ollama provides token counts)
         usage = None
@@ -234,9 +263,9 @@ If you don't need to use any tools, respond normally without the JSON format.
         
     def supports_tool_calling(self) -> bool:
         """Check if the model supports tool calling."""
-        from ..capabilities import get_model_capabilities
-        capabilities = get_model_capabilities(self.model_name)
-        return capabilities.tool_calling if capabilities else False
+        # Ollama models can always support tool calling via prompt embedding
+        # even if they don't have native tool support or aren't in the capabilities database
+        return True
         
     def supports_parallel_tools(self) -> bool:
         """Check if the model supports parallel tool execution."""

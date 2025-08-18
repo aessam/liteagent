@@ -355,20 +355,24 @@ to provide a final text response to the user."""
                 agent_name=self.name,
                 context_id=self.context_id,
                 function_name=tool_call.name,
-                arguments=tool_call.arguments
+                function_args=tool_call.arguments
             ))
             
             # Check for repeated function calls
             if self.memory.is_function_call_loop(tool_call.name, tool_call.arguments):
                 logger.warning(f"Detected repeated function call: {tool_call.name} with args {tool_call.arguments}")
-                continue
+                # Add a message explaining the loop and return to break the cycle
+                loop_message = f"I detected that I'm repeatedly calling the same tool '{tool_call.name}' with the same arguments. Let me provide a response based on the information I already have."
+                return loop_message
             
             # Add tool call to memory
             self.memory.add_tool_call(tool_call.name, tool_call.arguments, tool_call.id)
             
             # Execute the tool
             try:
+                self._log(f"Executing tool: {tool_call.name} with args: {tool_call.arguments}")
                 result = self._execute_tool(tool_call.name, tool_call.arguments)
+                self._log(f"Tool {tool_call.name} result: {str(result)[:200]}...")
                 
                 # Emit function result event
                 self._emit_event(FunctionResultEvent(
