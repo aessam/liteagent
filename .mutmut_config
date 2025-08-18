@@ -1,0 +1,15 @@
+[mutmut]
+# Paths to mutate - focus on core logic
+paths_to_mutate = liteagent/
+# Test command to run for each mutation
+runner = python -m pytest tests/unit/ -x --tb=short --disable-warnings
+# Directories to exclude from mutation
+exclude_dirs = __pycache__,.git,.pytest_cache,build,dist
+# Files to exclude from mutation
+exclude_files = __init__.py,examples.py,cli_commands.py
+# Only mutate these types of files
+test_file_suffixes = .py
+# Timeout for each test run (in seconds)
+timeout = 300
+# Show progress
+progress = true
