@@ -5,6 +5,7 @@ This module provides example tool functions that can be used in tests.
 """
 
 import random
+import math
 from typing import Dict, Tuple
 
 
@@ -41,6 +42,11 @@ def add_numbers(a: int, b: int) -> int:
 def calculate_area(width: float, height: float) -> float:
     """Calculate the area of a rectangle."""
     return width * height
+
+
+def calculate_square_root(number: float) -> float:
+    """Calculate the square root of a number with high precision."""
+    return math.sqrt(number)
 
 
 def get_user_data(user_id: str) -> Dict:
@@ -97,6 +103,11 @@ class ToolsForAgents:
         """Multiplies two numbers together."""
         self._call_count += 1
         return a * b
+    
+    def calculate_square_root(self, number: float) -> float:
+        """Calculate the square root of a number with high precision."""
+        self._call_count += 1
+        return math.sqrt(number)
         
     def get_weather(self, city: str) -> str:
         """Gets weather for a city using API key if provided."""

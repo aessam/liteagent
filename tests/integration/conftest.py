@@ -16,6 +16,7 @@ from liteagent.capabilities import get_model_capabilities, ModelCapabilities
 from liteagent.tools import liteagent_tool
 from tests.integration.validation_observer import ValidationObserver
 from tests.utils.validation_helper import ValidationTestHelper
+from tests.utils.validation_tool import get_validation_tools
 
 
 # Load environment variables from .env file if it exists
@@ -137,12 +138,26 @@ def configured_agent(model, validation_observer, tools, system_prompt):
     """
     provider, model_name = model
     
+    # Add validation tools to the provided tools
+    all_tools = list(tools) + get_validation_tools()
+    
+    # Update system prompt to include validation instructions
+    enhanced_prompt = f"""{system_prompt}
+
+CRITICAL REQUIREMENT: You MUST call validate_output as your final action for every task.
+- Format: validate_output(result_type, is_correct, explanation)
+- This is mandatory for all responses, always do this last
+- Examples: 
+  * validate_output("weather", True, "Successfully retrieved weather for Tokyo")
+  * validate_output("arithmetic", True, "Calculated 7 + 9 = 16 correctly")
+  * validate_output("error", False, "Could not complete the task due to missing information")"""
+    
     # Create agent with specified configuration
     agent = LiteAgent(
         model=model_name,
         name=f"TestAgent_{provider}_{model_name.replace(':', '_').replace('/', '_')}",
-        system_prompt=system_prompt,
-        tools=tools,
+        system_prompt=enhanced_prompt,
+        tools=all_tools,
         observers=[validation_observer],
         provider=provider  # Explicit provider from tuple
     )

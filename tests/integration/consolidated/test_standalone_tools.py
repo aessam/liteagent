@@ -57,76 +57,17 @@ class TestStandaloneTools:
             # Ask about weather in Tokyo
             response = configured_agent.chat("What's the weather in Tokyo?")
             
-            # Handle None responses
-            if response is None:
-                pytest.skip(f"Model {model} returned None response, skipping validation")
-                return
+            # Fail-fast assertions - zero complexity
+            assert response is not None, "Model returned None response"
+            validation_observer.assert_tool_called("get_weather")
+            validation_observer.assert_tool_called("validate_output")
             
-            # Track validation status
-            weather_task_validated = False
+            # Check validation result
+            validation_result = validation_observer.get_last_function_result("validate_output")
+            assert validation_result == True, "Agent reported incorrect weather result"
             
-            # Try to parse the response to extract structured data
-            try:
-                parsed_response = validation_observer.parse_response(response)
-                
-                # Check if weather information is in the response
-                if "city" in parsed_response:
-                    assert parsed_response["city"].lower() == "tokyo", f"Response city should be Tokyo, got {parsed_response.get('city', '')}"
-                    weather_task_validated = True
-                    
-                    # If we have temperature and conditions, validate them as well
-                    if "temperature" in parsed_response:
-                        assert parsed_response["temperature"] is not None, "Temperature should not be None"
-                    
-                    if "conditions" in parsed_response:
-                        assert parsed_response["conditions"], "Weather conditions should be provided"
-            except Exception as e:
-                print(f"Failed to parse response: {e}")
-                # If parsing fails, we'll validate through function calls below
-            
-            # Check if the function was called
-            if "get_weather" in validation_observer.called_functions:
-                # Validate the function call arguments
-                validation_observer.assert_function_called_with("get_weather", city="Tokyo")
-                weather_task_validated = True
-                
-                # Try to validate the function result if it's a dictionary
-                try:
-                    result = validation_observer.get_last_function_result("get_weather")
-                    if isinstance(result, dict):
-                        assert result["city"] == "Tokyo", f"Result city should be Tokyo, got {result.get('city', '')}"
-                        
-                        # Only validate structure if it's a dictionary
-                        validation_observer.assert_function_result_structure(
-                            "get_weather", 
-                            {"city": str, "temperature": object, "conditions": str}
-                        )
-                    else:
-                        # For non-dict results, just check if Tokyo is mentioned
-                        assert "Tokyo" in str(result), f"Result should mention Tokyo, got {result}"
-                        weather_task_validated = True
-                except Exception as e:
-                    # If we've already validated through response parsing, we can proceed
-                    if not weather_task_validated:
-                        print(f"Error validating function result: {e}")
-                        # Fallback: check if Tokyo appears in the raw response
-                        assert "Tokyo" in response, "Response should mention Tokyo"
-                        weather_task_validated = True
-            else:
-                # If function wasn't called, ensure we've validated the response content
-                if not weather_task_validated:
-                    # Fallback: simple check for Tokyo in the response
-                    assert "Tokyo" in response, "Response should mention Tokyo"
-                    
-                    # Look for temperature patterns in the response
-                    temp_pattern = re.search(r"(\d+)°C|(\d+)\s*degrees", response)
-                    assert temp_pattern, "Response should mention temperature"
-                    
-                    # Mark as validated
-                    weather_task_validated = True
-            
-            # Final validation check
-            assert weather_task_validated, "Weather task should be validated through response or function call"
+            # Validate tool arguments
+            validation_observer.assert_function_called_with("get_weather", city="Tokyo")
             
         except Exception as e:
             # Handle different model-specific exceptions

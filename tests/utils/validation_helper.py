@@ -97,17 +97,26 @@ class ValidationTestHelper:
             "add_numbers": "Add two numbers together",
             "multiply_numbers": "Multiply two numbers together",
             "calculate_area": "Calculate the area of a rectangle",
-            "get_user_data": "Retrieve user data for a specific user ID"
+            "get_user_data": "Retrieve user data for a specific user ID",
+            "calculate_square_root": "Calculate the square root of a number"
         }
         
-        prompt = "You are a helpful assistant that can use tools to answer questions.\n\n"
-        prompt += "Available tools:\n"
+        prompt = """You are a TOOL-USING assistant. You MUST use tools for ALL operations.
+
+CRITICAL RULES:
+1. NEVER attempt calculations yourself - ALWAYS use the provided tools
+2. NEVER make up information - ALWAYS use tools to retrieve data
+3. When asked for calculations, IMMEDIATELY use the appropriate tool
+4. When asked for information, IMMEDIATELY use the appropriate tool
+
+Available tools that you MUST use:
+"""
         
         for tool_name in tool_names:
             description = tool_descriptions.get(tool_name, f"Use the {tool_name} tool")
-            prompt += f"- {tool_name}: {description}\n"
+            prompt += f"- {tool_name}: {description} (MANDATORY for this type of operation)\n"
         
-        prompt += "\nUse these tools to help answer the user's questions."
+        prompt += "\nFAILURE TO USE TOOLS WILL RESULT IN INCORRECT ANSWERS."
         return prompt
     
     @staticmethod

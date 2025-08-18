@@ -118,6 +118,18 @@ class ValidationObserver(AgentObserver):
         """
         self._response_parsers[pattern_or_name] = parser
     
+    def was_tool_called(self, tool_name: str) -> bool:
+        """
+        Check if a tool was called during the interaction.
+        
+        Args:
+            tool_name: The name of the tool
+            
+        Returns:
+            True if the tool was called, False otherwise
+        """
+        return tool_name in self.called_functions
+    
     def get_function_call_count(self, function_name: str) -> int:
         """
         Get the number of times a function was called.
@@ -138,6 +150,16 @@ class ValidationObserver(AgentObserver):
             function_name: The name of the function
         """
         assert function_name in self.called_functions, f"Function {function_name} was not called"
+    
+    def assert_tool_called(self, tool_name: str):
+        """
+        Assert that a tool was called during the interaction.
+        Alias for assert_function_called with clearer naming.
+        
+        Args:
+            tool_name: The name of the tool
+        """
+        self.assert_function_called(tool_name)
         
     def assert_function_not_called(self, function_name: str):
         """
@@ -147,6 +169,16 @@ class ValidationObserver(AgentObserver):
             function_name: The name of the function
         """
         assert function_name not in self.called_functions, f"Function {function_name} was called"
+    
+    def assert_tool_not_called(self, tool_name: str):
+        """
+        Assert that a tool was not called during the interaction.
+        Alias for assert_function_not_called with clearer naming.
+        
+        Args:
+            tool_name: The name of the tool
+        """
+        self.assert_function_not_called(tool_name)
     
     def assert_function_call_count(self, function_name: str, expected_count: int):
         """

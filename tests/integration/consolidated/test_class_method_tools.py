@@ -181,10 +181,10 @@ class TestClassMethodTools:
     @pytest.mark.optional
     def test_multiply_numbers_class_method(self, model, validation_observer, tools_instance):
         """
-        Test multiply_numbers class method with different models.
+        Test calculate_square_root class method with different models.
         
-        This test checks if the agent can correctly use the multiply_numbers class method
-        to multiply two numbers together.
+        This test checks if the agent can correctly use the calculate_square_root class method
+        to find the square root of a number.
         """
         # Get tool calling type for the model
         tool_calling_type = get_tool_calling_type(model)
@@ -196,21 +196,21 @@ class TestClassMethodTools:
         ValidationTestHelper.register_parsers_for_type(
             validation_observer, 
             tool_calling_type, 
-            ["multiply_numbers"]
+            ["calculate_square_root"]
         )
         
-        # Create agent with the multiply_numbers class method tool
+        # Create agent with the calculate_square_root class method tool
         agent = LiteAgent(
             model=model,
-            name="MultiplyNumbersClassMethodAgent",
-            system_prompt=ValidationTestHelper.get_system_prompt_for_tools(["multiply_numbers"]) + "\nIMPORTANT: DO NOT attempt to calculate the answer yourself. The numbers are intentionally large and will result in errors if you try. You MUST use the multiply_numbers tool.",
-            tools=[tools_instance.multiply_numbers],
+            name="SquareRootClassMethodAgent",
+            system_prompt=ValidationTestHelper.get_system_prompt_for_tools(["calculate_square_root"]),
+            tools=[tools_instance.calculate_square_root],
             observers=[validation_observer]
         )
         
         try:
-            # Use an extremely difficult multiplication that LLMs cannot compute directly
-            response = agent.chat("What is 1299792458 times 6626070040? This is an intentionally difficult calculation to test the multiply_numbers tool. Do NOT try to calculate this yourself - use the multiply_numbers tool.")
+            # Use a number whose square root is not obvious
+            response = agent.chat("What is the square root of 789456123? You MUST use the calculate_square_root tool to get the precise answer.")
             
             # Check if the response contains the correct answer
             if response is None:
@@ -218,15 +218,15 @@ class TestClassMethodTools:
             
             # Only check that the function was called - don't try to verify the result in the response
             # as it's too complex to extract reliably
-            function_called = "multiply_numbers" in validation_observer.called_functions
+            function_called = "calculate_square_root" in validation_observer.called_functions
             
             # Assert the function was called - we're only testing tool usage, not response quality
-            assert function_called, f"The multiply_numbers function should be called. Function called: {function_called}"
+            assert function_called, f"The calculate_square_root function should be called. Function called: {function_called}"
             
             # If the function was called, validate the call
             if function_called:
                 # Check the arguments
-                call_args = validation_observer.get_function_call_args("multiply_numbers")
+                call_args = validation_observer.get_function_call_args("calculate_square_root")
                 assert call_args, "Function call arguments should not be empty"
                 
                 # Check the result
