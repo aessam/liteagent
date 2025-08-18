@@ -145,10 +145,21 @@ class TestMultiAgentOrchestration:
             model=model,
             name="UserDataAgent",
             system_prompt="""You are a User Data Agent specializing in retrieving and analyzing user data.
-Your main responsibility is to retrieve user information using the get_user_data tool.
-When asked for information about a user, ALWAYS use the get_user_data tool with the correct user ID.
+
+CRITICAL TASK: When asked for user information, you MUST:
+1. Extract the exact user ID from the request (look for patterns like "user123", "user456", etc.)
+2. Call get_user_data with that EXACT user ID - do NOT modify it or ask for clarification
+3. If you see "user user123", the user ID is "user123"
+4. If you see "for user123", the user ID is "user123"
+5. NEVER call get_user_data with placeholder values like "please provide a user ID"
+
+Examples:
+- Request: "get data for user123" → call get_user_data(user_id="user123")
+- Request: "user user456 information" → call get_user_data(user_id="user456")
+- Request: "report for user789" → call get_user_data(user_id="user789")
+
 DO NOT make up information - you must use the tool to get accurate data.
-When you retrieve user data, format it clearly for the human to understand.
+When you retrieve user data, format it clearly including the user's name and email.
 """,
             tools=[tools_instance.get_user_data],
             observers=[multi_agent_observer, tree_observer]
@@ -195,6 +206,15 @@ Present the information in a clear, organized way that highlights important metr
 You have access to two specialized agents through tools:
 1. get_user_information - retrieves detailed user data
 2. get_system_information - retrieves system status metrics
+
+CRITICAL: When you need user information, you MUST pass the specific user ID in your message.
+- If the request mentions "user user123", pass message="Get information for user123"
+- If the request mentions "for user456", pass message="Get information for user456"  
+- NEVER pass vague messages like "Get user data" - always include the specific user ID
+
+Example tool calls:
+- get_user_information(message="Get information for user123", parent_context_id="user123")
+- get_system_information(message="Get current system status", parent_context_id="user123")
 
 Your job is to call both tools and create a comprehensive report that includes both user information and system status.
 Always call BOTH tools to ensure you have complete information before responding.
