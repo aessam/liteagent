@@ -185,15 +185,15 @@ class ConversationMemory:
             is_error: Whether this result represents an error
             provider: The model provider (e.g., "anthropic", "openai")
         """
-        # Only Ollama needs user role format for tool results, Anthropic needs proper tool_result
-        if provider and provider.lower() == "ollama":
-            # For Ollama, use user role to provide tool results as if user is providing information
+        # Handle provider-specific tool result formats
+        if provider and provider.lower() == "anthropic":
+            # For Anthropic, use assistant role with text content to avoid tool_result validation issues
             message = {
-                "role": "user", 
-                "content": f"Tool result from {name}({args}): {content}"
+                "role": "assistant",
+                "content": f"I called the {name} function with {args} and got this result: {content}"
             }
         else:
-            # Use modern 'tool' role instead of deprecated 'function' role
+            # Use modern 'tool' role for all other providers (including Ollama with native tool calling)
             message = {
                 "role": "tool",
                 "name": name,

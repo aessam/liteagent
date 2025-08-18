@@ -56,7 +56,11 @@ to provide a final text response to the user."""
         """
         self.model = model
         self.name = name
-        self.system_prompt = system_prompt or self.DEFAULT_SYSTEM_PROMPT
+        # Combine custom prompt with default termination logic
+        if system_prompt:
+            self.system_prompt = f"{system_prompt}\n\n{self.DEFAULT_SYSTEM_PROMPT}"
+        else:
+            self.system_prompt = self.DEFAULT_SYSTEM_PROMPT
         self.debug = debug
         self.api_key = api_key
         self.parent_context_id = parent_context_id
@@ -348,6 +352,14 @@ to provide a final text response to the user."""
             # If there's content along with tool calls, add it
             self.memory.add_assistant_message(response.content)
             
+        # Check for tool calling loops before processing any tools
+        for tool_call in tool_calls:
+            if self.memory.is_function_call_loop(tool_call.name, tool_call.arguments):
+                logger.warning(f"Detected repeated function call: {tool_call.name} with args {tool_call.arguments}")
+                # Return immediately to break the cycle
+                loop_message = f"I notice I'm repeatedly trying to call the same tool. Let me provide a response based on the information I already have rather than continuing to search."
+                return loop_message
+        
         # Add tool calls to memory
         for tool_call in tool_calls:
             self._emit_event(FunctionCallEvent(
@@ -357,13 +369,6 @@ to provide a final text response to the user."""
                 function_name=tool_call.name,
                 function_args=tool_call.arguments
             ))
-            
-            # Check for repeated function calls
-            if self.memory.is_function_call_loop(tool_call.name, tool_call.arguments):
-                logger.warning(f"Detected repeated function call: {tool_call.name} with args {tool_call.arguments}")
-                # Add a message explaining the loop and return to break the cycle
-                loop_message = f"I detected that I'm repeatedly calling the same tool '{tool_call.name}' with the same arguments. Let me provide a response based on the information I already have."
-                return loop_message
             
             # Add tool call to memory
             self.memory.add_tool_call(tool_call.name, tool_call.arguments, tool_call.id)

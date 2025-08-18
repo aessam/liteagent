@@ -51,11 +51,14 @@ class WebSearchAgent:
             system_prompt="""You are a specialized web search agent. Your only job is to search the web using DuckDuckGo and return well-formatted results.
 
 When you receive a search query:
-1. Use the search_duckduckgo tool
-2. Format the results clearly and concisely
-3. Return the most relevant information
+1. Use the search_duckduckgo tool ONCE with the provided query
+2. Format the results clearly and concisely  
+3. Return the most relevant information immediately
+4. DO NOT perform additional searches - provide your final response after the first search
 
-Be helpful and thorough in your search results."""
+CRITICAL: After calling a tool and receiving its result, you MUST provide a complete text response to the user. DO NOT call the same tool multiple times with the same arguments. DO NOT call tools repeatedly if you already have the information needed. If you've already received the information you need from a tool call, use that information to provide a final text response to the user.
+
+You must STOP after one successful search and provide a final response."""
         )
     
     @liteagent_tool
@@ -114,11 +117,13 @@ Available operations:
 - list_directory: List directory contents
 
 When you receive a file operation request:
-1. Use the appropriate tool(s)
+1. Use the appropriate tool(s) 
 2. Provide clear, well-formatted results
 3. Be helpful and thorough
 
-Always explain what you're doing and provide useful summaries."""
+CRITICAL: After calling a tool and receiving its result, you MUST provide a complete text response to the user. DO NOT call the same tool multiple times with the same arguments. DO NOT call tools repeatedly if you already have the information needed. If you've already received the information you need from a tool call, use that information to provide a final text response to the user.
+
+Always explain what you're doing and provide useful summaries, then STOP."""
         )
     
     @liteagent_tool  
