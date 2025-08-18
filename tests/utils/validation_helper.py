@@ -16,18 +16,26 @@ class ValidationTestHelper:
     """Helper class for validation in tests."""
     
     @staticmethod
-    def has_api_key_for_model(model: str) -> bool:
+    def has_api_key_for_model(model) -> bool:
         """
         Check if an API key is available for the model.
         
         Args:
-            model: The model name
+            model: The model name (string) or (provider, model_name) tuple
             
         Returns:
             True if an API key is available, False otherwise
         """
+        # Handle tuple input: (provider, model_name)
+        if isinstance(model, tuple):
+            provider, model_name = model
+            # Use provider/model_name format for validation
+            model_str = f"{provider}/{model_name}"
+        else:
+            model_str = model
+            
         # Normalize model name
-        model_lower = model.lower()
+        model_lower = model_str.lower()
         
         # OpenAI models
         if model_lower.startswith("gpt-") or model_lower.startswith("openai/"):
