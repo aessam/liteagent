@@ -1,6 +1,5 @@
 import pytest
 import os
-from unittest.mock import patch
 from liteagent.models import LiteLLMInterface
 from liteagent.provider_roles import process_messages_for_provider
 
@@ -42,13 +41,14 @@ def test_mistral_system_message_handling():
     
     assert converted_found, "Second system message not properly converted to user message"
     
-    # Mock the API call to avoid actual API usage for this test
-    with patch.object(LiteLLMInterface, '_call_api', return_value={"choices": [{"message": {"content": "Paris is the capital of France."}}]}):
-        model = LiteLLMInterface(model_name="mistral-small-latest")
-        response = model.generate_response(messages=messages)
-        
-        # Just verify we get any response without errors
-        assert "Paris" in response["choices"][0]["message"]["content"]
+    # Test with actual API call (no mock needed with new provider system)
+    model = LiteLLMInterface(model_name="mistral-small-latest")
+    response = model.generate_response(messages=messages)
+    
+    # Verify we get a ProviderResponse object with content
+    assert hasattr(response, 'content'), "Response should have content attribute"
+    assert response.content is not None, "Response content should not be None"
+    assert len(response.content) > 0, "Response content should not be empty"
 
 
 @requires_mistral
@@ -88,10 +88,11 @@ def test_mistral_sequence_constraints():
     assert assistant_count == 2, f"Expected 2 assistant messages, got {assistant_count}"
     assert placeholder_user_found, "Placeholder user message not found between consecutive assistant messages"
     
-    # Mock the API call to avoid actual API usage
-    with patch.object(LiteLLMInterface, '_call_api', return_value={"choices": [{"message": {"content": "Paris is the capital of France."}}]}):
-        model = LiteLLMInterface(model_name="mistral-small-latest")
-        response = model.generate_response(messages=messages)
-        
-        # Just verify we get a response without errors
-        assert response["choices"][0]["message"]["content"] 
+    # Test with actual API call (no mock needed with new provider system)
+    model = LiteLLMInterface(model_name="mistral-small-latest")
+    response = model.generate_response(messages=messages)
+    
+    # Verify we get a ProviderResponse object with content
+    assert hasattr(response, 'content'), "Response should have content attribute"
+    assert response.content is not None, "Response content should not be None"
+    assert len(response.content) > 0, "Response content should not be empty" 

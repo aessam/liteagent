@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(mv:*)",
+      "Bash(git log:*)",
+      "Bash(pytest:*)",
+      "Bash(python -m pytest --cov=liteagent --cov-report=term-missing --tb=short)",
+      "Bash(python -m pytest tests/unit/test_models.py -v)",
+      "Bash(python -m pytest tests/unit/test_tool_calling.py::TestOpenAIToolCallingHandler::test_format_tool_results -v)",
+      "Bash(python -m pytest tests/integration/ -v --tb=short -x)",
+      "Bash(python -m pytest tests/unit/test_observer.py -v --tb=short)",
+      "Bash(find:*)",
+      "Bash(python -m pytest tests/utils/test_tools.py::get_weather -v --no-header)",
+      "Bash(python -m coverage report:*)",
+      "Bash(python -m pytest tests/unit/test_tool_calling.py::TestAnthropicToolCallingHandler::test_extract_tool_calls -v)",
+      "Bash(grep:*)",
+      "Bash(python:*)",
+      "Bash(python -m pytest tests/integration/consolidated/ -v --tb=short -x)",
+      "WebFetch(domain:models.dev)"
+    ],
+    "deny": [],
+    "ask": []
+  },
+  "outputStyle": "Reasoning Chain"
+}

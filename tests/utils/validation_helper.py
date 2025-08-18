@@ -8,25 +8,34 @@ import os
 import re
 from typing import Dict, List, Any, Optional, Union
 
-from liteagent.tool_calling_types import ToolCallingType
+from liteagent.capabilities import ModelCapabilities
+from liteagent.tool_calling_types import ToolCallingType, get_tool_calling_type
 
 
 class ValidationTestHelper:
     """Helper class for validation in tests."""
     
     @staticmethod
-    def has_api_key_for_model(model: str) -> bool:
+    def has_api_key_for_model(model) -> bool:
         """
         Check if an API key is available for the model.
         
         Args:
-            model: The model name
+            model: The model name (string) or (provider, model_name) tuple
             
         Returns:
             True if an API key is available, False otherwise
         """
+        # Handle tuple input: (provider, model_name)
+        if isinstance(model, tuple):
+            provider, model_name = model
+            # Use provider/model_name format for validation
+            model_str = f"{provider}/{model_name}"
+        else:
+            model_str = model
+            
         # Normalize model name
-        model_lower = model.lower()
+        model_lower = model_str.lower()
         
         # OpenAI models
         if model_lower.startswith("gpt-") or model_lower.startswith("openai/"):
@@ -111,22 +120,16 @@ class ValidationTestHelper:
             tool_calling_type: The tool calling type
             tool_names: List of tool names
         """
+        # For provider-specific logic, we would need to derive provider from tool_calling_type
+        # For now, we'll use generic parsing since we don't have model info here
+        provider = "generic"
+        
         for tool_name in tool_names:
             if tool_name == "get_weather":
-                if tool_calling_type == ToolCallingType.OPENAI:
-                    validation_observer.register_response_parser(
-                        r"weather\s+in\s+([A-Za-z\s]+).*?(\d+)[°℃C].*?(\w+)",
-                        lambda m: {"city": m.group(1), "temperature": m.group(2), "condition": m.group(3)}
-                    )
-                elif tool_calling_type == ToolCallingType.ANTHROPIC:
-                    validation_observer.register_response_parser(
-                        r"weather\s+in\s+([A-Za-z\s]+).*?(\d+)[°℃C].*?(\w+)",
-                        lambda m: {"city": m.group(1), "temperature": m.group(2), "condition": m.group(3)}
-                    )
-                else:
-                    validation_observer.register_response_parser(
-                        "get_weather", ValidationTestHelper.parse_weather_response_default
-                    )
+                # Use generic weather response parsing for all providers
+                validation_observer.register_response_parser(
+                    "get_weather", ValidationTestHelper.parse_weather_response_default
+                )
             elif tool_name == "add_numbers":
                 validation_observer.register_response_parser(
                     r"(sum|add|total|addition).*?(\d+).*?(\d+).*?=?\s*(\d+)",

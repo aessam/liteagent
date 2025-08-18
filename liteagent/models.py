@@ -1,129 +1,59 @@
 """
-Model interfaces for LiteAgent.
+New model interfaces for LiteAgent using official provider clients.
 
-This module provides abstractions for different LLM models with varying capabilities,
-particularly around function/tool calling.
+This module provides a unified interface for different LLM providers using their
+official client libraries instead of LiteLLM.
 """
 
-import json
 import time
-import random
+from typing import Any, Dict, List, Optional
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Union
-import litellm
-from litellm.exceptions import RateLimitError, APIError, APIConnectionError, Timeout, ServiceUnavailableError
 
-from .tool_calling_types import ToolCallingType, get_tool_calling_type, get_provider_from_model
-from .tool_calling import get_tool_calling_handler, get_provider_specific_handler
-from .utils import logger, log_completion_request, log_completion_response
-from .provider_roles import process_messages_for_provider
+from .providers import create_provider, ProviderInterface, ProviderResponse, ToolCall
+from .capabilities import get_model_capabilities, ModelCapabilities
+from .utils import logger
 
 
 class ModelInterface(ABC):
     """Abstract base class for model interfaces."""
     
-    def __init__(self, model_name: str, drop_params: bool = True):
+    def __init__(self, model_name: str, api_key: Optional[str] = None, provider: Optional[str] = None, **kwargs):
         """
         Initialize the model interface.
         
         Args:
             model_name: Name of the model to use
-            drop_params: Whether to drop unsupported parameters
+            api_key: API key for the provider
+            provider: Explicit provider name (overrides auto-detection)
+            **kwargs: Provider-specific configuration
         """
         self.model_name = model_name
-        self.drop_params = drop_params
-        self.provider = get_provider_from_model(model_name)
-        self.tool_calling_type = get_tool_calling_type(model_name)
-        self.tool_handler = get_provider_specific_handler(self.provider, self.tool_calling_type)
-        self.temperature = None  # Default to None, which will use the model's default temperature
+        self.api_key = api_key
+        self.config = kwargs
         
-    def generate_response(self, messages: List[Dict], functions: Optional[List[Dict]] = None) -> Any:
+        # Get model capabilities
+        self.capabilities = get_model_capabilities(model_name)
+        
+        # Create the appropriate provider
+        self.provider = create_provider(model_name, api_key, provider=provider, **kwargs)
+        
+        logger.info(f"Initialized {self.provider.provider_name} model interface for {model_name}")
+        
+    @abstractmethod
+    def generate_response(self, messages: List[Dict], functions: Optional[List[Dict]] = None, **kwargs) -> Any:
         """
         Generate a response from the model.
         
         Args:
             messages: List of message dictionaries
             functions: Optional list of function definitions
-            
-        Returns:
-            The model's response
-        """
-        # Prepare kwargs for the API call
-        kwargs = {
-            "model": self.model_name,
-            "messages": messages,
-        }
-        
-        # Add functions if provided and supported
-        if functions:
-            # Format functions based on tool calling type
-            formatted_tools = self.tool_handler.format_tools_for_model(functions)
-            
-            # Add functions to kwargs based on tool calling type
-            if self.tool_calling_type == ToolCallingType.OPENAI:
-                # OpenAI-style function calling
-                kwargs["tools"] = formatted_tools
-                kwargs["tool_choice"] = "auto"
-            elif self.tool_calling_type == ToolCallingType.ANTHROPIC:
-                # Anthropic-style tool calling
-                kwargs["tools"] = formatted_tools
-            elif self.tool_calling_type in [ToolCallingType.OLLAMA, ToolCallingType.TEXT_BASED, ToolCallingType.STRUCTURED_OUTPUT]:
-                # For these types, we need to modify the system prompt
-                tool_description = formatted_tools
-                if messages and messages[0]["role"] == "system":
-                    # Create a copy of messages to avoid modifying the original
-                    messages = messages.copy()
-                    # Update the system prompt with tool descriptions
-                    messages[0] = {
-                        "role": "system",
-                        "content": f"{messages[0]['content']}\n\n{tool_description}"
-                    }
-                    kwargs["messages"] = messages
-            
-            logger.info(f"Calling LiteLLM with model: {self.model_name}")
-            logger.info(f"Message count: {len(messages)}")
-            logger.info(f"Tool calling type: {self.tool_calling_type.name}")
-            logger.info(f"Tools available: {[f.get('name', 'unknown') for f in functions]}")
-        else:
-            logger.info(f"Calling LiteLLM with model: {self.model_name} (without functions)")
-            logger.info(f"Message count: {len(messages)}")
-        
-        # Log the request
-        log_completion_request(self.model_name, messages, functions)
-        
-        # Track request time
-        start_time = time.time()
-        response = self._call_api(kwargs)
-        elapsed_time = time.time() - start_time
-        
-        # Log the response
-        log_completion_response(response, elapsed_time)
-        
-        # Debug log for Ollama responses
-        if self.tool_calling_type == ToolCallingType.OLLAMA:
-            logger.debug(f"Ollama response type: {type(response)}")
-            logger.debug(f"Ollama response attributes: {dir(response) if hasattr(response, '__dict__') else 'No attributes'}")
-            logger.debug(f"Ollama response dict: {response.__dict__ if hasattr(response, '__dict__') else 'Not a class instance'}")
-            
-            # Check for message attribute
-            if hasattr(response, 'message'):
-                logger.debug(f"Ollama message: {response.message}")
-        
-        return response
-    
-    @abstractmethod
-    def _call_api(self, kwargs: Dict) -> Any:
-        """
-        Make the actual API call to the model provider.
-        
-        Args:
-            kwargs: Dictionary of arguments for the API call
+            **kwargs: Additional parameters (e.g. enable_caching)
             
         Returns:
             The model's response
         """
         pass
-    
+        
     def extract_tool_calls(self, response: Any) -> List[Dict]:
         """
         Extract tool calls from the model's response.
@@ -134,8 +64,21 @@ class ModelInterface(ABC):
         Returns:
             List of dictionaries with tool call details
         """
-        return self.tool_handler.extract_tool_calls(response)
-    
+        if isinstance(response, ProviderResponse):
+            # Convert ToolCall objects to dictionaries
+            tool_calls = []
+            for tc in response.tool_calls:
+                tool_calls.append({
+                    'id': tc.id,
+                    'type': 'function',
+                    'function': {
+                        'name': tc.name,
+                        'arguments': tc.arguments
+                    }
+                })
+            return tool_calls
+        return []
+        
     def extract_content(self, response: Any) -> str:
         """
         Extract the content from a response.
@@ -146,143 +89,165 @@ class ModelInterface(ABC):
         Returns:
             str: The text content
         """
-        # Extract content based on the model type
-        if self.tool_calling_type == ToolCallingType.OPENAI:
-            if not response or not hasattr(response, 'choices') or len(response.choices) == 0:
-                return ""
-                
-            message_obj = response.choices[0].message
-            content = message_obj.content if hasattr(message_obj, 'content') else ""
-            return str(content).strip() if content else ""
-            
-        elif self.tool_calling_type == ToolCallingType.ANTHROPIC:
-            if not response:
-                return ""
-                
-            # Handle different response formats
-            if hasattr(response, 'content') and isinstance(response.content, list):
-                # Extract text from content blocks
-                text_blocks = []
-                for block in response.content:
-                    if block.get('type') == 'text':
-                        text_blocks.append(block.get('text', ''))
-                return ' '.join(text_blocks)
-            
-            # Handle Anthropic responses via LiteLLM
-            if hasattr(response, 'choices') and len(response.choices) > 0:
-                message_obj = response.choices[0].message
-                content = message_obj.content if hasattr(message_obj, 'content') else ""
-                
-                # If content is None but there are tool calls, return a default message
-                if content is None and hasattr(message_obj, 'tool_calls') and message_obj.tool_calls:
-                    tool_names = [tool.function.name for tool in message_obj.tool_calls if hasattr(tool, 'function')]
-                    if tool_names:
-                        return f"I'm using the {', '.join(tool_names)} tool(s) to help answer your question."
-                    return "I'm using tools to help answer your question."
-                
-                return str(content).strip() if content else ""
-            
-        elif self.tool_calling_type == ToolCallingType.OLLAMA:
-            if not response:
-                return ""
-                
-            # Try to extract content from Ollama response
-            if hasattr(response, 'message'):
-                content = response.message.content if hasattr(response.message, 'content') else ""
-                return str(content).strip() if content else ""
-            
-            # Handle LiteLLM response format
-            if hasattr(response, 'choices') and len(response.choices) > 0:
-                message_obj = response.choices[0].message
-                content = message_obj.content if hasattr(message_obj, 'content') else ""
-                return str(content).strip() if content else ""
-            
-        else:
-            # For other types, use a generic approach
-            if hasattr(response, 'choices') and len(response.choices) > 0:
-                message_obj = response.choices[0].message
-                content = message_obj.content if hasattr(message_obj, 'content') else ""
-                return str(content).strip() if content else ""
-            
-        # Default fallback
+        if isinstance(response, ProviderResponse):
+            return response.content or ""
         return ""
+        
+    def supports_tool_calling(self) -> bool:
+        """Check if the model supports tool calling."""
+        if self.capabilities:
+            return self.capabilities.tool_calling
+        return self.provider.supports_tool_calling()
+        
+    def supports_parallel_tools(self) -> bool:
+        """Check if the model supports parallel tool execution."""
+        if self.capabilities:
+            return self.capabilities.supports_parallel_tools
+        return self.provider.supports_parallel_tools()
+        
+    def get_context_window(self) -> Optional[int]:
+        """Get the context window size for this model."""
+        if self.capabilities:
+            return self.capabilities.context_limit
+        return self.provider.get_context_window()
+        
+    def get_max_tokens(self) -> Optional[int]:
+        """Get the maximum output tokens for this model."""
+        if self.capabilities:
+            return self.capabilities.output_limit
+        return self.provider.get_max_tokens()
+
+
+class UnifiedModelInterface(ModelInterface):
+    """
+    Unified model interface that works with any supported provider.
     
-    def format_tool_results(self, tool_name: str, result: Any, **kwargs) -> Dict:
+    This is the main interface that should be used by agents.
+    """
+    
+    def generate_response(self, messages: List[Dict], functions: Optional[List[Dict]] = None, enable_caching: bool = False, **kwargs) -> ProviderResponse:
         """
-        Format tool execution results for the model.
+        Generate a response from the model.
         
         Args:
-            tool_name: Name of the tool that was called
-            result: Result from the tool execution
-            **kwargs: Additional arguments like tool_call_id
+            messages: List of message dictionaries
+            functions: Optional list of function definitions
+            enable_caching: Whether to enable caching (for supported models)
+            **kwargs: Additional parameters to pass to the provider
             
         Returns:
-            Dictionary formatted as a message to send back to the model
+            ProviderResponse: Standardized response object
         """
-        return self.tool_handler.format_tool_results(tool_name, result, **kwargs)
-
-
-class LiteLLMInterface(ModelInterface):
-    """Model interface that uses LiteLLM for API calls."""
-    
-    def __init__(self, model_name: str, drop_params: bool = True):
-        """Initialize with retry settings."""
-        super().__init__(model_name, drop_params)
-        self.max_retries = 3
-        self.initial_retry_delay = 2.0  # in seconds
-    
-    def _call_api(self, kwargs: Dict) -> Any:
-        """Make the API call using LiteLLM with retries for rate limits."""
-        # Process messages for provider compatibility
-        if "messages" in kwargs:
-            kwargs["messages"] = process_messages_for_provider(kwargs["messages"], self.provider)
+        # Convert function definitions to tools format if needed
+        tools = None
+        if functions:
+            tools = self._convert_functions_to_tools(functions)
             
-        retries = 0
-        while True:
-            try:
-                return litellm.completion(**kwargs)
-            except (RateLimitError, ServiceUnavailableError) as e:
-                retries += 1
-                if retries > self.max_retries:
-                    logger.error(f"Exceeded maximum retries ({self.max_retries}) for {self.model_name}")
-                    raise
-                
-                # Calculate backoff with jitter
-                delay = self.initial_retry_delay * (2 ** (retries - 1))
-                jitter = random.uniform(0, 0.1 * delay)  # 10% jitter
-                delay += jitter
-                
-                logger.warning(f"Rate limit hit for {self.model_name} ({self.provider}). Retrying in {delay:.2f}s (attempt {retries}/{self.max_retries})")
-                time.sleep(delay)
-            except (Timeout, APIConnectionError) as e:
-                retries += 1
-                if retries > self.max_retries:
-                    logger.error(f"Connection/timeout errors exceeded maximum retries ({self.max_retries})")
-                    raise
-                
-                # Different backoff strategy for network issues
-                delay = self.initial_retry_delay * 1.5 * (retries)
-                jitter = random.uniform(0, 0.1 * delay)
-                delay += jitter
-                
-                logger.warning(f"Connection error with {self.model_name}: {str(e)}. Retrying in {delay:.2f}s")
-                time.sleep(delay)
-            except Exception as e:
-                # All other exceptions are not retried
-                logger.error(f"Error calling {self.model_name}: {type(e).__name__}: {str(e)}")
-                raise
+        # Merge enable_caching with other kwargs
+        provider_kwargs = kwargs.copy()
+        provider_kwargs['enable_caching'] = enable_caching
+            
+        # Generate response using the provider
+        response = self.provider.generate_response(messages, tools, **provider_kwargs)
+        
+        return response
+        
+    def _convert_functions_to_tools(self, functions: List[Dict]) -> List[Dict]:
+        """
+        Convert function definitions to tools format.
+        
+        Args:
+            functions: List of function definitions
+            
+        Returns:
+            List of tool definitions
+        """
+        tools = []
+        for func in functions:
+            if 'function' in func:
+                # Already in tools format
+                tools.append(func)
+            else:
+                # Convert from legacy function format
+                tools.append({
+                    'type': 'function',
+                    'function': func
+                })
+        return tools
 
 
-def create_model_interface(model_name: str, drop_params: bool = True) -> ModelInterface:
+# Legacy compatibility class
+class LiteLLMInterface(UnifiedModelInterface):
     """
-    Factory function to create the appropriate model interface based on the model name.
+    Legacy compatibility interface that mimics the old LiteLLM interface.
+    
+    This class provides backward compatibility while using the new provider system.
+    """
+    
+    def __init__(self, model_name: str, drop_params: bool = True, **kwargs):
+        """
+        Initialize with LiteLLM-compatible parameters.
+        
+        Args:
+            model_name: Name of the model to use
+            drop_params: Ignored (kept for compatibility)
+            **kwargs: Additional configuration
+        """
+        # Extract API key from various possible sources
+        api_key = kwargs.pop('api_key', None)
+        
+        super().__init__(model_name, api_key, **kwargs)
+        
+        # Legacy attributes for backward compatibility
+        self.drop_params = drop_params
+        self.temperature = None
+        
+    def _call_api(self, kwargs: Dict) -> ProviderResponse:
+        """
+        Legacy method that mimics LiteLLM's _call_api.
+        
+        Args:
+            kwargs: API call parameters
+            
+        Returns:
+            ProviderResponse: The response from the provider
+        """
+        messages = kwargs.get('messages', [])
+        tools = kwargs.get('tools', [])
+        
+        # Extract other parameters
+        other_params = {k: v for k, v in kwargs.items() 
+                       if k not in ['model', 'messages', 'tools']}
+        
+        return self.provider.generate_response(messages, tools, **other_params)
+
+
+def create_model_interface(model_name: str, api_key: Optional[str] = None, provider: Optional[str] = None, **kwargs) -> ModelInterface:
+    """
+    Create a model interface for the given model.
     
     Args:
         model_name: Name of the model
-        drop_params: Whether to drop unsupported parameters
+        api_key: API key for the provider
+        provider: Explicit provider name (overrides auto-detection)
+        **kwargs: Additional configuration
         
     Returns:
         ModelInterface: The appropriate model interface
     """
-    # For now, we only have one implementation that uses LiteLLM
-    return LiteLLMInterface(model_name, drop_params) 
+    return UnifiedModelInterface(model_name, api_key, provider=provider, **kwargs)
+
+
+def create_legacy_interface(model_name: str, drop_params: bool = True, **kwargs) -> LiteLLMInterface:
+    """
+    Create a legacy-compatible interface.
+    
+    Args:
+        model_name: Name of the model
+        drop_params: Whether to drop unsupported parameters (ignored)
+        **kwargs: Additional configuration
+        
+    Returns:
+        LiteLLMInterface: Legacy-compatible interface
+    """
+    return LiteLLMInterface(model_name, drop_params, **kwargs)

@@ -118,9 +118,9 @@ Use the appropriate tool when needed to provide accurate information.""",
             response1 = agent.chat("What's the weather in Tokyo?")
             
             # Switch to a different strategy temporarily
-            temp_strategy = ToolCallingType.OLLAMA
-            if current_strategy == ToolCallingType.OLLAMA:
-                temp_strategy = ToolCallingType.ANTHROPIC
+            temp_strategy = ToolCallingType.BASIC
+            if current_strategy == ToolCallingType.BASIC:
+                temp_strategy = ToolCallingType.PARALLEL
                 
             validation_observer.set_validation_strategy(temp_strategy)
             validation_observer.reset()

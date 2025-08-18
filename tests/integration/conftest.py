@@ -12,7 +12,8 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 from liteagent import LiteAgent
-from liteagent.tool_calling_types import ToolCallingType, get_tool_calling_type
+from liteagent.capabilities import get_model_capabilities, ModelCapabilities
+from liteagent.tools import liteagent_tool
 from tests.integration.validation_observer import ValidationObserver
 from tests.utils.validation_helper import ValidationTestHelper
 
@@ -48,30 +49,46 @@ def pytest_configure(config):
 
 
 @pytest.fixture
-def validation_observer():
+def validation_observer(model):
     """
-    Fixture that provides a ValidationObserver instance.
+    Fixture that provides a ValidationObserver instance with pre-configured parsers.
     
     The ValidationObserver is reset before each test to ensure a clean state.
     """
+    from liteagent.tool_calling_types import get_tool_calling_type
+    from tests.utils.validation_helper import ValidationTestHelper
+    
     observer = ValidationObserver()
+    
+    # Extract model name from tuple for tool calling type detection
+    provider, model_name = model
+    
+    # Pre-configure validation strategy and parsers based on model
+    tool_calling_type = get_tool_calling_type(model_name)
+    observer.set_validation_strategy(tool_calling_type)
+    
+    # Register parsers for common tools used in tests
+    common_tools = ["get_weather", "add_numbers", "multiply_numbers", "get_user_data", "calculate_area"]
+    ValidationTestHelper.register_parsers_for_type(
+        observer, 
+        tool_calling_type, 
+        common_tools
+    )
+    
     yield observer
     # Reset the observer after each test
     observer.reset()
 
 
 # Standard set of models to test across all providers
+# Using (provider, model) tuples
 STANDARD_TEST_MODELS = [
-    "openai/gpt-4.1",
-    "openai/gpt-4.1-mini",
-    "openai/gpt-4.1-nano",
-    "openai/gpt-4o-mini",
-    "anthropic/claude-3-7-sonnet-20250219",
-    "anthropic/claude-3-5-sonnet-20241022",
-    "groq/qwen-qwq-32b",
-    "mistral/open-mixtral-8x22b",
-    "deepseek/deepseek-chat",
-    "ollama/phi4"
+    ("openai", "gpt-5-nano"),
+    ("anthropic", "claude-3-7-sonnet-20250219"), 
+    ("groq", "llama3-70b-8192"),
+    ("mistral", "mistral-large-latest"),
+    ("deepseek", "deepseek-chat"),
+    ("ollama", "gpt-oss:20b")
 ]
 
 
@@ -84,21 +101,21 @@ def model(request):
     is not available or required dependencies are not installed.
     
     Returns:
-        str: The model name to use for testing
+        tuple: (provider, model_name) tuple for testing
     """
-    model_name = request.param
+    provider, model_name = request.param
     
     # Skip if API key not available or required dependencies missing
-    if not ValidationTestHelper.has_api_key_for_model(model_name):
-        print(f"DEBUG: Skipping test for {model_name} due to missing API key")
-        pytest.skip(f"API key for {model_name} not available")
+    if not ValidationTestHelper.has_api_key_for_model(f"{provider}/{model_name}"):
+        print(f"DEBUG: Skipping test for {provider}/{model_name} due to missing API key")
+        pytest.skip(f"API key for {provider} not available")
     
     # Skip Ollama tests if Ollama is not installed
-    if model_name.startswith("ollama/") and os.system("which ollama > /dev/null 2>&1") != 0:
-        print(f"DEBUG: Skipping test for {model_name} due to missing Ollama installation")
+    if provider == "ollama" and os.system("which ollama > /dev/null 2>&1") != 0:
+        print(f"DEBUG: Skipping test for {provider}/{model_name} due to missing Ollama installation")
         pytest.skip("Ollama is not installed or not in PATH")
     
-    return model_name
+    return (provider, model_name)
 
 
 @pytest.fixture
@@ -110,7 +127,7 @@ def configured_agent(model, validation_observer, tools, system_prompt):
     to create a fully configured agent ready for testing.
     
     Args:
-        model: The model name to use
+        model: (provider, model_name) tuple
         validation_observer: The validation observer to attach
         tools: The tools to provide to the agent
         system_prompt: The system prompt to use
@@ -118,38 +135,72 @@ def configured_agent(model, validation_observer, tools, system_prompt):
     Returns:
         LiteAgent: A configured agent ready for testing
     """
-    # Set validation strategy based on model
-    tool_calling_type = get_tool_calling_type(model)
-    validation_observer.set_validation_strategy(tool_calling_type)
+    provider, model_name = model
     
     # Create agent with specified configuration
     agent = LiteAgent(
-        model=model,
-        name=f"TestAgent_{model.replace('/', '_')}",
+        model=model_name,
+        name=f"TestAgent_{provider}_{model_name.replace(':', '_').replace('/', '_')}",
         system_prompt=system_prompt,
         tools=tools,
-        observers=[validation_observer]
+        observers=[validation_observer],
+        provider=provider  # Explicit provider from tuple
     )
     
     return agent
 
 
+# Add agent fixtures for observer integration tests
+@pytest.fixture(scope="session")
+def api_keys():
+    """Get API keys from environment."""
+    keys = {
+        'openai': os.getenv('OPENAI_API_KEY'),
+        'anthropic': os.getenv('ANTHROPIC_API_KEY'),
+        'groq': os.getenv('GROQ_API_KEY'),
+        'mistral': os.getenv('MISTRAL_API_KEY'),
+        'deepseek': os.getenv('DEEPSEEK_API_KEY')
+    }
+    return keys
+
+
 @pytest.fixture
-def register_tool_parsers(validation_observer, model, tool_names):
-    """
-    Registers response parsers for the specified tools.
+def test_tool():
+    """Create a simple test tool function."""
+    @liteagent_tool
+    def get_current_time() -> str:
+        """Get the current time."""
+        import datetime
+        return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
-    This fixture automatically registers the appropriate parsers
-    for the specified tools based on the model's tool calling type.
+    return get_current_time
+
+
+@pytest.fixture 
+def openai_agent(api_keys, test_tool):
+    """Create a real OpenAI agent with tools."""
+    if not api_keys['openai']:
+        pytest.skip("OPENAI_API_KEY not available")
     
-    Args:
-        validation_observer: The validation observer
-        model: The model name
-        tool_names: List of tool names to register parsers for
-    """
-    tool_calling_type = get_tool_calling_type(model)
-    ValidationTestHelper.register_parsers_for_type(
-        validation_observer,
-        tool_calling_type,
-        tool_names
+    return LiteAgent(
+        model="gpt-4o-mini",
+        name="test-openai-agent",
+        api_key=api_keys['openai'],
+        tools=[test_tool],
+        system_prompt="You are a helpful test assistant. Use tools when needed."
+    )
+
+
+@pytest.fixture
+def anthropic_agent(api_keys, test_tool):
+    """Create a real Anthropic agent with tools.""" 
+    if not api_keys['anthropic']:
+        pytest.skip("ANTHROPIC_API_KEY not available")
+        
+    return LiteAgent(
+        model="claude-3-5-haiku-20241022",
+        name="test-anthropic-agent", 
+        api_key=api_keys['anthropic'],
+        tools=[test_tool],
+        system_prompt="You are a helpful test assistant. Use tools when needed."
     ) 

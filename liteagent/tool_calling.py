@@ -1,132 +1,123 @@
 """
-Tool calling implementation for different types of language models.
+Tool calling utilities and tracking.
 
-This module provides classes for handling tool calling interactions with different LLM providers.
+This module provides utilities for tracking and managing tool calls.
 """
 
-import json
-import re
-import uuid
-from enum import Enum, auto
-from typing import Dict, List, Optional, Any, Union, Callable, Set, Tuple
-import logging
-import copy
+from typing import Dict, List, Any, Optional
+from dataclasses import dataclass, field
+import time
 
-from .tools import get_function_definitions
-from .agent_tool import FunctionDefinition
-from .tool_calling_types import ToolCallingType
-from .utils import logger
 
-# Import our base class and pattern-based handler
-from .pattern_tool_handler import ToolCallingHandlerBase, PatternToolHandler
+@dataclass
+class ToolCallRecord:
+    """Record of a tool call execution."""
+    name: str
+    arguments: Dict[str, Any]
+    result: Any
+    timestamp: float
+    execution_time: Optional[float] = None
+    error: Optional[str] = None
 
-# Tool call tracking for tests
+
 class ToolCallTracker:
-    """Tracker for tool calls to help with testing."""
+    """Tracks tool calls for debugging and analysis."""
     
     _instance = None
     
+    def __init__(self):
+        """Initialize the tool call tracker."""
+        self.calls: List[ToolCallRecord] = []
+        self._call_counts: Dict[str, int] = {}
+    
     @classmethod
     def get_instance(cls):
-        """Get the singleton instance."""
+        """Get the singleton instance of ToolCallTracker."""
         if cls._instance is None:
-            cls._instance = ToolCallTracker()
+            cls._instance = cls()
         return cls._instance
     
-    def __init__(self):
-        """Initialize the tracker."""
-        self.reset()
+    def record_call(self, name: str, arguments: Dict[str, Any], result: Any = None, 
+                   execution_time: Optional[float] = None, error: Optional[str] = None) -> None:
+        """
+        Record a tool call.
+        
+        Args:
+            name: Name of the tool
+            arguments: Arguments passed to the tool
+            result: Result of the tool call
+            execution_time: Time taken to execute the tool
+            error: Error message if the call failed
+        """
+        record = ToolCallRecord(
+            name=name,
+            arguments=arguments,
+            result=result,
+            timestamp=time.time(),
+            execution_time=execution_time,
+            error=error
+        )
+        
+        self.calls.append(record)
+        self._call_counts[name] = self._call_counts.get(name, 0) + 1
     
-    def reset(self):
-        """Reset the tracker."""
-        self.called_tools = set()
-        self.tool_args = {}
-        self.tool_results = {}
-    
-    def record_call(self, tool_name: str, arguments: Dict):
-        """Record a tool call."""
-        self.called_tools.add(tool_name)
-        self.tool_args[tool_name] = arguments
-    
-    def record_result(self, tool_name: str, result: Any):
-        """Record a tool result."""
-        self.tool_results[tool_name] = result
+    def get_call_count(self, tool_name: str) -> int:
+        """Get the number of times a tool was called."""
+        return self._call_counts.get(tool_name, 0)
     
     def was_tool_called(self, tool_name: str) -> bool:
-        """Check if a tool was called."""
-        return tool_name in self.called_tools
+        """Check if a tool was called at least once."""
+        return self.get_call_count(tool_name) > 0
     
-    def get_tool_args(self, tool_name: str) -> Dict:
-        """Get the arguments used for a tool call."""
-        return self.tool_args.get(tool_name, {})
+    def get_calls_for_tool(self, tool_name: str) -> List[ToolCallRecord]:
+        """Get all calls for a specific tool."""
+        return [call for call in self.calls if call.name == tool_name]
+    
+    def clear(self) -> None:
+        """Clear all recorded calls."""
+        self.calls.clear()
+        self._call_counts.clear()
+    
+    def reset(self) -> None:
+        """Reset the tracker (alias for clear)."""
+        self.clear()
+    
+    @property
+    def total_calls(self) -> int:
+        """Get the total number of calls recorded."""
+        return len(self.calls)
+    
+    @property
+    def unique_tools_called(self) -> List[str]:
+        """Get list of unique tool names that were called."""
+        return list(self._call_counts.keys())
+    
+    def get_tool_args(self, tool_name: str) -> Optional[Dict[str, Any]]:
+        """
+        Get the arguments from the most recent call to a tool.
+        
+        Args:
+            tool_name: Name of the tool
+            
+        Returns:
+            Dict containing the arguments, or None if tool wasn't called
+        """
+        calls = self.get_calls_for_tool(tool_name)
+        if calls:
+            return calls[-1].arguments
+        return None
     
     def get_tool_result(self, tool_name: str) -> Any:
-        """Get the result of a tool call."""
-        return self.tool_results.get(tool_name)
-
-# Import specific handlers
-from .handlers.openai_handler import OpenAIToolCallingHandler
-from .handlers.anthropic_handler import AnthropicToolCallingHandler
-from .handlers.groq_handler import GroqToolCallingHandler
-from .handlers.ollama_handler import OllamaToolCallingHandler
-from .handlers.text_based_handler import TextBasedToolCallingHandler
-from .handlers.structured_output_handler import StructuredOutputHandler
-from .handlers.noop_handler import NoopToolCallingHandler
-from .handlers.auto_detect_handler import AutoDetectToolCallingHandler
-
-def get_tool_calling_handler(tool_calling_type: Optional[ToolCallingType] = None) -> ToolCallingHandlerBase:
-    """
-    Get a tool calling handler for a given model.
-    
-    Args:
-        tool_calling_type: The tool calling type to use (overrides automatic detection)
+        """
+        Get the result from the most recent call to a tool.
         
-    Returns:
-        A tool calling handler
-    """
-    # Default to auto-detection if none specified
-    if tool_calling_type is None:
-        # We used to have a model registry here, but now we try to auto-detect the format from responses
-        return AutoDetectToolCallingHandler()
-        
-    # If a specific tool calling type is specified, use it
-    if tool_calling_type == ToolCallingType.OPENAI:
-        return OpenAIToolCallingHandler()
-    elif tool_calling_type == ToolCallingType.ANTHROPIC:
-        return AnthropicToolCallingHandler()
-    elif tool_calling_type == ToolCallingType.GROQ:
-        return GroqToolCallingHandler()
-    elif tool_calling_type == ToolCallingType.OLLAMA:
-        return OllamaToolCallingHandler()
-    elif tool_calling_type == ToolCallingType.TEXT_BASED:
-        return TextBasedToolCallingHandler()
-    elif tool_calling_type == ToolCallingType.STRUCTURED_OUTPUT:
-        return StructuredOutputHandler()
-    elif tool_calling_type == ToolCallingType.NONE:
-        return NoopToolCallingHandler()
-    else:
-        logger.warning(f"Unknown tool calling type: {tool_calling_type}. Using auto-detection instead.")
-        return AutoDetectToolCallingHandler()
-
-def get_provider_specific_handler(provider: str, tool_calling_type: ToolCallingType) -> ToolCallingHandlerBase:
-    """
-    Get a provider-specific tool calling handler.
-    
-    Args:
-        provider: The provider name
-        tool_calling_type: The tool calling type
-        
-    Returns:
-        A tool calling handler
-    """
-    if provider.lower() == "openai":
-        return OpenAIToolCallingHandler()
-    elif provider.lower() == "anthropic":
-        return AnthropicToolCallingHandler()
-    elif provider.lower() == "groq":
-        return GroqToolCallingHandler()
-    elif provider.lower() == "ollama":
-        return OllamaToolCallingHandler()
-    else:
-        # Return the handler for the specified tool calling type
-        return get_tool_calling_handler(tool_calling_type) 
+        Args:
+            tool_name: Name of the tool
+            
+        Returns:
+            The result of the most recent call, or None if tool wasn't called
+        """
+        calls = self.get_calls_for_tool(tool_name)
+        if calls:
+            return calls[-1].result
+        return None

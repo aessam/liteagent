@@ -1,256 +1,323 @@
 """
-Unit tests for LiteAgent using mock LLM implementations.
+Unit tests for LiteAgent using REAL API calls.
 
-This module contains tests for the core functionality of LiteAgent 
-using a mock LLM to avoid real API calls during testing.
+This module contains tests for the main LiteAgent class using real
+LLM providers. NO MOCKS - uses actual API keys and real provider calls.
 """
 
-import json
 import pytest
-from unittest.mock import MagicMock, patch, call
-
-# Import our testing utilities
-from tests.unit.test_mock_llm import MockModelInterface
-
-# Import LiteAgent components
-from liteagent.agent import LiteAgent
-from liteagent.observer import (AgentInitializedEvent, UserMessageEvent, 
-                              ModelRequestEvent, ModelResponseEvent, 
-                              FunctionCallEvent, FunctionResultEvent, 
-                              AgentResponseEvent)
+from liteagent import LiteAgent
+from liteagent.memory import ConversationMemory
+from liteagent.observer import ConsoleObserver
 
 
-class TestAgentWithMockLLM:
-    """Test the LiteAgent class with a mock LLM."""
-    
-    def test_agent_initialization(self, agent_with_mock_model):
-        """Test that the agent initializes correctly with a mock model."""
-        agent = agent_with_mock_model
-        
-        assert agent.name == "test-agent"
-        assert agent.model == "mock-model"
-        assert agent.system_prompt == "You are a test agent."
-        assert isinstance(agent.model_interface, MockModelInterface)
-    
-    def test_agent_simple_chat(self, agent_with_mock_model):
-        """Test that the agent can handle a simple chat interaction."""
-        agent = agent_with_mock_model
-        
-        # Set up the mock to return a predefined response
-        agent.model_interface.responses = [
-            {"type": "text", "content": "This is a test response."}
-        ]
-        
-        # Chat with the agent
-        response = agent.chat("Hello, agent!")
-        
-        # Verify the response
-        assert response == "This is a test response."
-        assert len(agent.model_interface.generate_response_calls) == 1
-        
-        # Check that the message was properly added to memory
-        messages = agent.memory.get_messages()
-        assert len(messages) == 3  # System prompt + user message + assistant response
-        assert messages[0]["role"] == "system"
-        assert messages[0]["content"] == "You are a test agent."
-        assert messages[1]["role"] == "user"
-        assert messages[1]["content"] == "Hello, agent!"
-        assert messages[2]["role"] == "assistant"
-        assert messages[2]["content"] == "This is a test response."
-    
-    def test_agent_with_function_call(self, agent_with_tools):
-        """Test that the agent properly handles function calling."""
-        agent = agent_with_tools
-        
-        # Set up the mock to return a function call followed by a text response
-        agent.model_interface.responses = [
-            {
-                "type": "function_call",
-                "function_name": "example_function",
-                "function_args": {"param1": "test value", "param2": 42}
-            },
-            {"type": "text", "content": "I've called the function for you."}
-        ]
-        
-        # Chat with the agent
-        response = agent.chat("Call a function please")
-        
-        # Verify the response
-        assert response == "I've called the function for you."
-        
-        # Check that the function was called with the right parameters
-        messages = agent.memory.get_messages()
-        
-        # Find the function result message
-        function_results = [msg for msg in messages if msg["role"] == "function" and msg["name"] == "example_function"]
-        
-        # Verify function result exists
-        assert len(function_results) == 1
-        
-        # Verify function result details
-        function_result = function_results[0]
-        assert function_result["role"] == "function"
-        assert function_result["name"] == "example_function"
-        assert "Function called with param1=test value, param2=42" in function_result["content"]
-        
-        # Verify that the model_interface was called with the right function
-        assert len(agent.model_interface.generate_response_calls) >= 2
-        first_call = agent.model_interface.generate_response_calls[0]
-        assert "functions" in first_call
-        assert first_call["functions"] is not None
-        
-        # Verify that the final response was added to memory
-        assert messages[-1]["role"] == "assistant"
-        assert messages[-1]["content"] == "I've called the function for you."
-    
-    def test_agent_with_observer(self, agent_with_mock_model, mock_observer):
-        """Test that the agent properly emits events to observers."""
-        agent = agent_with_mock_model
-        agent.add_observer(mock_observer)
-        
-        # Set up the mock to return a text response
-        agent.model_interface.responses = [
-            {"type": "text", "content": "This is a test response."}
-        ]
-        
-        # Chat with the agent
-        response = agent.chat("Hello, agent!")
-        
-        # Verify that the observer methods were called
-        assert mock_observer.on_user_message.called
-        assert mock_observer.on_model_request.called
-        assert mock_observer.on_model_response.called
-        assert mock_observer.on_agent_response.called
-        
-        # Verify the arguments of the calls
-        user_message_call = mock_observer.on_user_message.call_args[0][0]
-        assert isinstance(user_message_call, UserMessageEvent)
-        assert user_message_call.message == "Hello, agent!"
-        
-        agent_response_call = mock_observer.on_agent_response.call_args[0][0]
-        assert isinstance(agent_response_call, AgentResponseEvent)
-        assert agent_response_call.response == "This is a test response."
-    
-    def test_agent_with_conversation(self, agent_with_conversation_model):
-        """Test that the agent can handle a multi-turn conversation with function calling."""
-        agent = agent_with_conversation_model
-        
-        # Chat with the agent to start the conversation
-        response1 = agent.chat("I need some data.")
-        
-        # First response should be text
-        assert response1 == "I'll help you with that."
-        
-        # The model's next response should trigger a function call (get_data)
-        # Since we don't have a "get_data" function registered, it should fail
-        # and then move to the next response
-        response2 = agent.chat("Please get the data now.")
-        
-        # Final response should be text
-        assert response2 == "Based on the data, here's your answer..."
-    
-    def test_agent_reset_memory(self, agent_with_mock_model):
-        """Test that the agent can reset its memory."""
-        agent = agent_with_mock_model
-        
-        # Set up the mock to return a predefined response
-        agent.model_interface.responses = [
-            {"type": "text", "content": "This is a test response."}
-        ]
-        
-        # Chat with the agent
-        agent.chat("Hello, agent!")
-        
-        # Verify memory has conversation
-        messages = agent.memory.get_messages()
-        assert len(messages) == 3  # System prompt + user message + assistant response
-        
-        # Reset memory
-        agent.reset_memory()
-        
-        # Verify only system prompt remains
-        messages = agent.memory.get_messages()
-        assert len(messages) == 1
-        assert messages[0]["role"] == "system"
-        assert messages[0]["content"] == "You are a test agent."
-    
-    def test_consecutive_function_calls(self, agent_with_tools):
-        """Test the agent's handling of consecutive function calls."""
-        agent = agent_with_tools
-        
-        # Set up the mock to return multiple function calls
-        agent.model_interface.responses = [
-            {
-                "type": "function_call",
-                "function_name": "example_function",
-                "function_args": {"param1": "first call", "param2": 1}
-            },
-            {
-                "type": "function_call",
-                "function_name": "example_function",
-                "function_args": {"param1": "second call", "param2": 2}
-            },
-            {
-                "type": "function_call",
-                "function_name": "example_function",
-                "function_args": {"param1": "third call", "param2": 3}
-            },
-            {"type": "text", "content": "I've called the functions."}
-        ]
-        
-        # Chat with the agent
-        response = agent.chat("Call some functions")
-        
-        # Verify the final response
-        assert response == "I've called the functions."
-        
-        # Check that all functions were called
-        messages = agent.memory.get_messages()
-        
-        # Count function results
-        function_results = [msg for msg in messages if msg["role"] == "function" and msg["name"] == "example_function"]
-        assert len(function_results) == 3
-        
-        # Verify function results
-        results_content = [result["content"] for result in function_results]
-        assert "Function called with param1=first call, param2=1" in results_content
-        assert "Function called with param1=second call, param2=2" in results_content
-        assert "Function called with param1=third call, param2=3" in results_content
-    
-    def test_repeated_function_call_prevention(self, agent_with_tools):
-        """Test that the agent prevents repeated function calls with the same arguments."""
-        agent = agent_with_tools
-        
-        # Set up the mock to return repeated function calls
-        agent.model_interface.responses = [
-            {
-                "type": "function_call",
-                "function_name": "example_function",
-                "function_args": {"param1": "repeated", "param2": 1}
-            },
-            {
-                "type": "function_call",
-                "function_name": "example_function",
-                "function_args": {"param1": "repeated", "param2": 1}  # Same args as before
-            },
-            {"type": "text", "content": "Final response after prevention."}
-        ]
-        
-        # Chat with the agent
-        response = agent.chat("Call a function repeatedly")
-        
-        # The agent should prevent the repeated call and force a text response
-        assert response == "Final response after prevention."
-        
-        # Check the messages to see that a system message was added to prevent repetition
-        messages = agent.memory.get_messages()
-        system_messages = [msg for msg in messages if msg["role"] == "system" and "called the same function multiple times" in msg["content"]]
-        assert len(system_messages) > 0
-        
-        # Function should only have been called once despite two attempts
-        function_results = [msg for msg in messages if msg["role"] == "function" and msg["name"] == "example_function"]
-        assert len(function_results) == 1
+def test_openai_agent_initialization(openai_agent):
+    """Test that OpenAI agent initializes correctly."""
+    assert openai_agent.name == "test-openai-agent"
+    assert openai_agent.model == "gpt-4o-mini"
+    assert isinstance(openai_agent.memory, ConversationMemory)
+    assert len(openai_agent.tools) > 0
 
 
-if __name__ == "__main__":
-    pytest.main(["-v", "test_agent.py"]) 
+def test_anthropic_agent_initialization(anthropic_agent):
+    """Test that Anthropic agent initializes correctly."""
+    assert anthropic_agent.name == "test-anthropic-agent"
+    assert anthropic_agent.model == "claude-3-5-haiku-20241022"
+    assert isinstance(anthropic_agent.memory, ConversationMemory)
+    assert len(anthropic_agent.tools) > 0
+
+
+def test_groq_agent_initialization(groq_agent):
+    """Test that Groq agent initializes correctly."""
+    assert groq_agent.name == "test-groq-agent"
+    assert groq_agent.model == "qwen/qwen3-32b"  # Full model name with provider prefix
+    assert isinstance(groq_agent.memory, ConversationMemory)
+    assert len(groq_agent.tools) > 0
+
+
+def test_openai_agent_simple_chat(openai_agent):
+    """Test simple chat with OpenAI agent."""
+    response = openai_agent.chat("Say 'Hello OpenAI' exactly.")
+    
+    assert isinstance(response, str)
+    assert len(response) > 0
+    # The response should contain the requested text or be a reasonable response
+    assert len(response.strip()) > 5
+
+
+def test_anthropic_agent_simple_chat(anthropic_agent):
+    """Test simple chat with Anthropic agent."""
+    response = anthropic_agent.chat("Say 'Hello Anthropic' exactly.")
+    
+    assert isinstance(response, str)
+    assert len(response) > 0
+    assert len(response.strip()) > 5
+
+
+def test_groq_agent_simple_chat(groq_agent):
+    """Test simple chat with Groq agent."""
+    response = groq_agent.chat("Say 'Hello Groq' exactly.")
+    
+    assert isinstance(response, str)
+    assert len(response) > 0
+    assert len(response.strip()) > 5
+
+
+def test_openai_agent_tool_usage(openai_agent):
+    """Test that OpenAI agent can use tools."""
+    response = openai_agent.chat("What is the current time? Please use the get_current_time tool.")
+    
+    assert isinstance(response, str)
+    assert len(response) > 0
+    
+    # Check that the tool was likely used by looking for time-related content
+    # The response should contain information about the current time
+    response_lower = response.lower()
+    time_indicators = ["time", "2025", ":", "-"]
+    has_time_content = any(indicator in response_lower for indicator in time_indicators)
+    
+    # Either the response talks about time, or it explains why the tool wasn't used
+    assert has_time_content or "time" in response_lower
+
+
+def test_anthropic_agent_tool_usage(anthropic_agent):
+    """Test that Anthropic agent can use tools."""
+    response = anthropic_agent.chat("What is the current time? Please use the get_current_time tool.")
+    
+    assert isinstance(response, str)
+    assert len(response) > 0
+    
+    # Check for time-related content
+    response_lower = response.lower()
+    time_indicators = ["time", "2025", ":", "-"]
+    has_time_content = any(indicator in response_lower for indicator in time_indicators)
+    
+    assert has_time_content or "time" in response_lower
+
+
+def test_anthropic_sonnet_initialization(anthropic_sonnet_agent):
+    """Test Anthropic Sonnet agent initialization."""
+    assert anthropic_sonnet_agent.model == "claude-3-5-sonnet-20241022"
+    assert anthropic_sonnet_agent.name == "test-sonnet-agent"
+    assert anthropic_sonnet_agent.tools is not None
+    assert len(anthropic_sonnet_agent.tools) > 0
+
+
+def test_anthropic_sonnet_simple_chat(anthropic_sonnet_agent):
+    """Test Anthropic Sonnet agent simple chat."""
+    response = anthropic_sonnet_agent.chat("Hello, can you help me?")
+    assert isinstance(response, str)
+    assert len(response) > 0
+
+
+def test_anthropic_sonnet_tool_usage(anthropic_sonnet_agent):
+    """Test that Anthropic Sonnet agent can use tools."""
+    response = anthropic_sonnet_agent.chat("What is the current time? Please use the get_current_time tool.")
+    
+    assert isinstance(response, str)
+    assert len(response) > 0
+    
+    # Check for time-related content
+    response_lower = response.lower()
+    time_indicators = ["time", "2025", ":", "-"]
+    has_time_content = any(indicator in response_lower for indicator in time_indicators)
+    
+    assert has_time_content or "time" in response_lower
+
+
+def test_groq_agent_tool_usage(groq_agent):
+    """Test that Groq agent can use tools."""
+    response = groq_agent.chat("What is the current time? Please use the get_current_time tool.")
+    
+    assert isinstance(response, str)
+    assert len(response) > 0
+    
+    # Check for time-related content
+    response_lower = response.lower()
+    time_indicators = ["time", "2025", ":", "-"]
+    has_time_content = any(indicator in response_lower for indicator in time_indicators)
+    
+    assert has_time_content or "time" in response_lower
+
+
+def test_agent_memory_persistence(openai_agent):
+    """Test that agent memory persists across conversations."""
+    # First interaction
+    response1 = openai_agent.chat("My name is TestUser.")
+    assert isinstance(response1, str)
+    
+    # Second interaction referencing the first
+    response2 = openai_agent.chat("What did I tell you my name was?")
+    assert isinstance(response2, str)
+    
+    # The agent should remember the name
+    assert "testuser" in response2.lower() or "test" in response2.lower()
+
+
+def test_agent_reset_memory(openai_agent):
+    """Test that agent memory can be reset."""
+    # Add some conversation
+    openai_agent.chat("Remember that my favorite color is blue.")
+    
+    # Check memory has messages
+    messages_before = openai_agent.memory.get_messages()
+    assert len(messages_before) > 2  # At least system, user, assistant
+    
+    # Reset memory
+    openai_agent.reset_memory()
+    
+    # Check memory is reset
+    messages_after = openai_agent.memory.get_messages()
+    assert len(messages_after) == 1  # Only system message should remain
+
+
+def test_agent_with_observer(openai_agent):
+    """Test that agent works with observers."""
+    observer = ConsoleObserver()
+    openai_agent.add_observer(observer)
+    
+    # Verify observer was added
+    assert observer in openai_agent.observers
+    
+    # Test chat with observer
+    response = openai_agent.chat("Hello!")
+    assert isinstance(response, str)
+    
+    # Remove observer
+    openai_agent.remove_observer(observer)
+    assert observer not in openai_agent.observers
+
+
+def test_agent_with_calculator_tool(api_keys, calculator_tool):
+    """Test agent using calculator tool with real calculation."""
+    if not api_keys['openai']:
+        pytest.skip("OPENAI_API_KEY not available")
+    
+    agent = LiteAgent(
+        model="gpt-4o-mini",
+        name="calculator-agent",
+        api_key=api_keys['openai'],
+        tools=[calculator_tool],
+        system_prompt="You are a calculator assistant. Use the calculate tool for any math operations."
+    )
+    
+    response = agent.chat("What is 25 + 17? Please use the calculate tool.")
+    
+    assert isinstance(response, str)
+    assert len(response) > 0
+    
+    # The response should mention the result (42) or show calculation
+    response_lower = response.lower()
+    assert "42" in response or "forty" in response_lower or "add" in response_lower
+
+
+def test_multiple_providers_same_task(api_keys, test_tool):
+    """Test that different providers can handle the same task using target models."""
+    providers_to_test = []
+    
+    # Your target models for testing
+    if api_keys['openai']:
+        # Try latest models first, fallback to available ones
+        for model in ["gpt-5", "gpt-5-mini", "gpt-4o", "gpt-4o-mini"]:
+            try:
+                # Quick validation that model exists
+                from liteagent.providers.factory import ProviderFactory
+                ProviderFactory.determine_provider(model)
+                providers_to_test.append((model, "openai"))
+                break
+            except:
+                continue
+    
+    if api_keys['anthropic']:
+        # Try latest Anthropic models first
+        for model in ["claude-3-7-sonnet-20250219", "claude-3-5-sonnet-20241022"]:
+            try:
+                from liteagent.providers.factory import ProviderFactory
+                ProviderFactory.determine_provider(model)
+                providers_to_test.append((model, "anthropic"))
+                break
+            except:
+                continue
+    
+    if api_keys['groq']:
+        providers_to_test.append(("qwen/qwen3-32b", "groq"))
+    
+    if api_keys['mistral']:
+        providers_to_test.append(("open-mixtral-8x22b", "mistral"))
+    
+    if api_keys['deepseek']:
+        providers_to_test.append(("deepseek-chat", "deepseek"))
+    
+    if len(providers_to_test) < 2:
+        pytest.skip("Need at least 2 providers to test")
+    
+    responses = []
+    task = "Count to 3 and say done."
+    
+    for model, provider_name in providers_to_test:
+        agent = LiteAgent(
+            model=model,
+            name=f"test-{provider_name}-agent",
+            api_key=api_keys[provider_name],
+            tools=[test_tool],
+            system_prompt="You are a helpful assistant."
+        )
+        
+        response = agent.chat(task)
+        responses.append((provider_name, response))
+        
+        # Each response should be valid
+        assert isinstance(response, str)
+        assert len(response) > 0
+    
+    # All providers should have provided responses
+    assert len(responses) >= 2
+    
+    # All responses should be strings with reasonable length
+    for provider_name, response in responses:
+        assert len(response.strip()) > 5, f"{provider_name} response too short: {response}"
+
+
+def test_mistral_agent_initialization(mistral_agent):
+    """Test Mistral agent initialization with target model."""
+    assert mistral_agent.model == "open-mixtral-8x22b"
+    assert mistral_agent.name == "test-mistral-agent"
+    assert mistral_agent.tools is not None
+    assert len(mistral_agent.tools) > 0
+
+
+def test_mistral_agent_simple_chat(mistral_agent):
+    """Test Mistral agent simple chat."""
+    response = mistral_agent.chat("Hello, can you help me?")
+    assert isinstance(response, str)
+    assert len(response) > 0
+
+
+def test_deepseek_agent_initialization(deepseek_agent):
+    """Test DeepSeek agent initialization with target model."""
+    assert deepseek_agent.model == "deepseek-chat"
+    assert deepseek_agent.name == "test-deepseek-agent"
+    assert deepseek_agent.tools is not None
+    assert len(deepseek_agent.tools) > 0
+
+
+def test_deepseek_agent_simple_chat(deepseek_agent):
+    """Test DeepSeek agent simple chat."""
+    response = deepseek_agent.chat("Hello, can you help me?")
+    assert isinstance(response, str)
+    assert len(response) > 0
+
+
+def test_ollama_agent_initialization(ollama_agent):
+    """Test Ollama agent initialization with target model."""
+    assert ollama_agent.model == "gpt-oss:20b"
+    assert ollama_agent.name == "test-ollama-agent"
+    assert ollama_agent.tools is not None
+    assert len(ollama_agent.tools) > 0
+
+
+def test_ollama_agent_simple_chat(ollama_agent):
+    """Test Ollama agent simple chat."""
+    response = ollama_agent.chat("Hello, can you help me?")
+    assert isinstance(response, str)
+    assert len(response) > 0

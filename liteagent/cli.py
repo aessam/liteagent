@@ -1,24 +1,11 @@
 """
-This module has been moved to the cli directory.
+CLI module for LiteAgent.
 
-Please import from cli.commands instead.
-
-Examples:
-    from cli.commands import main
-    main()
+This is the main command-line interface functionality.
 """
 
-import warnings
-
-warnings.warn(
-    "The CLI module has been moved to the cli directory. "
-    "Please import from cli.commands instead.",
-    DeprecationWarning,
-    stacklevel=2
-)
-
-# Import functions from the new location for backward compatibility
-from cli.commands import (
+# Import functions from the CLI commands module
+from .cli_commands import (
     main,
     parse_arguments,
     show_version,

@@ -32,6 +32,70 @@ class ConversationMemory:
         """
         self.messages.append({"role": "user", "content": content})
     
+    def add_user_message_with_images(self, content: str, images: List[str]) -> None:
+        """
+        Add a user message with images to the conversation.
+        
+        Args:
+            content: The message content
+            images: List of image paths or URLs
+        """
+        import base64
+        import os
+        from typing import Union
+        
+        # Prepare message content for multimodal format
+        message_content = []
+        
+        # Add text content
+        if content:
+            message_content.append({
+                "type": "text",
+                "text": content
+            })
+        
+        # Add images
+        for image in images:
+            if self._is_url(image):
+                # Remote image URL
+                message_content.append({
+                    "type": "image_url",
+                    "image_url": {"url": image}
+                })
+            else:
+                # Local image file - convert to base64
+                if os.path.exists(image):
+                    with open(image, "rb") as image_file:
+                        image_data = base64.b64encode(image_file.read()).decode()
+                        # Determine image format
+                        extension = os.path.splitext(image)[1].lower()
+                        if extension in ['.jpg', '.jpeg']:
+                            format_type = 'jpeg'
+                        elif extension == '.png':
+                            format_type = 'png'
+                        elif extension == '.gif':
+                            format_type = 'gif'
+                        elif extension == '.webp':
+                            format_type = 'webp'
+                        else:
+                            format_type = 'jpeg'  # Default
+                        
+                        message_content.append({
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/{format_type};base64,{image_data}"
+                            }
+                        })
+        
+        self.messages.append({
+            "role": "user", 
+            "content": message_content
+        })
+    
+    def _is_url(self, string: str) -> bool:
+        """Check if a string is a URL."""
+        return string.startswith(('http://', 'https://'))
+    
     def add_assistant_message(self, content: str) -> None:
         """
         Add an assistant message to the conversation.
@@ -121,24 +185,24 @@ class ConversationMemory:
             is_error: Whether this result represents an error
             provider: The model provider (e.g., "anthropic", "openai")
         """
-        # For Anthropic, we need to use a different format to avoid the tool_result error
+        # Handle provider-specific tool result formats
         if provider and provider.lower() == "anthropic":
-            # For Anthropic, use assistant role with text content
+            # For Anthropic, use assistant role with text content to avoid tool_result validation issues
             message = {
                 "role": "assistant",
                 "content": f"I called the {name} function with {args} and got this result: {content}"
             }
         else:
-            # For other models, use the standard function role
+            # Use modern 'tool' role for all other providers (including Ollama with native tool calling)
             message = {
-                "role": "function",
+                "role": "tool",
                 "name": name,
                 "content": str(content)
             }
             
-            # Add function call ID if provided
+            # Add tool call ID if provided (modern format)
             if call_id:
-                message["function_call_id"] = call_id
+                message["tool_call_id"] = call_id
                 
             # Add error flag if this is an error result
             if is_error:
@@ -323,7 +387,8 @@ class ConversationMemory:
             str or None: The function result or None if not found
         """
         for message in reversed(self.messages):
-            if message.get("role") == "function" and message.get("name") == function_name:
+            # Check for both 'tool' (modern) and 'function' (legacy) roles for backward compatibility
+            if (message.get("role") in ["tool", "function"]) and message.get("name") == function_name:
                 return message.get("content")
         return None
         
