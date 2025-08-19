@@ -151,6 +151,12 @@ class UnifiedModelInterface(ModelInterface):
         response = self.provider.generate_response(messages, tools, **provider_kwargs)
         
         return response
+    
+    def supports_caching(self) -> bool:
+        """Check if the model supports caching."""
+        if self.capabilities:
+            return self.capabilities.supports_caching
+        return self.provider.supports_caching()
         
     def _convert_functions_to_tools(self, functions: List[Dict]) -> List[Dict]:
         """

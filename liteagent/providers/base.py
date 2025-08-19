@@ -111,11 +111,19 @@ class ProviderInterface(ABC):
             logger.info(f"[{self.provider_name}] No tools provided")
             
     def _log_response(self, response: ProviderResponse, elapsed_time: float) -> None:
-        """Log the response details."""
+        """Log the response details and record costs."""
         logger.info(f"[{self.provider_name}] Response received in {elapsed_time:.2f}s")
         if response.tool_calls:
             logger.info(f"[{self.provider_name}] Tool calls: {[tc.name for tc in response.tool_calls]}")
         if response.usage:
             logger.info(f"[{self.provider_name}] Token usage: {response.usage}")
+            
+            # Record cost at provider level
+            try:
+                from ..provider_cost_tracker import record_provider_cost
+                cost = record_provider_cost(response)
+                logger.info(f"[{self.provider_name}] Cost recorded: ${cost:.6f}")
+            except Exception as e:
+                logger.debug(f"[{self.provider_name}] Cost tracking failed: {e}")
             
     # Removed _handle_error - all providers should fail fast without error handling

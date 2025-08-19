@@ -1,0 +1,336 @@
+"""
+Cost tracking system for LiteAgent with real pricing data.
+
+This module provides accurate cost calculation based on actual token usage
+and real-time pricing data from providers.
+"""
+
+import json
+import time
+from typing import Dict, List, Optional, Tuple, Any
+from dataclasses import dataclass, asdict
+from datetime import datetime, timedelta
+import requests
+from .utils import logger
+
+
+@dataclass
+class TokenUsage:
+    """Represents token usage for a single API call."""
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+    cached_tokens: Optional[int] = None  # For providers that support caching
+    
+    def __post_init__(self):
+        if self.total_tokens == 0:
+            self.total_tokens = self.prompt_tokens + self.completion_tokens
+
+
+@dataclass
+class ModelPricing:
+    """Pricing information for a specific model."""
+    model_name: str
+    provider: str
+    input_cost_per_million: float  # Cost per million input tokens
+    output_cost_per_million: float  # Cost per million output tokens
+    context_window: Optional[int] = None
+    supports_caching: bool = False
+    cache_discount: float = 0.0  # Discount factor for cached tokens (0.0 = full price, 0.9 = 90% off)
+    
+    def calculate_cost(self, usage: TokenUsage) -> float:
+        """Calculate cost for given token usage."""
+        input_cost = (usage.prompt_tokens / 1_000_000) * self.input_cost_per_million
+        output_cost = (usage.completion_tokens / 1_000_000) * self.output_cost_per_million
+        
+        # Apply cache discount if applicable
+        if usage.cached_tokens and self.supports_caching:
+            cached_cost = (usage.cached_tokens / 1_000_000) * self.input_cost_per_million
+            cache_savings = cached_cost * self.cache_discount
+            return input_cost + output_cost - cache_savings
+        
+        return input_cost + output_cost
+
+
+@dataclass
+class CostEvent:
+    """Represents a cost event from an API call."""
+    timestamp: datetime
+    agent_id: str
+    agent_name: str
+    model_name: str
+    provider: str
+    usage: TokenUsage
+    cost: float
+    is_fork: bool = False
+    parent_agent_id: Optional[str] = None
+    context_id: Optional[str] = None
+
+
+class PricingDataManager:
+    """Manages pricing data from models.dev and other sources."""
+    
+    def __init__(self, cache_duration_hours: int = 24):
+        self.cache_duration_hours = cache_duration_hours
+        self._pricing_cache: Dict[str, ModelPricing] = {}
+        self._last_update: Optional[datetime] = None
+        self._fallback_pricing = self._get_fallback_pricing()
+        
+    def _get_fallback_pricing(self) -> Dict[str, ModelPricing]:
+        """Fallback pricing data when API is unavailable."""
+        return {
+            # OpenAI Models
+            "gpt-4o": ModelPricing("gpt-4o", "openai", 2.50, 10.00, 128000),
+            "gpt-4o-mini": ModelPricing("gpt-4o-mini", "openai", 0.15, 0.60, 128000),
+            "gpt-4-turbo": ModelPricing("gpt-4-turbo", "openai", 10.00, 30.00, 128000),
+            "gpt-3.5-turbo": ModelPricing("gpt-3.5-turbo", "openai", 0.50, 1.50, 16385),
+            
+            # Anthropic Models (with caching support)
+            "claude-3-5-sonnet-20241022": ModelPricing(
+                "claude-3-5-sonnet-20241022", "anthropic", 3.00, 15.00, 200000, 
+                supports_caching=True, cache_discount=0.90
+            ),
+            "claude-3-5-haiku-20241022": ModelPricing(
+                "claude-3-5-haiku-20241022", "anthropic", 0.80, 4.00, 200000,
+                supports_caching=True, cache_discount=0.90
+            ),
+            "claude-3-opus-20240229": ModelPricing(
+                "claude-3-opus-20240229", "anthropic", 15.00, 75.00, 200000,
+                supports_caching=True, cache_discount=0.90
+            ),
+            
+            # Groq Models (typically free/very cheap)
+            "llama-3.1-70b-versatile": ModelPricing("llama-3.1-70b-versatile", "groq", 0.59, 0.79, 131072),
+            "llama-3.1-8b-instant": ModelPricing("llama-3.1-8b-instant", "groq", 0.05, 0.08, 131072),
+            "mixtral-8x7b-32768": ModelPricing("mixtral-8x7b-32768", "groq", 0.24, 0.24, 32768),
+            
+            # Mistral Models
+            "mistral-large-latest": ModelPricing("mistral-large-latest", "mistral", 2.00, 6.00, 128000),
+            "mistral-small-latest": ModelPricing("mistral-small-latest", "mistral", 0.20, 0.60, 128000),
+            
+            # DeepSeek Models
+            "deepseek-chat": ModelPricing("deepseek-chat", "deepseek", 0.14, 0.28, 64000),
+            "deepseek-coder": ModelPricing("deepseek-coder", "deepseek", 0.14, 0.28, 64000),
+        }
+    
+    def _fetch_pricing_data(self) -> Dict[str, ModelPricing]:
+        """Fetch pricing data from models.dev API."""
+        try:
+            response = requests.get("https://models.dev/api.json", timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            
+            pricing_data = {}
+            for model_data in data.get("models", []):
+                if "pricing" in model_data:
+                    pricing = model_data["pricing"]
+                    model_name = model_data.get("name", "")
+                    provider = model_data.get("provider", "").lower()
+                    
+                    # Extract pricing information
+                    input_cost = pricing.get("input", 0) * 1000  # Convert to per million
+                    output_cost = pricing.get("output", 0) * 1000  # Convert to per million
+                    context_window = model_data.get("context_window")
+                    
+                    # Determine cache support (mainly Anthropic for now)
+                    supports_caching = provider == "anthropic" and "claude-3" in model_name.lower()
+                    cache_discount = 0.90 if supports_caching else 0.0
+                    
+                    pricing_data[model_name] = ModelPricing(
+                        model_name=model_name,
+                        provider=provider,
+                        input_cost_per_million=input_cost,
+                        output_cost_per_million=output_cost,
+                        context_window=context_window,
+                        supports_caching=supports_caching,
+                        cache_discount=cache_discount
+                    )
+            
+            logger.info(f"Loaded pricing data for {len(pricing_data)} models from models.dev")
+            return pricing_data
+            
+        except Exception as e:
+            logger.warning(f"Failed to fetch pricing data from models.dev: {e}")
+            return {}
+    
+    def get_model_pricing(self, model_name: str) -> Optional[ModelPricing]:
+        """Get pricing for a specific model."""
+        # Check if cache needs refresh
+        if (self._last_update is None or 
+            datetime.now() - self._last_update > timedelta(hours=self.cache_duration_hours)):
+            self._refresh_pricing_data()
+        
+        # Try exact match first
+        if model_name in self._pricing_cache:
+            return self._pricing_cache[model_name]
+        
+        # Try fallback pricing
+        if model_name in self._fallback_pricing:
+            return self._fallback_pricing[model_name]
+        
+        # Try partial matches for model families
+        for cached_model in self._pricing_cache:
+            if self._models_match(model_name, cached_model):
+                return self._pricing_cache[cached_model]
+        
+        return None
+    
+    def _models_match(self, model1: str, model2: str) -> bool:
+        """Check if two model names likely refer to the same model family."""
+        # Simple heuristic - could be improved
+        model1_base = model1.lower().split('-')[0]
+        model2_base = model2.lower().split('-')[0]
+        return model1_base == model2_base
+    
+    def _refresh_pricing_data(self):
+        """Refresh pricing data from external sources."""
+        try:
+            fresh_data = self._fetch_pricing_data()
+            if fresh_data:
+                self._pricing_cache.update(fresh_data)
+            self._last_update = datetime.now()
+        except Exception as e:
+            logger.error(f"Error refreshing pricing data: {e}")
+
+
+class CostTracker:
+    """Tracks costs for agent operations."""
+    
+    def __init__(self):
+        self.pricing_manager = PricingDataManager()
+        self.cost_events: List[CostEvent] = []
+        self.total_cost = 0.0
+        
+    def record_usage(self, 
+                    agent_id: str,
+                    agent_name: str, 
+                    model_name: str,
+                    provider: str,
+                    usage: TokenUsage,
+                    is_fork: bool = False,
+                    parent_agent_id: Optional[str] = None,
+                    context_id: Optional[str] = None) -> float:
+        """Record token usage and calculate cost."""
+        
+        pricing = self.pricing_manager.get_model_pricing(model_name)
+        if not pricing:
+            logger.warning(f"No pricing data found for model: {model_name}")
+            return 0.0
+        
+        cost = pricing.calculate_cost(usage)
+        
+        event = CostEvent(
+            timestamp=datetime.now(),
+            agent_id=agent_id,
+            agent_name=agent_name,
+            model_name=model_name,
+            provider=provider,
+            usage=usage,
+            cost=cost,
+            is_fork=is_fork,
+            parent_agent_id=parent_agent_id,
+            context_id=context_id
+        )
+        
+        self.cost_events.append(event)
+        self.total_cost += cost
+        
+        logger.debug(f"Cost recorded: ${cost:.6f} for {usage.total_tokens} tokens ({model_name})")
+        return cost
+    
+    def get_cost_summary(self) -> Dict[str, Any]:
+        """Get comprehensive cost summary."""
+        if not self.cost_events:
+            return {"total_cost": 0.0, "total_tokens": 0, "events": 0}
+        
+        # Calculate totals
+        total_tokens = sum(event.usage.total_tokens for event in self.cost_events)
+        total_prompt_tokens = sum(event.usage.prompt_tokens for event in self.cost_events)
+        total_completion_tokens = sum(event.usage.completion_tokens for event in self.cost_events)
+        
+        # Group by model
+        by_model = {}
+        for event in self.cost_events:
+            model = event.model_name
+            if model not in by_model:
+                by_model[model] = {"cost": 0.0, "tokens": 0, "calls": 0}
+            by_model[model]["cost"] += event.cost
+            by_model[model]["tokens"] += event.usage.total_tokens
+            by_model[model]["calls"] += 1
+        
+        # Fork vs parent costs
+        fork_cost = sum(event.cost for event in self.cost_events if event.is_fork)
+        parent_cost = sum(event.cost for event in self.cost_events if not event.is_fork)
+        
+        return {
+            "total_cost": self.total_cost,
+            "total_tokens": total_tokens,
+            "prompt_tokens": total_prompt_tokens,
+            "completion_tokens": total_completion_tokens,
+            "events": len(self.cost_events),
+            "by_model": by_model,
+            "fork_cost": fork_cost,
+            "parent_cost": parent_cost,
+            "average_cost_per_token": self.total_cost / total_tokens if total_tokens > 0 else 0
+        }
+    
+    def calculate_traditional_cost(self, fork_count: int) -> float:
+        """Calculate what the cost would be without forking (for comparison)."""
+        # For traditional approach, each fork would need to send the full context
+        parent_events = [e for e in self.cost_events if not e.is_fork]
+        if not parent_events:
+            return 0.0
+        
+        # Estimate the cost if each fork had to send the full parent context
+        parent_context_cost = sum(e.cost for e in parent_events)
+        estimated_traditional_cost = parent_context_cost * (fork_count + 1)  # +1 for parent
+        
+        return estimated_traditional_cost
+    
+    def get_savings_report(self) -> Dict[str, Any]:
+        """Generate a detailed savings report for forked vs traditional approach."""
+        summary = self.get_cost_summary()
+        fork_events = [e for e in self.cost_events if e.is_fork]
+        
+        if not fork_events:
+            return {"message": "No fork events recorded"}
+        
+        fork_count = len(set(e.agent_id for e in fork_events))
+        traditional_cost = self.calculate_traditional_cost(fork_count)
+        actual_cost = self.total_cost
+        savings = traditional_cost - actual_cost
+        savings_percent = (savings / traditional_cost * 100) if traditional_cost > 0 else 0
+        
+        return {
+            "actual_cost": actual_cost,
+            "traditional_cost": traditional_cost,
+            "savings": savings,
+            "savings_percent": savings_percent,
+            "fork_count": fork_count,
+            "total_tokens": summary["total_tokens"],
+            "cost_per_token": summary["average_cost_per_token"]
+        }
+
+
+# Global cost tracker instance
+_global_cost_tracker = CostTracker()
+
+
+def get_cost_tracker() -> CostTracker:
+    """Get the global cost tracker instance."""
+    return _global_cost_tracker
+
+
+def record_agent_cost(agent_id: str, 
+                     agent_name: str,
+                     model_name: str, 
+                     provider: str,
+                     usage: TokenUsage,
+                     is_fork: bool = False,
+                     parent_agent_id: Optional[str] = None,
+                     context_id: Optional[str] = None) -> float:
+    """Convenience function to record cost using global tracker."""
+    return _global_cost_tracker.record_usage(
+        agent_id, agent_name, model_name, provider, usage, 
+        is_fork, parent_agent_id, context_id
+    )

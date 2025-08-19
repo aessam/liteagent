@@ -11,5 +11,6 @@ from .memory import ConversationMemory
 from .utils import setup_logging, check_api_keys
 from .capabilities import get_model_capabilities, ModelCapabilities
 from .mcp_adapter import run_as_mcp, LiteAgentMCPServer, MCPAgentObserver
+from .cost_tracking import CostTracker, TokenUsage, get_cost_tracker
 
 __version__ = "0.1.0"

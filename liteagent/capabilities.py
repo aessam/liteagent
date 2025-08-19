@@ -184,7 +184,10 @@ class CapabilityDetector:
             ])
             
             # Caching support - conservative approach based on known providers
-            supports_caching = provider.lower() in ['anthropic'] and 'claude-3' in model_id.lower()
+            supports_caching = (
+                (provider.lower() in ['anthropic'] and 'claude-3' in model_id.lower()) or
+                (provider.lower() in ['openai'] and ('gpt-4' in model_id.lower() or 'gpt-4o' in model_id.lower()))
+            )
             
             # JSON mode support - based on known model capabilities
             supports_json_mode = tool_calling and any(x in model_id.lower() for x in [
