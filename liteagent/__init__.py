@@ -4,6 +4,7 @@ LiteAgent is a lightweight, extensible framework for building AI agents.
 
 from .tools import liteagent_tool, BaseTool, FunctionTool, InstanceMethodTool, StaticMethodTool
 from .agent import LiteAgent
+from .forked_agent import ForkedAgent
 from .observer import AgentObserver, ConsoleObserver
 from .models import create_model_interface, UnifiedModelInterface
 from .memory import ConversationMemory

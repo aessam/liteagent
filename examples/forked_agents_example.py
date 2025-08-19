@@ -328,7 +328,13 @@ async def run_forked_analysis(provider: str, model: str, codebase_path: str):
     print(f"\n💵 Cost Comparison:")
     print(f"  • Traditional approach (4 separate agents): ${traditional_cost:.4f}")
     print(f"  • ForkedAgents approach: ${forked_cost:.4f}")
-    print(f"  • Savings: ${traditional_cost - forked_cost:.4f} ({((traditional_cost - forked_cost) / traditional_cost * 100):.1f}% reduction)")
+    
+    if traditional_cost > 0:
+        savings_amount = traditional_cost - forked_cost
+        savings_percent = (savings_amount / traditional_cost) * 100
+        print(f"  • Savings: ${savings_amount:.4f} ({savings_percent:.1f}% reduction)")
+    else:
+        print(f"  • Savings: Not calculated (no cached content detected)")
     
     print("\n✨ ForkedAgents demonstration completed!")
 

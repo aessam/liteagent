@@ -11,6 +11,7 @@ import uuid
 from typing import Any, Dict, List, Optional, Union, Set
 from .agent import LiteAgent
 from .memory import ConversationMemory
+from .models import create_model_interface
 from .utils import logger
 from .observer import generate_context_id, AgentEvent
 
@@ -27,7 +28,6 @@ class ForkEvent(AgentEvent):
         super().__init__(
             agent_id=parent_agent_id,
             agent_name=f"fork_{parent_agent_id}",
-            event_type="fork",
             context_id=parent_context_id,
             parent_context_id=None,
             event_data={
@@ -37,6 +37,7 @@ class ForkEvent(AgentEvent):
                 "allowed_tools": list(allowed_tools) if allowed_tools else None
             }
         )
+        self.event_type = "fork"  # Override the default class name
 
 
 class ForkedMemory(ConversationMemory):
@@ -277,12 +278,14 @@ class ForkedAgent(LiteAgent):
                 
         return cached_messages
         
-    def run(self, message: str) -> str:
+    def chat(self, message: str, images: Optional[List[str]] = None, enable_caching: bool = False) -> str:
         """
-        Run the agent with a message, using cache optimization for forks.
+        Chat with the agent using cache optimization for forks.
         
         Args:
             message: The message to process
+            images: Optional list of image paths/URLs
+            enable_caching: Whether to enable caching (overrides instance setting)
             
         Returns:
             The agent's response
@@ -293,18 +296,33 @@ class ForkedAgent(LiteAgent):
             self._cache_stats["hits"] += 1
             self._log(f"Fork using cached context (cache key: {self.memory.get_cache_key()[:8]}...)")
             
+        # Use instance caching setting or override
+        use_caching = enable_caching or self.enable_caching
+        
         # Add cache control to the request if supported
         original_messages = self.memory.messages.copy()
-        if self.enable_caching:
+        if use_caching:
             self.memory.messages = self._create_message_with_cache(self.memory.messages)
             
         try:
-            response = super().run(message)
+            response = super().chat(message, images=images, enable_caching=use_caching)
         finally:
             # Restore original messages
             self.memory.messages = original_messages
             
         return response
+        
+    def run(self, message: str) -> str:
+        """
+        Legacy run method for backward compatibility.
+        
+        Args:
+            message: The message to process
+            
+        Returns:
+            The agent's response
+        """
+        return self.chat(message)
         
     def get_fork_tree(self) -> Dict[str, Any]:
         """
