@@ -96,7 +96,7 @@ def demo_mock_provider():
     try:
         # Create agent with mock provider
         agent = ForkedAgentV2(
-            model="gpt-4o",  # Model doesn't matter for mock
+            model="mock",  # Use mock as model name
             provider="mock",
             system_prompt="You are a comprehensive code analysis system.",
             name="mock_demo_agent",

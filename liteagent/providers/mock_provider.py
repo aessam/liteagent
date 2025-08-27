@@ -368,6 +368,10 @@ class MockProvider(ProviderInterface):
         """Return False - mock is stateless."""
         return False
     
+    def supports_parallel_tools(self) -> bool:
+        """Return False for simplicity."""
+        return False
+    
     def reset_stats(self):
         """Reset usage statistics."""
         self.request_count = 0

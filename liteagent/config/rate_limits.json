@@ -146,11 +146,28 @@
       }
     }
   },
+  "mock": {
+    "mock": {
+      "test": {
+        "rpm": 1000,
+        "tpm": 100000,
+        "notes": "Mock provider - unlimited for testing"
+      }
+    },
+    "gpt-4o": {
+      "test": {
+        "rpm": 1000,
+        "tpm": 100000,
+        "notes": "Mock provider - unlimited for testing"
+      }
+    }
+  },
   "default_tier_assumptions": {
     "openai": "tier_1",
     "anthropic": "tier_1", 
     "google": "free",
     "groq": "free",
+    "mock": "test",
     "notes": "Conservative assumptions - use lowest available tier"
   },
   "safety_multipliers": {

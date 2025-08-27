@@ -17,8 +17,17 @@ import uuid
 
 from .providers.base import ProviderInterface, ProviderResponse
 from .providers.factory import create_provider
-from .providers.openai_assistants import OpenAIAssistantsProvider
-from .providers.gemini_chat import GeminiChatProvider
+
+# Optional imports for stateful providers
+try:
+    from .providers.openai_assistants import OpenAIAssistantsProvider
+except ImportError:
+    OpenAIAssistantsProvider = None
+
+try:
+    from .providers.gemini_chat import GeminiChatProvider
+except ImportError:
+    GeminiChatProvider = None
 from .rate_limiter import get_rate_limiter, RateLimitError
 from .memory import ConversationMemory
 from .utils import logger
@@ -136,12 +145,12 @@ class ForkedAgentV2:
     def _setup_provider(self):
         """Setup the appropriate provider based on session type."""
         if self.session_type == SessionType.STATEFUL:
-            if self.provider_name == 'openai':
+            if self.provider_name == 'openai' and OpenAIAssistantsProvider is not None:
                 self.provider = OpenAIAssistantsProvider(
                     model_name=self.model,
                     **self.kwargs
                 )
-            elif self.provider_name == 'google':
+            elif self.provider_name == 'google' and GeminiChatProvider is not None:
                 self.provider = GeminiChatProvider(
                     model_name=self.model,
                     system_instruction=self.system_prompt,
@@ -149,10 +158,10 @@ class ForkedAgentV2:
                 )
             else:
                 # Fallback to regular provider
-                self.provider = create_provider(self.provider_name, self.model, **self.kwargs)
+                self.provider = create_provider(self.model, provider=self.provider_name, **self.kwargs)
         else:
             # Use regular provider for stateless/cached
-            self.provider = create_provider(self.provider_name, self.model, **self.kwargs)
+            self.provider = create_provider(self.model, provider=self.provider_name, **self.kwargs)
     
     def prepare_for_forking(self) -> bool:
         """
@@ -176,7 +185,9 @@ class ForkedAgentV2:
     def _prepare_stateful_session(self) -> bool:
         """Prepare stateful session (OpenAI Assistants, Gemini Chat)."""
         try:
-            if self.provider_name == 'openai' and isinstance(self.provider, OpenAIAssistantsProvider):
+            if (self.provider_name == 'openai' and 
+                OpenAIAssistantsProvider is not None and 
+                isinstance(self.provider, OpenAIAssistantsProvider)):
                 # Create assistant and initial thread
                 self.assistant_id = self.provider.create_assistant(
                     instructions=self.system_prompt,
@@ -196,7 +207,9 @@ class ForkedAgentV2:
                 logger.info(f"[{self.name}] OpenAI Assistant prepared: {self.assistant_id}")
                 return True
                 
-            elif self.provider_name == 'google' and isinstance(self.provider, GeminiChatProvider):
+            elif (self.provider_name == 'google' and 
+                  GeminiChatProvider is not None and 
+                  isinstance(self.provider, GeminiChatProvider)):
                 # Start chat session with preparation
                 self.session_id = self.provider.start_chat_session([
                     {"role": "user", "content": "I will assign you specific analysis roles. Please confirm readiness."}
