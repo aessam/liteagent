@@ -1,3 +1,0 @@
-"""
-LiteAgent Unit Tests Package
-""" 

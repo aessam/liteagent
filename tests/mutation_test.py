@@ -20,7 +20,7 @@ class MutationTester:
         self.config_file = ".mutmut_config"
         
     def create_config(self, target_path: str = "liteagent/", 
-                     test_command: str = "python -m pytest tests/unit/ -x --tb=short --disable-warnings",
+                     test_command: str = "python -m pytest tests/unit/ -x --tb=short --disable-warnings --reruns=3",
                      timeout: int = 60):
         """Create mutmut configuration file."""
         config_content = f"""[mutmut]
