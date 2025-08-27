@@ -1,0 +1,178 @@
+{
+  "_metadata": {
+    "version": "1.0",
+    "last_updated": "2024-08-19",
+    "description": "Rate limits for LLM providers. Manually maintained with accurate tier data.",
+    "notes": [
+      "Always assume LOWEST tier limits for safety",
+      "RPM = Requests Per Minute, TPM = Tokens Per Minute",
+      "Add new models here before using them in ForkedAgents",
+      "System will ERROR if model not found in this config"
+    ]
+  },
+  "openai": {
+    "gpt-4o": {
+      "tier_1": {
+        "rpm": 500,
+        "tpm": 30000,
+        "notes": "Lowest paid tier - TO BE UPDATED WITH REAL VALUES"
+      },
+      "tier_2": {
+        "rpm": 5000,
+        "tpm": 450000,
+        "notes": "Higher tier for reference"
+      }
+    },
+    "gpt-4o-mini": {
+      "tier_1": {
+        "rpm": 1000,
+        "tpm": 200000,
+        "notes": "Lowest paid tier - TO BE UPDATED WITH REAL VALUES"
+      },
+      "tier_2": {
+        "rpm": 10000,
+        "tpm": 2000000,
+        "notes": "Higher tier for reference"
+      }
+    },
+    "gpt-3.5-turbo": {
+      "tier_1": {
+        "rpm": 3500,
+        "tpm": 160000,
+        "notes": "Lowest paid tier - TO BE UPDATED WITH REAL VALUES"
+      },
+      "tier_2": {
+        "rpm": 10000,
+        "tpm": 1000000,
+        "notes": "Higher tier for reference"
+      }
+    }
+  },
+  "anthropic": {
+    "claude-3-5-sonnet-20241022": {
+      "free": {
+        "rpm": 5,
+        "tpm": 20000,
+        "daily_tokens": 300000,
+        "notes": "Free tier limits - confirmed"
+      },
+      "tier_1": {
+        "rpm": 50,
+        "tpm": 40000,
+        "notes": "Lowest paid tier - TO BE CONFIRMED"
+      },
+      "tier_2": {
+        "rpm": 1000,
+        "tpm": 80000,
+        "notes": "Higher tier for reference"
+      }
+    },
+    "claude-3-haiku-20240307": {
+      "free": {
+        "rpm": 5,
+        "tpm": 25000,
+        "daily_tokens": 300000,
+        "notes": "Free tier limits"
+      },
+      "tier_1": {
+        "rpm": 50,
+        "tpm": 50000,
+        "notes": "Lowest paid tier - TO BE CONFIRMED"
+      }
+    }
+  },
+  "google": {
+    "gemini-1.5-pro": {
+      "free": {
+        "rpm": 5,
+        "rpd": 25,
+        "tpm": "unlimited",
+        "notes": "Free tier - 5 RPM, 25 requests per day confirmed"
+      },
+      "paid_tier_1": {
+        "rpm": 300,
+        "tpm": 1000000,
+        "notes": "Paid tier 1 - confirmed"
+      }
+    },
+    "gemini-1.5-flash": {
+      "free": {
+        "rpm": 5,
+        "rpd": 25,
+        "tpm": "unlimited",
+        "notes": "Free tier - 5 RPM, 25 requests per day confirmed"
+      },
+      "paid_tier_1": {
+        "rpm": 2000,
+        "tpm": 1000000,
+        "notes": "Paid tier 1 - recent update"
+      }
+    },
+    "gemini-2.5-flash": {
+      "free": {
+        "rpm": 5,
+        "rpd": 25,
+        "tpm": "unlimited",
+        "minimum_cache_tokens": 1024,
+        "notes": "Free tier - 5 RPM, 25 requests per day"
+      },
+      "paid_tier_1": {
+        "rpm": 300,
+        "tpm": 1000000,
+        "notes": "Paid tier 1"
+      }
+    }
+  },
+  "groq": {
+    "llama-3.1-8b-instant": {
+      "free": {
+        "rpm": 30,
+        "tpm": 6000,
+        "notes": "Free tier limits - confirmed"
+      }
+    },
+    "llama-3.1-70b-versatile": {
+      "free": {
+        "rpm": 30,
+        "tpm": 6000,
+        "notes": "Free tier limits - confirmed"
+      }
+    },
+    "mixtral-8x7b-32768": {
+      "free": {
+        "rpm": 30,
+        "tpm": 6000,
+        "notes": "Free tier limits - confirmed"
+      }
+    }
+  },
+  "mock": {
+    "mock": {
+      "test": {
+        "rpm": 1000,
+        "tpm": 100000,
+        "notes": "Mock provider - unlimited for testing"
+      }
+    },
+    "gpt-4o": {
+      "test": {
+        "rpm": 1000,
+        "tpm": 100000,
+        "notes": "Mock provider - unlimited for testing"
+      }
+    }
+  },
+  "default_tier_assumptions": {
+    "openai": "tier_1",
+    "anthropic": "tier_1", 
+    "google": "free",
+    "groq": "free",
+    "mock": "test",
+    "notes": "Conservative assumptions - use lowest available tier"
+  },
+  "safety_multipliers": {
+    "rpm_safety": 0.8,
+    "tpm_safety": 0.8,
+    "notes": "Apply 80% of actual limits to provide safety buffer"
+  }
+}

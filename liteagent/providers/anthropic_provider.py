@@ -47,6 +47,7 @@ class AnthropicProvider(ProviderInterface):
             api_key=self.api_key or os.getenv('ANTHROPIC_API_KEY'),
             max_retries=self.max_retries,
             timeout=self.timeout,
+            default_headers={"anthropic-beta": "prompt-caching-2024-07-31"}
         )
         
     def generate_response(
@@ -69,13 +70,34 @@ class AnthropicProvider(ProviderInterface):
         start_time = time.time()
         self._log_request(messages, tools)
         
+        # DEBUG: Log incoming messages
+        logger.info(f"[{self.provider_name}] DEBUG: Incoming messages count: {len(messages)}")
+        if messages:
+            first_msg = messages[0]
+            logger.info(f"[{self.provider_name}] DEBUG: First message role: {first_msg.get('role')}")
+            logger.info(f"[{self.provider_name}] DEBUG: First message content length: {len(str(first_msg.get('content', '')))}")
+        
         # Convert messages to Anthropic format
         anthropic_messages = self._convert_messages(messages)
         
         # Extract system message if present
         system_message = None
         if anthropic_messages and anthropic_messages[0].get('role') == 'system':
-            system_message = anthropic_messages.pop(0)['content']
+            raw_content = anthropic_messages.pop(0)['content']
+            logger.info(f"[{self.provider_name}] DEBUG: Raw system content type: {type(raw_content)}")
+            logger.info(f"[{self.provider_name}] DEBUG: Raw system content: {str(raw_content)[:200]}...")
+            
+            # Handle both string and list format for system messages
+            if isinstance(raw_content, list):
+                # Extract text from multimodal format
+                for item in raw_content:
+                    if item.get('type') == 'text':
+                        system_message = item.get('text', '')
+                        break
+            else:
+                system_message = raw_content
+                
+            logger.info(f"[{self.provider_name}] DEBUG: Extracted system message length: {len(system_message) if system_message else 0}")
             
         # Prepare request parameters
         request_params = {
@@ -97,8 +119,10 @@ class AnthropicProvider(ProviderInterface):
         
         # Add caching support if enabled and model supports it
         if kwargs.get('enable_caching', False) and self.supports_caching():
+            logger.info(f"[{self.provider_name}] Caching enabled - system message length: {len(system_message) if system_message else 0}")
             # Mark system message for caching if it's long enough
             if system_message and len(system_message) > 1000:
+                logger.info(f"[{self.provider_name}] Marking system message for caching")
                 request_params['system'] = [
                     {
                         "type": "text",
@@ -283,6 +307,8 @@ class AnthropicProvider(ProviderInterface):
                 'prompt_tokens': response.usage.input_tokens,
                 'completion_tokens': response.usage.output_tokens,
                 'total_tokens': response.usage.input_tokens + response.usage.output_tokens,
+                'cache_read_input_tokens': getattr(response.usage, 'cache_read_input_tokens', 0),
+                'cache_creation_input_tokens': getattr(response.usage, 'cache_creation_input_tokens', 0),
             }
             
         return ProviderResponse(

@@ -17,12 +17,15 @@ class ProviderFactory:
     # Provider mapping based on model prefixes (lazy loaded)
     PROVIDER_MAP = {
         'openai': 'openai_provider.OpenAIProvider',
+        'openai_assistants': 'openai_assistants.OpenAIAssistantsProvider',
         'anthropic': 'anthropic_provider.AnthropicProvider',
+        'google': 'gemini_chat.GeminiChatProvider',
         'groq': 'groq_provider.GroqProvider',
         'mistral': 'mistral_provider.MistralProvider',
         'deepseek': 'openai_provider.DeepSeekProvider',
         'ollama': 'ollama_provider.OllamaProvider',
         'qwen': 'groq_provider.GroqProvider',  # Qwen models are served by Groq
+        'mock': 'mock_provider.MockProvider',
     }
     
     # Model name patterns for automatic provider detection

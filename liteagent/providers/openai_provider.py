@@ -164,6 +164,7 @@ class OpenAIProvider(ProviderInterface):
                 'prompt_tokens': response.usage.prompt_tokens,
                 'completion_tokens': response.usage.completion_tokens,
                 'total_tokens': response.usage.total_tokens,
+                'cached_tokens': getattr(getattr(response.usage, 'prompt_tokens_details', None), 'cached_tokens', 0) if hasattr(response.usage, 'prompt_tokens_details') else 0,
             }
             
         return ProviderResponse(
@@ -193,6 +194,12 @@ class OpenAIProvider(ProviderInterface):
         from ..capabilities import get_model_capabilities
         capabilities = get_model_capabilities(self.model_name)
         return capabilities.supports_image_input if capabilities else False
+    
+    def supports_caching(self) -> bool:
+        """Check if the model supports caching."""
+        from ..capabilities import get_model_capabilities
+        capabilities = get_model_capabilities(self.model_name)
+        return capabilities.supports_caching if capabilities else False
         
     def get_max_tokens(self) -> Optional[int]:
         """Get the maximum token limit for this model."""
