@@ -72,3 +72,23 @@ Thumbs.db
 
 # Local development settings that shouldn't be tracked
 local_settings.py
+
+# Debug and temporary files (prevent future clutter)
+debug_*.py
+test_*.py
+temp_*.py
+*_debug.py
+*_test.py
+*_temp.py
+comprehensive_*.py
+run_tests.py
+
+# Manual/temporary test directories
+tests/manual/
+tests/temp/
+
+# Cleanup and documentation files
+*CLEANUP*.md
+*cleanup*.md
+fix_assertions.md
+TEST_*_SUMMARY.md
