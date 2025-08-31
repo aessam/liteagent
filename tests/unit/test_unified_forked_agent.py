@@ -440,7 +440,7 @@ class TestRateLimitingIntegration:
         # Should have consumed tokens
         mock_limiter.consume_tokens.assert_called_once()
         
-        assert response == "Test response"
+        assert response == mock_response  # Should return the mock response object, not string
 
 
 class TestBackwardCompatibility:

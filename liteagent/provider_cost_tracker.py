@@ -243,8 +243,13 @@ class ProviderCostTracker:
             return self.pricing_cache[model.lower()]
         return None
     
-    def calculate_cost(self, usage: 'TokenUsage', model: str, provider: str = "") -> float:
+    def calculate_cost(self, model: str, usage: 'TokenUsage', provider: str = "") -> float:
         """Calculate cost for given token usage."""
+        # Handle the case where usage might be passed as first argument for backward compatibility
+        if isinstance(model, type(usage)) and hasattr(model, 'prompt_tokens'):
+            # Swap parameters - old calling convention
+            usage, model = model, usage
+        
         pricing = self._get_pricing(provider, model) if provider else self.get_model_pricing(model)
         if not pricing:
             return 0.0
@@ -252,16 +257,23 @@ class ProviderCostTracker:
         # Import TokenUsage if needed
         from .cost_tracking import TokenUsage
         
-        # Calculate costs (pricing is per 1K tokens)
-        input_cost = (usage.prompt_tokens / 1000.0) * pricing.get('input', 0)
-        output_cost = (usage.completion_tokens / 1000.0) * pricing.get('output', 0)
-        cache_cost = (usage.cached_tokens / 1000.0) * pricing.get('cache_read', 0) if usage.cached_tokens else 0
+        # Calculate costs - check for both per-token and per-1K pricing formats
+        if 'input_cost_per_token' in pricing:
+            # Per-token pricing format
+            input_cost = usage.prompt_tokens * pricing.get('input_cost_per_token', 0)
+            output_cost = usage.completion_tokens * pricing.get('output_cost_per_token', 0)
+            cache_cost = usage.cached_tokens * pricing.get('cache_read_cost_per_token', 0) if usage.cached_tokens else 0
+        else:
+            # Per 1K tokens pricing format
+            input_cost = (usage.prompt_tokens / 1000.0) * pricing.get('input', 0)
+            output_cost = (usage.completion_tokens / 1000.0) * pricing.get('output', 0)
+            cache_cost = (usage.cached_tokens / 1000.0) * pricing.get('cache_read', 0) if usage.cached_tokens else 0
         
         return input_cost + output_cost + cache_cost
     
     def track_and_calculate(self, usage: 'TokenUsage', model: str, provider: str = "") -> float:
         """Track usage and calculate cost."""
-        cost = self.calculate_cost(usage, model, provider)
+        cost = self.calculate_cost(model, usage, provider)
         
         # Create and store event
         event = CostEvent(
@@ -285,6 +297,18 @@ class ProviderCostTracker:
     def calculate_cost_with_caching(self, usage: 'TokenUsage', model: str, provider: str = "") -> float:
         """Calculate cost with caching considerations."""
         return self.calculate_cost(usage, model, provider)
+    
+    def track_request(self, model: str, provider: str, usage: 'TokenUsage', 
+                      cost: Optional[float] = None, **kwargs) -> float:
+        """Track a request - compatibility method."""
+        if cost is not None:
+            # If cost is provided directly, use it
+            return self.track_usage(provider, model, 
+                                  usage.prompt_tokens, usage.completion_tokens, 
+                                  usage.cached_tokens, **kwargs)
+        else:
+            # Calculate cost and track
+            return self.track_and_calculate(usage, model, provider)
     
     def get_summary(self) -> Dict[str, Any]:
         """Get complete cost summary."""

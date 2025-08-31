@@ -66,7 +66,7 @@ class ForkEvent(AgentEvent):
                 "child_agent_id": child_agent_id,
                 "child_context_id": child_context_id,
                 "prefill_role": prefill_role,
-                "allowed_tools": list(allowed_tools) if allowed_tools else None,
+                "allowed_tools": sorted(list(allowed_tools)) if allowed_tools else None,
                 "session_type": session_type
             }
         )
@@ -423,7 +423,7 @@ class UnifiedForkedAgent(LiteAgent):
         
         # Set fork-specific attributes
         fork._is_fork = True
-        fork._allowed_tools = set(config.tools) if config.tools else None
+        fork._allowed_tools = set(str(tool) for tool in config.tools) if config.tools else None
         fork.parent_agent = self
         
         # Track child agent
@@ -509,7 +509,9 @@ class UnifiedForkedAgent(LiteAgent):
         
         # Filter tools if subset specified
         if config.tools:
-            fork_tool_instances = [self.tool_instances[name] for name in config.tools 
+            # Ensure tool names are strings
+            tool_names = [str(name) for name in config.tools]
+            fork_tool_instances = [self.tool_instances[name] for name in tool_names 
                                  if name in self.tool_instances]
         else:
             fork_tool_instances = list(self.tool_instances.values())
