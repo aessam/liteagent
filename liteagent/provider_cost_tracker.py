@@ -234,6 +234,58 @@ class ProviderCostTracker:
             "mathematically_consistent": True
         }
     
+    def get_model_pricing(self, model: str) -> Optional[Dict[str, float]]:
+        """Get pricing for a specific model."""
+        # Try to find pricing in cache
+        if model in self.pricing_cache:
+            return self.pricing_cache[model]
+        if model.lower() in self.pricing_cache:
+            return self.pricing_cache[model.lower()]
+        return None
+    
+    def calculate_cost(self, usage: 'TokenUsage', model: str, provider: str = "") -> float:
+        """Calculate cost for given token usage."""
+        pricing = self._get_pricing(provider, model) if provider else self.get_model_pricing(model)
+        if not pricing:
+            return 0.0
+        
+        # Import TokenUsage if needed
+        from .cost_tracking import TokenUsage
+        
+        # Calculate costs (pricing is per 1K tokens)
+        input_cost = (usage.prompt_tokens / 1000.0) * pricing.get('input', 0)
+        output_cost = (usage.completion_tokens / 1000.0) * pricing.get('output', 0)
+        cache_cost = (usage.cached_tokens / 1000.0) * pricing.get('cache_read', 0) if usage.cached_tokens else 0
+        
+        return input_cost + output_cost + cache_cost
+    
+    def track_and_calculate(self, usage: 'TokenUsage', model: str, provider: str = "") -> float:
+        """Track usage and calculate cost."""
+        cost = self.calculate_cost(usage, model, provider)
+        
+        # Create and store event
+        event = CostEvent(
+            timestamp=datetime.now(),
+            provider=provider or "unknown",
+            model=model,
+            prompt_tokens=usage.prompt_tokens,
+            completion_tokens=usage.completion_tokens,
+            total_tokens=usage.total_tokens,
+            cached_tokens=usage.cached_tokens or 0,
+            input_cost=cost * 0.4,  # Estimate breakdown
+            output_cost=cost * 0.6,
+            cache_cost=0,
+            total_cost=cost,
+            agent_name=None,
+            is_fork=False
+        )
+        self.events.append(event)
+        return cost
+    
+    def calculate_cost_with_caching(self, usage: 'TokenUsage', model: str, provider: str = "") -> float:
+        """Calculate cost with caching considerations."""
+        return self.calculate_cost(usage, model, provider)
+    
     def get_summary(self) -> Dict[str, Any]:
         """Get complete cost summary."""
         if not self.events:

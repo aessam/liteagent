@@ -569,27 +569,23 @@ class ForkedAgent(LiteAgent):
             "cache_hit_rate": self._calculate_cache_hit_rate()
         }
         
+    def _generate_prefill_messages(self, role: str) -> List[Dict[str, str]]:
+        """Generate prefill messages for role definition."""
+        return [
+            {"role": "user", "content": f"You are now acting as a {role}. Please confirm your role."},
+            {"role": "assistant", "content": f"I understand. I am now acting as a {role} and will provide specialized assistance in that capacity."}
+        ]
+    
     def _calculate_cache_hit_rate(self) -> float:
-        """
-        Calculate real cache hit rate from provider responses.
-        
-        This replaces the fake local counter system with actual
-        provider-reported cache usage.
-        """
-        from .provider_cost_tracker import get_cost_tracker
-        cost_tracker = get_cost_tracker()
-        
-        # Get real cache data from provider responses
-        summary = cost_tracker.get_summary()
-        total_tokens = summary.get('total_tokens', 0)
-        
-        # Sum up cached tokens from all events
-        cached_tokens = 0
-        for event in summary.get('events', []):
-            cached_tokens += event.get('cached_tokens', 0)
-        
-        if total_tokens == 0:
+        """Calculate cache hit rate from stored stats."""
+        if not hasattr(self, '_cache_stats') or not self._cache_stats:
             return 0.0
         
-        # Return actual cache hit rate
-        return cached_tokens / total_tokens
+        hits = self._cache_stats.get('hits', 0)
+        misses = self._cache_stats.get('misses', 0)
+        total = hits + misses
+        
+        if total == 0:
+            return 0.0
+        
+        return hits / total

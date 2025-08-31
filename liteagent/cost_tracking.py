@@ -19,12 +19,26 @@ class TokenUsage:
     """Represents token usage for a single API call."""
     prompt_tokens: int
     completion_tokens: int
-    total_tokens: int
-    cached_tokens: Optional[int] = None  # For providers that support caching
+    total_tokens: int = 0  # Made optional with default value
+    cached_tokens: int = 0  # For providers that support caching, default to 0
     
     def __post_init__(self):
         if self.total_tokens == 0:
             self.total_tokens = self.prompt_tokens + self.completion_tokens
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'TokenUsage':
+        """Create TokenUsage from dictionary."""
+        return cls(
+            prompt_tokens=data.get('prompt_tokens', 0),
+            completion_tokens=data.get('completion_tokens', 0),
+            total_tokens=data.get('total_tokens', 0),
+            cached_tokens=data.get('cached_tokens')
+        )
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert TokenUsage to dictionary."""
+        return asdict(self)
 
 
 @dataclass
@@ -199,7 +213,9 @@ class CostTracker:
     def __init__(self):
         self.pricing_manager = PricingDataManager()
         self.cost_events: List[CostEvent] = []
+        self.events = self.cost_events  # Alias for backward compatibility
         self.total_cost = 0.0
+        self.session_start_time = time.time()
         
     def record_usage(self, 
                     agent_id: str,
@@ -237,6 +253,57 @@ class CostTracker:
         
         logger.debug(f"Cost recorded: ${cost:.6f} for {usage.total_tokens} tokens ({model_name})")
         return cost
+    
+    def track_request(self, model: str, provider: str, usage: TokenUsage, 
+                      metadata: Optional[Dict[str, Any]] = None) -> float:
+        """Track a request (alias for record_usage for backward compatibility)."""
+        agent_id = metadata.get('agent_id', 'default') if metadata else 'default'
+        agent_name = metadata.get('agent_name', 'default') if metadata else 'default'
+        return self.record_usage(
+            agent_id=agent_id,
+            agent_name=agent_name,
+            model_name=model,
+            provider=provider,
+            usage=usage,
+            is_fork=metadata.get('is_fork', False) if metadata else False,
+            parent_agent_id=metadata.get('parent_agent_id') if metadata else None,
+            context_id=metadata.get('context_id') if metadata else None
+        )
+    
+    def get_total_cost(self) -> float:
+        """Get total cost tracked."""
+        return self.total_cost
+    
+    def get_cost_by_model(self) -> Dict[str, float]:
+        """Get cost breakdown by model."""
+        by_model = {}
+        for event in self.cost_events:
+            model = event.model_name
+            if model not in by_model:
+                by_model[model] = 0.0
+            by_model[model] += event.cost
+        return by_model
+    
+    def get_cost_by_provider(self) -> Dict[str, float]:
+        """Get cost breakdown by provider."""
+        by_provider = {}
+        for event in self.cost_events:
+            provider = event.provider
+            if provider not in by_provider:
+                by_provider[provider] = 0.0
+            by_provider[provider] += event.cost
+        return by_provider
+    
+    def reset(self) -> None:
+        """Reset the cost tracker."""
+        self.cost_events.clear()
+        self.events = self.cost_events
+        self.total_cost = 0.0
+        self.session_start_time = time.time()
+    
+    def get_summary(self) -> Dict[str, Any]:
+        """Alias for get_cost_summary for backward compatibility."""
+        return self.get_cost_summary()
     
     def get_cost_summary(self) -> Dict[str, Any]:
         """Get comprehensive cost summary."""
