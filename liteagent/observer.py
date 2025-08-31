@@ -432,7 +432,7 @@ class UnifiedObserver(AgentObserver):
         # Print event-specific details based on event type
         if isinstance(event, AgentInitializedEvent) and self.verbose:
             print(f"  Model: {event.model_name}")
-            print(f"  Tools: {', '.join(event.tools) if event.tools else 'None'}")
+            print(f"  Tools: {', '.join(str(tool) for tool in event.tools) if event.tools else 'None'}")
         elif isinstance(event, UserMessageEvent):
             print(f"  User Message: {event.message}")
         elif isinstance(event, FunctionCallEvent):

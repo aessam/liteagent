@@ -66,7 +66,7 @@ class ForkEvent(AgentEvent):
                 "child_agent_id": child_agent_id,
                 "child_context_id": child_context_id,
                 "prefill_role": prefill_role,
-                "allowed_tools": sorted(list(allowed_tools)) if allowed_tools else None,
+                "allowed_tools": sorted([str(tool) for tool in allowed_tools]) if allowed_tools else None,
                 "session_type": session_type
             }
         )

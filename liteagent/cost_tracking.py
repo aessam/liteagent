@@ -278,7 +278,8 @@ class CostTracker:
                 "cost": cost,
                 "is_fork": metadata.get('is_fork', False) if metadata else False,
                 "parent_agent_id": metadata.get('parent_agent_id') if metadata else None,
-                "context_id": metadata.get('context_id') if metadata else None
+                "context_id": metadata.get('context_id') if metadata else None,
+                "metadata": metadata if metadata else {}
             }
             # Also create CostEvent for internal consistency
             cost_event = CostEvent(
@@ -312,26 +313,46 @@ class CostTracker:
     
     def get_total_cost(self) -> float:
         """Get total cost tracked."""
-        return self.total_cost
+        return round(self.total_cost, 10)  # Round to avoid floating point precision issues
     
-    def get_cost_by_model(self) -> Dict[str, float]:
+    def get_cost_by_model(self) -> Dict[str, Dict[str, Any]]:
         """Get cost breakdown by model."""
         by_model = {}
         for event in self.cost_events:
             model = event.model_name
             if model not in by_model:
-                by_model[model] = 0.0
-            by_model[model] += event.cost
+                by_model[model] = {
+                    "total_cost": 0.0,
+                    "request_count": 0,
+                    "total_tokens": 0
+                }
+            by_model[model]["total_cost"] += event.cost
+            by_model[model]["request_count"] += 1
+            by_model[model]["total_tokens"] += event.usage.total_tokens
+        
+        # Round total_cost for each model to avoid floating point precision issues
+        for model_data in by_model.values():
+            model_data["total_cost"] = round(model_data["total_cost"], 10)
+        
         return by_model
     
-    def get_cost_by_provider(self) -> Dict[str, float]:
+    def get_cost_by_provider(self) -> Dict[str, Dict[str, Any]]:
         """Get cost breakdown by provider."""
         by_provider = {}
         for event in self.cost_events:
             provider = event.provider
             if provider not in by_provider:
-                by_provider[provider] = 0.0
-            by_provider[provider] += event.cost
+                by_provider[provider] = {
+                    "total_cost": 0.0,
+                    "request_count": 0
+                }
+            by_provider[provider]["total_cost"] += event.cost
+            by_provider[provider]["request_count"] += 1
+        
+        # Round total_cost for each provider to avoid floating point precision issues
+        for provider_data in by_provider.values():
+            provider_data["total_cost"] = round(provider_data["total_cost"], 10)
+        
         return by_provider
     
     def reset(self) -> None:
@@ -357,12 +378,22 @@ class CostTracker:
         total_tokens = sum(event.usage.total_tokens for event in self.cost_events)
         cached_tokens = sum(event.usage.cached_tokens for event in self.cost_events)
         
-        # Get unique providers and models
-        providers = list(set(event.provider for event in self.cost_events))
-        models = list(set(event.model_name for event in self.cost_events))
+        # Get unique providers and models in insertion order
+        providers = []
+        models = []
+        seen_providers = set()
+        seen_models = set()
+        
+        for event in self.cost_events:
+            if event.provider not in seen_providers:
+                providers.append(event.provider)
+                seen_providers.add(event.provider)
+            if event.model_name not in seen_models:
+                models.append(event.model_name)
+                seen_models.add(event.model_name)
         
         return {
-            "total_cost": self.total_cost,
+            "total_cost": round(self.total_cost, 10),  # Round for float precision
             "total_requests": len(self.cost_events),
             "total_tokens": total_tokens,
             "cached_tokens": cached_tokens,

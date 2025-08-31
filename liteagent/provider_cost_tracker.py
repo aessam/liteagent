@@ -31,6 +31,12 @@ class CostEvent:
     total_cost: float
     agent_name: Optional[str] = None
     is_fork: bool = False
+    
+    def __getitem__(self, key):
+        """Make CostEvent subscriptable for backward compatibility."""
+        if key == "cost":
+            return self.total_cost
+        return getattr(self, key)
 
 
 class ProviderCostTracker:
@@ -40,6 +46,10 @@ class ProviderCostTracker:
         self.events: list[CostEvent] = []
         self.pricing_cache: Dict[str, Dict] = {}
         self._load_pricing_data()
+    
+    def get_events_as_dicts(self) -> list[Dict[str, Any]]:
+        """Get events as dictionaries for backward compatibility."""
+        return [asdict(event) for event in self.events]
     
     def _load_pricing_data(self):
         """Load pricing data from models.dev."""
@@ -148,8 +158,9 @@ class ProviderCostTracker:
         # Get pricing
         pricing = self._get_pricing(provider, model)
         
-        # Calculate costs (pricing is per 1K tokens)
-        input_cost = (prompt_tokens / 1000.0) * pricing.get('input', 0)
+        # Calculate costs (pricing is per 1K tokens) - cached tokens are subset of prompt
+        non_cached_prompt = max(0, prompt_tokens - cached_tokens)
+        input_cost = (non_cached_prompt / 1000.0) * pricing.get('input', 0)
         output_cost = (completion_tokens / 1000.0) * pricing.get('output', 0)
         cache_cost = (cached_tokens / 1000.0) * pricing.get('cache_read', 0)
         total_cost = input_cost + output_cost + cache_cost
@@ -223,7 +234,7 @@ class ProviderCostTracker:
         
         return {
             "actual_cost": actual_total,
-            "estimated_cost_without_caching": estimated_without_caching,
+            "estimated_traditional_cost": estimated_without_caching,
             "savings": savings,
             "savings_percent": min(100.0, savings_percent),  # Cap at 100%
             "fork_events": len(fork_events),
@@ -259,13 +270,15 @@ class ProviderCostTracker:
         
         # Calculate costs - check for both per-token and per-1K pricing formats
         if 'input_cost_per_token' in pricing:
-            # Per-token pricing format
-            input_cost = usage.prompt_tokens * pricing.get('input_cost_per_token', 0)
+            # Per-token pricing format - cached tokens are subset of prompt tokens
+            non_cached_prompt = max(0, usage.prompt_tokens - usage.cached_tokens)
+            input_cost = non_cached_prompt * pricing.get('input_cost_per_token', 0)
             output_cost = usage.completion_tokens * pricing.get('output_cost_per_token', 0)
             cache_cost = usage.cached_tokens * pricing.get('cache_read_cost_per_token', 0) if usage.cached_tokens else 0
         else:
-            # Per 1K tokens pricing format
-            input_cost = (usage.prompt_tokens / 1000.0) * pricing.get('input', 0)
+            # Per 1K tokens pricing format - cached tokens are subset of prompt tokens
+            non_cached_prompt = max(0, usage.prompt_tokens - usage.cached_tokens)
+            input_cost = (non_cached_prompt / 1000.0) * pricing.get('input', 0)
             output_cost = (usage.completion_tokens / 1000.0) * pricing.get('output', 0)
             cache_cost = (usage.cached_tokens / 1000.0) * pricing.get('cache_read', 0) if usage.cached_tokens else 0
         
@@ -297,6 +310,43 @@ class ProviderCostTracker:
     def calculate_cost_with_caching(self, usage: 'TokenUsage', model: str, provider: str = "") -> float:
         """Calculate cost with caching considerations."""
         return self.calculate_cost(usage, model, provider)
+    
+    def track_usage(self, provider: str, model: str, 
+                    prompt_tokens: int, completion_tokens: int,
+                    cached_tokens: int = 0, 
+                    agent_name: Optional[str] = None,
+                    is_fork: bool = False,
+                    metadata: Optional[Dict] = None) -> float:
+        """Track token usage and return cost."""
+        # Get pricing
+        pricing = self._get_pricing(provider, model)
+        
+        # Calculate costs (pricing is per 1K tokens) - cached tokens are subset of prompt
+        non_cached_prompt = max(0, prompt_tokens - cached_tokens)
+        input_cost = (non_cached_prompt / 1000.0) * pricing.get('input', 0)
+        output_cost = (completion_tokens / 1000.0) * pricing.get('output', 0)
+        cache_cost = (cached_tokens / 1000.0) * pricing.get('cache_read', 0)
+        total_cost = input_cost + output_cost + cache_cost
+        
+        # Create and store event
+        event = CostEvent(
+            timestamp=datetime.now(),
+            provider=provider,
+            model=model,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=prompt_tokens + completion_tokens,
+            cached_tokens=cached_tokens,
+            input_cost=input_cost,
+            output_cost=output_cost,
+            cache_cost=cache_cost,
+            total_cost=total_cost,
+            agent_name=agent_name,
+            is_fork=is_fork
+        )
+        
+        self.events.append(event)
+        return total_cost
     
     def track_request(self, model: str, provider: str, usage: 'TokenUsage', 
                       cost: Optional[float] = None, **kwargs) -> float:

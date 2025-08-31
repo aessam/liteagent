@@ -212,13 +212,18 @@ class TestUnifiedForkedAgent:
     
     def test_fork_creation_with_tools(self, base_agent):
         """Test fork creation with tool filtering."""
-        # Add some tools to base agent with __name__ attribute
-        tool1 = MagicMock()
-        tool1.__name__ = "tool1"
-        tool2 = MagicMock()
-        tool2.__name__ = "tool2"
-        tool3 = MagicMock()
-        tool3.__name__ = "tool3"
+        # Add some tools to base agent with __name__ and __str__ attributes
+        def create_mock_tool(name):
+            tool = MagicMock()
+            tool.__name__ = name
+            tool.name = name
+            tool.__str__ = lambda: name
+            tool._mock_name = name  # This helps MagicMock identify the tool
+            return tool
+        
+        tool1 = create_mock_tool("tool1")
+        tool2 = create_mock_tool("tool2")
+        tool3 = create_mock_tool("tool3")
         
         base_agent.tool_instances = {
             "tool1": tool1,
