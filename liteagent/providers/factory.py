@@ -26,6 +26,7 @@ class ProviderFactory:
         'ollama': 'ollama_provider.OllamaProvider',
         'qwen': 'groq_provider.GroqProvider',  # Qwen models are served by Groq
         'mock': 'mock_provider.MockProvider',
+        'deterministic_mock': 'deterministic_mock_provider.DeterministicMockProvider',
     }
     
     # Model name patterns for automatic provider detection

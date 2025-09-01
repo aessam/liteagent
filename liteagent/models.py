@@ -180,6 +180,22 @@ class UnifiedModelInterface(ModelInterface):
                     'function': func
                 })
         return tools
+    
+    def get_mock_stats(self) -> Dict[str, Any]:
+        """Get mock provider statistics if available."""
+        if hasattr(self.provider, 'get_mock_stats'):
+            return self.provider.get_mock_stats()
+        else:
+            # Return empty stats for non-mock providers
+            return {
+                'total_requests': 0,
+                'total_tokens_used': 0,
+                'cache_hits': 0,
+                'cache_misses': 0,
+                'cache_hit_rate': 0.0,
+                'simulated_cost': 0.0,
+                'avg_tokens_per_request': 0.0
+            }
 
 
 # Legacy compatibility class

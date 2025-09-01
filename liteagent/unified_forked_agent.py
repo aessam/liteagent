@@ -66,7 +66,7 @@ class ForkEvent(AgentEvent):
                 "child_agent_id": child_agent_id,
                 "child_context_id": child_context_id,
                 "prefill_role": prefill_role,
-                "allowed_tools": list(allowed_tools) if allowed_tools else None,
+                "allowed_tools": sorted([str(tool) for tool in allowed_tools]) if allowed_tools else None,
                 "session_type": session_type
             }
         )
@@ -194,11 +194,30 @@ class UnifiedForkedAgent(LiteAgent):
         self._agent_registry_id: Optional[str] = None
         self._blackboard_subscriptions: List[str] = []
         
+        # Cleanup tracking
+        self._cleaned_up: bool = False
+        
         logger.info(f"[{self.name}] Initialized UnifiedForkedAgent with {self.session_type.value} session")
+    
+    def _get_provider_name(self) -> str:
+        """Get the provider name from the model interface."""
+        # For tests that set provider_name directly on the interface
+        if hasattr(self.model_interface, 'provider_name'):
+            provider_name = self.model_interface.provider_name
+            if provider_name and provider_name != 'unknown':
+                return provider_name
+        
+        # For real providers where provider_name is on the provider object
+        if hasattr(self.model_interface, 'provider') and hasattr(self.model_interface.provider, 'provider_name'):
+            provider_name = self.model_interface.provider.provider_name
+            if provider_name:
+                return provider_name
+        
+        return 'unknown'
     
     def _determine_session_type(self) -> SessionType:
         """Determine the best session type for this provider/model."""
-        provider_name = getattr(self.model_interface, 'provider_name', 'unknown')
+        provider_name = self._get_provider_name()
         
         if provider_name == 'openai':
             return SessionType.STATEFUL  # Use Assistants API where possible
@@ -423,7 +442,7 @@ class UnifiedForkedAgent(LiteAgent):
         
         # Set fork-specific attributes
         fork._is_fork = True
-        fork._allowed_tools = set(config.tools) if config.tools else None
+        fork._allowed_tools = set(str(tool) for tool in config.tools) if config.tools else None
         fork.parent_agent = self
         
         # Track child agent
@@ -509,12 +528,14 @@ class UnifiedForkedAgent(LiteAgent):
         
         # Filter tools if subset specified
         if config.tools:
-            fork_tool_instances = [self.tool_instances[name] for name in config.tools 
+            # Ensure tool names are strings
+            tool_names = [str(name) for name in config.tools]
+            fork_tool_instances = [self.tool_instances[name] for name in tool_names 
                                  if name in self.tool_instances]
         else:
             fork_tool_instances = list(self.tool_instances.values())
         
-        # Create the forked agent
+        # Create the forked agent - use the same model specification as parent
         fork = UnifiedForkedAgent(
             model=self.model,
             name=config.name,
@@ -522,7 +543,6 @@ class UnifiedForkedAgent(LiteAgent):
             tools=fork_tool_instances,
             debug=self.debug,
             api_key=self.api_key,
-            provider=getattr(self.model_interface, 'provider_name', 'unknown'),
             parent_context_id=self.context_id,
             context_id=generate_context_id(),
             observers=self.observers.copy(),
@@ -531,6 +551,18 @@ class UnifiedForkedAgent(LiteAgent):
             tier=config.tier or self.tier,
             multi_agent_coordinator=self.multi_agent_coordinator
         )
+        
+        # Preserve parent's provider scenario settings for mock providers
+        if hasattr(self.model_interface, 'provider') and hasattr(fork.model_interface, 'provider'):
+            parent_provider = self.model_interface.provider
+            fork_provider = fork.model_interface.provider
+            
+            # Copy scenario settings from parent to fork for deterministic mock providers
+            if (hasattr(parent_provider, 'scenario_name') and 
+                hasattr(fork_provider, 'scenario_name') and
+                hasattr(parent_provider, 'scenario')):
+                fork_provider.scenario_name = parent_provider.scenario_name
+                fork_provider.scenario = parent_provider.scenario
         
         return fork
     
@@ -697,6 +729,9 @@ class UnifiedForkedAgent(LiteAgent):
     
     def get_stats(self) -> Dict[str, Any]:
         """Get comprehensive agent statistics."""
+        # Import here to avoid circular imports
+        from .provider_cost_tracker import get_cost_tracker
+        
         stats = {
             'agent_id': self.agent_id,
             'name': self.name,
@@ -718,6 +753,18 @@ class UnifiedForkedAgent(LiteAgent):
         
         if self.rate_limiter:
             stats['rate_limiter_stats'] = self.rate_limiter.get_usage_stats()
+        
+        # Add cost tracking statistics
+        cost_tracker = get_cost_tracker()
+        stats.update({
+            'total_tokens': cost_tracker.get_total_tokens(),
+            'total_cost': cost_tracker.get_total_cost()
+        })
+        
+        # Add cache efficiency if available
+        fork_savings = cost_tracker.get_fork_savings()
+        if 'cache_efficiency_percent' in fork_savings:
+            stats['cache_efficiency'] = fork_savings['cache_efficiency_percent']
         
         return stats
     
@@ -743,6 +790,9 @@ class UnifiedForkedAgent(LiteAgent):
         # Clean up provider resources
         if hasattr(self.model_interface, 'cleanup'):
             self.model_interface.cleanup()
+        
+        # Mark as cleaned up
+        self._cleaned_up = True
         
         logger.info(f"[{self.name}] Cleaned up resources")
 

@@ -86,12 +86,13 @@ class VersionedMergeStrategy(ConflictResolutionStrategy):
     
     def resolve(self, current: KnowledgeItem, incoming: KnowledgeItem) -> KnowledgeItem:
         """Merge by incrementing version and keeping newest data."""
+        # Use incoming version directly since write_knowledge already incremented it
         return KnowledgeItem(
             key=current.key,
             data=incoming.data,
             agent_id=incoming.agent_id,
             timestamp=incoming.timestamp,
-            version=max(current.version, incoming.version) + 1,
+            version=incoming.version,  # Already incremented by write_knowledge
             category=incoming.category or current.category,
             metadata={**(current.metadata or {}), **(incoming.metadata or {})}
         )
