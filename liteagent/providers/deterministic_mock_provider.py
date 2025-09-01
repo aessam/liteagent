@@ -39,6 +39,9 @@ class DeterministicMockProvider(MockProvider):
     - Fixed token counts
     """
     
+    # Shared scenario indices across instances
+    _scenario_indices = {}
+    
     def __init__(self, model_name: str, api_key: Optional[str] = None, **kwargs):
         """
         Initialize deterministic mock provider.
@@ -59,9 +62,25 @@ class DeterministicMockProvider(MockProvider):
         super().__init__(model_name, api_key, **kwargs)
         
         # Load scenario
-        self.scenario_name = kwargs.get('scenario', 'default')
-        self.scenario = self._load_scenario(self.scenario_name)
-        self.scenario_index = 0
+        self._scenario_name = kwargs.get('scenario', 'default')
+        self.scenario = self._load_scenario(self._scenario_name)
+        
+        # Initialize shared scenario index if not exists
+        if self._scenario_name not in DeterministicMockProvider._scenario_indices:
+            DeterministicMockProvider._scenario_indices[self._scenario_name] = 0
+    
+    @property
+    def scenario_name(self) -> str:
+        """Get the current scenario name."""
+        return self._scenario_name
+    
+    @scenario_name.setter
+    def scenario_name(self, value: str):
+        """Set the scenario name and initialize shared index."""
+        self._scenario_name = value
+        # Initialize shared scenario index if not exists
+        if self._scenario_name not in DeterministicMockProvider._scenario_indices:
+            DeterministicMockProvider._scenario_indices[self._scenario_name] = 0
         
     def _load_scenario(self, scenario_name: str) -> TestScenario:
         """Load a test scenario."""
@@ -248,16 +267,18 @@ class DeterministicMockProvider(MockProvider):
         if self.scenario.rate_limit_after and self.request_count > self.scenario.rate_limit_after:
             raise Exception("Rate limit exceeded")
         
-        # Get next response from scenario
+        # Get next response from scenario using shared index
         if not self.scenario.responses:
             raise ValueError(f"No responses defined for scenario '{self.scenario_name}'")
         
-        response = self.scenario.responses[self.scenario_index % len(self.scenario.responses)]
-        self.scenario_index += 1
+        # Get current shared index and increment it
+        current_index = DeterministicMockProvider._scenario_indices[self.scenario_name]
+        response = self.scenario.responses[current_index % len(self.scenario.responses)]
+        DeterministicMockProvider._scenario_indices[self.scenario_name] += 1
         
         # Apply cache hit pattern if defined
         if self.scenario.cache_hit_pattern:
-            pattern_index = (self.scenario_index - 1) % len(self.scenario.cache_hit_pattern)
+            pattern_index = (current_index) % len(self.scenario.cache_hit_pattern)
             response.cache_hit = self.scenario.cache_hit_pattern[pattern_index]
         
         # Update statistics
@@ -276,7 +297,7 @@ class DeterministicMockProvider(MockProvider):
                 'mock': True, 
                 'deterministic': True,
                 'scenario': self.scenario_name,
-                'response_index': self.scenario_index - 1
+                'response_index': current_index
             },
             finish_reason='stop'
         )
@@ -297,14 +318,23 @@ class DeterministicMockProvider(MockProvider):
     
     def reset_scenario(self):
         """Reset scenario to beginning."""
-        self.scenario_index = 0
+        DeterministicMockProvider._scenario_indices[self.scenario_name] = 0
         self.request_count = 0
         self.reset_stats()
         logger.info(f"[{self.provider_name}] Scenario '{self.scenario_name}' reset")
+    
+    @classmethod
+    def reset_all_scenarios(cls):
+        """Reset all scenario indices globally."""
+        cls._scenario_indices.clear()
     
     def set_scenario(self, scenario_name: str):
         """Change to a different scenario."""
         self.scenario_name = scenario_name
         self.scenario = self._load_scenario(scenario_name)
+        
+        # Initialize shared scenario index if not exists
+        if self.scenario_name not in DeterministicMockProvider._scenario_indices:
+            DeterministicMockProvider._scenario_indices[self.scenario_name] = 0
         self.reset_scenario()
         logger.info(f"[{self.provider_name}] Switched to scenario '{scenario_name}'")

@@ -169,8 +169,8 @@ class TestUnifiedForkedAgent:
         assert base_agent._fork_count == 0
         assert base_agent._is_fork is False
         assert len(base_agent._child_agents) == 0
-        # Session type is STATELESS for unknown providers
-        assert base_agent.session_type == SessionType.STATELESS
+        # Session type is CACHED for Anthropic providers (mocked as anthropic)
+        assert base_agent.session_type == SessionType.CACHED
     
     def test_prepare_for_forking_cached(self, base_agent):
         """Test preparing for forking with cached session."""
@@ -340,7 +340,7 @@ class TestUnifiedForkedAgent:
         assert tree["name"] == "TestAgent"
         assert tree["is_fork"] is False
         assert tree["fork_count"] == 2
-        assert tree["session_type"] == "stateless"  # Default for unknown provider
+        assert tree["session_type"] == "cached"  # Anthropic provider uses cached sessions
         assert len(tree["children"]) == 2
     
     def test_stats_generation(self, base_agent):
@@ -351,7 +351,7 @@ class TestUnifiedForkedAgent:
         stats = base_agent.get_stats()
         
         assert stats["name"] == "TestAgent"
-        assert stats["session_type"] == "stateless"  # Default for unknown provider
+        assert stats["session_type"] == "cached"  # Anthropic provider uses cached sessions
         assert stats["is_fork"] is False
         assert stats["num_forks"] == 0
         assert stats["multi_agent_registry_id"] == "agent_123"
